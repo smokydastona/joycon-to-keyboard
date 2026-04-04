@@ -33,6 +33,8 @@ Before buying parts, read `docs/board-checklist.md`.
 
 ## Next
 
-1) Build and flash ESP32-S3 firmware: see `firmware/esp32s3-usb-kbd/README.md`
-2) Build and flash ESP32 firmware: see `firmware/esp32-hid-host-uart/README.md`
-3) Edit key mapping in `docs/keymap.md` (then update the ESP32 mapping table)
+0) Wiring (one USB dongle): see `docs/wiring.md`
+1) Firmware install / flashing (Windows): see `docs/firmware-install.md`
+2) Build and flash ESP32-S3 firmware: see `firmware/esp32s3-usb-kbd/README.md`
+3) Build and flash ESP32 firmware: see `firmware/esp32-hid-host-uart/README.md`
+4) Edit key mapping in `docs/keymap.md` (then update the ESP32 mapping table)
