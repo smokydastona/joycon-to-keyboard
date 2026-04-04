@@ -54,7 +54,7 @@ That means a **one-chip ESP32-S3-only** design *might* be possible.
 
 In that case, an **ESP32-S3 cannot be the wireless host**. For a Nintendo Joy-Con, the practical path is:
 
-- **Classic-BT-capable ESP32** (Joy-Con host) → UART → **USB-HID keyboard device** (RP2040 or ESP32-S3)
+- **Classic-BT-capable ESP32** (Joy-Con host) → UART → **USB-HID keyboard device** (ESP32-S3)
 
 ## What to send back (so I can answer YES/NO)
 

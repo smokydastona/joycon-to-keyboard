@@ -4,19 +4,19 @@
 
 Pick a common ground.
 
-- ESP32 `TX` → RP2040 `RX`
-- ESP32 `RX` ← RP2040 `TX` (optional; not used by default)
-- ESP32 `GND` ↔ RP2040 `GND`
+- ESP32 `TX` → ESP32-S3 `RX`
+- ESP32 `RX` ← ESP32-S3 `TX` (optional; not used by default)
+- ESP32 `GND` ↔ ESP32-S3 `GND`
 
 **Voltage levels:**
 - Many ESP32 dev boards are 3.3V UART.
-- RP2040 UART is 3.3V.
-- Do NOT connect 5V UART to RP2040 without level shifting.
+- ESP32-S3 UART is 3.3V.
+- Do NOT connect 5V UART without level shifting.
 
-## RP2040 → PC
+## ESP32-S3 → PC
 
-- Plug RP2040 into PC via USB.
-- PC should enumerate it as a USB keyboard.
+- Plug ESP32-S3 into PC via USB.
+- PC should enumerate it as a USB keyboard (and optionally a CDC COM port).
 
 ## Notes
 

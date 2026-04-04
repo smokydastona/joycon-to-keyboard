@@ -1,6 +1,6 @@
 #pragma once
 
-// UART to RP2040
+// UART to USB keyboard device (ESP32-S3)
 #define BRIDGE_UART_PORT UART_NUM_2
 #define BRIDGE_UART_BAUD 115200
 

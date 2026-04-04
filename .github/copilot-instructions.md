@@ -4,7 +4,7 @@ This repo is an **anti-cheat-safe hardware input bridge**:
 
 - Wireless controller side (Joy-Con / compatible) connects to a **Bluetooth Classic capable ESP32** (host).
 - It outputs a tiny **UART key event protocol**.
-- A **USB-device board** (RP2040 or ESP32-S3) turns those events into a **real USB HID keyboard** as seen by the PC.
+- An **ESP32-S3 USB-device board** turns those events into a **real USB HID keyboard** as seen by the PC.
 
 Non-negotiables:
 
@@ -14,7 +14,6 @@ Non-negotiables:
 ## Where things live
 
 - `firmware/esp32-hid-host-uart/` — ESP32 Bluetooth HID host → UART framing
-- `firmware/pico-usb-kbd/` — RP2040 USB HID keyboard (UART → HID)
 - `firmware/esp32s3-usb-kbd/` — ESP32-S3 USB HID keyboard + USB CDC serial (UART → HID + helper COM port)
 - `helper-app/` — Python + Tkinter helper app (serial UI)
 - `docs/` — wiring, protocols, keymap
@@ -22,7 +21,7 @@ Non-negotiables:
 ## Protocols (do not break casually)
 
 - UART framing is documented in `docs/serial-protocol.md`.
-  - Any changes must update both ends (ESP32 sender + RP2040/ESP32-S3 receiver) and the doc.
+  - Any changes must update both ends (ESP32 sender + ESP32-S3 receiver) and the doc.
 - Helper-app serial protocol is documented in `helper-app/protocol.md`.
   - Framing: NDJSON (one JSON object per line).
   - Prefer backward-compatible changes (add new fields/events; don’t rename existing fields without a transition).

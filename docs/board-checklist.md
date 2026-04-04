@@ -37,7 +37,7 @@ So an ESP32-S3 board is usually **not sufficient by itself** for “Joy-Con → 
 - ✅ Supports **Bluetooth Classic** (good candidate for Joy-Con side).
 - ❌ Does **not** have native USB device hardware, so it cannot directly be a USB keyboard.
 
-So an original ESP32 is usually **not sufficient by itself** either — you still need a USB-HID-capable chip (RP2040 or similar).
+So an original ESP32 is usually **not sufficient by itself** either — you still need a USB-HID-capable chip (like an ESP32-S3).
 
 ## How to identify what you bought
 
@@ -54,6 +54,6 @@ If you can, send a photo of the board (top side, chip/module text visible) and I
 This repo currently implements a **two-chip bridge**:
 
 - ESP32 (Classic BT capable) → connects to Joy-Con and forwards HID reports over UART
-- RP2040 → enumerates as USB keyboard and converts UART events to USB HID
+- ESP32-S3 → enumerates as USB keyboard and converts UART events to USB HID
 
 If you only bought an ESP32-S3 board, it can still be used in the overall build, but you will likely need an additional Classic-BT-capable device for Joy-Con.

@@ -1,6 +1,6 @@
 # esp32-hid-host-uart
 
-ESP-IDF app that acts as a **Bluetooth HID Host** and forwards key events over UART to the RP2040.
+ESP-IDF app that acts as a **Bluetooth HID Host** and forwards key events over UART to the USB-keyboard-side device.
 
 ## Reality check (important)
 

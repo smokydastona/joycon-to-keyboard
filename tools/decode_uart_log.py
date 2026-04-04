@@ -1,4 +1,4 @@
-"""Decode UART frames captured from ESP32->RP2040.
+"""Decode UART frames captured from ESP32->USB keyboard device.
 
 This is for offline debugging only (e.g., you capture UART with a USB-UART dongle).
 It is not required for gameplay.
