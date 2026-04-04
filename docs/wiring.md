@@ -58,6 +58,32 @@ So the default “minimum wiring” becomes:
 - GND ↔ GND
 - Nano 5V/VUSB → ESP32 VIN/5V
 
+## Exact pin-to-pin wiring (matches `pinouts.png`)
+
+If you are using the exact boards shown in `pinouts.png`:
+
+- **Arduino Nano ESP32-S3** (USB HID keyboard side)
+- **NodeMCU ESP32-WROOM-32** (Bluetooth host side)
+
+Wire them like this.
+
+### Power (one USB dongle)
+
+This is what makes it a *single dongle*: the Nano powers the NodeMCU.
+
+- Nano **VUSB (OUT)** → NodeMCU **5V**
+- Nano **GND** → NodeMCU **GND**
+
+### UART data (ESP32 → ESP32-S3)
+
+- NodeMCU **UART2_TX (GPIO17)** → Nano **D0 / RX0 (GPIO44)**
+
+### Optional return UART (ESP32-S3 → ESP32)
+
+Not required for basic operation, but recommended if you can spare the wire.
+
+- Nano **D1 / TX0 (GPIO43)** → NodeMCU **UART2_RX (GPIO16)**
+
 ## Voltage levels (important)
 
 - UART signals on both chips are **3.3V logic**.
