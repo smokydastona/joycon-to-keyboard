@@ -1,0 +1,26 @@
+menu "JoyCon Bridge (ESP32-S3 USB Keyboard)"
+
+config BRIDGE_UART_PORT
+    int "UART port" 
+    range 0 2
+    default 1
+    help
+        UART peripheral number used to receive frames from the Joy-Con receiver.
+
+config BRIDGE_UART_BAUD
+    int "Bridge UART baud"
+    default 115200
+
+config BRIDGE_UART_TX_GPIO
+    int "Bridge UART TX GPIO"
+    default 6
+    help
+        GPIO used for UART TX (optional). If you only need RX, TX can be unused.
+
+config BRIDGE_UART_RX_GPIO
+    int "Bridge UART RX GPIO"
+    default 7
+    help
+        GPIO used for UART RX (required). Set this to the pin connected to the Joy-Con receiver TX.
+
+endmenu
