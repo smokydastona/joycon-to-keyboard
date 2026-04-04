@@ -13,13 +13,13 @@ config BRIDGE_UART_BAUD
 
 config BRIDGE_UART_TX_GPIO
     int "Bridge UART TX GPIO"
-    default 6
+    default 43
     help
         GPIO used for UART TX (optional). If you only need RX, TX can be unused.
 
 config BRIDGE_UART_RX_GPIO
     int "Bridge UART RX GPIO"
-    default 7
+    default 44
     help
         GPIO used for UART RX (required). Set this to the pin connected to the Joy-Con receiver TX.
 

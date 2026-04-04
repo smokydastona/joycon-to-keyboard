@@ -29,13 +29,14 @@ Build target is `esp32s3`.
 
 In ESP-IDF, `menuconfig` expects the **ESP32-S3 GPIO number**, not the silk-screen label.
 
-Do this:
+For **Arduino Nano ESP32 (ABX00083)**, the official pinout maps:
 
-1) Open Arduino’s pinout PDF for Nano ESP32 (ABX00083) and find the row for **RX0**.
-2) Note the **GPIO number** (it will be written as something like `GPIO44` / `GPIOxx`).
-3) Set that value in:
+- `RX0` = `GPIO44`
+- `TX0` = `GPIO43`
 
-`idf.py menuconfig` → `JoyCon Bridge (ESP32-S3 USB Keyboard)` → `Bridge UART RX GPIO`
+So set:
+
+`idf.py menuconfig` → `JoyCon Bridge (ESP32-S3 USB Keyboard)` → `Bridge UART RX GPIO` = `44`
 
 Also set:
 - `Bridge UART baud` to `115200`
@@ -43,4 +44,4 @@ Also set:
 
 ## If you paste the RX0 GPIO mapping
 
-If you reply with just: `RX0 = GPIO__` (from the pinout PDF), I’ll update the repo defaults so you don’t have to.
+The repo defaults are already set for `RX0=GPIO44` / `TX0=GPIO43`.
