@@ -7,6 +7,8 @@ To confirm your board and make firmware changes that match it, send ONE of these
 
 A clear photo of the board with the chip/module text readable.
 
+If you’re debugging a build issue, also include a photo of the **wiring between boards** (especially GND, TX→RX, and any VIN/5V power wire). For the expected layout, see `docs/wiring.md`.
+
 ## Option B: copy/paste from the listing
 
 Copy/paste these lines from the Amazon page:
@@ -19,6 +21,8 @@ Copy/paste these lines from the Amazon page:
 ## Option C: what Windows sees
 
 Plug the board in and tell me what device name appears in Device Manager (or copy its VID/PID).
+
+If you’re not sure you flashed the right thing, follow `docs/firmware-install.md` and tell me which step failed (and paste the last ~50 lines of `idf.py` output).
 
 ## Option D: BLE HID check (controller side)
 

@@ -16,6 +16,11 @@ So the practical setup is:
 
 - Joy-Con (wireless) → **ESP32 (Classic BT capable)** → UART → **ESP32-S3 (USB keyboard)** → PC
 
+For full setup instructions:
+
+- `docs/wiring.md` (one-USB dongle wiring + power)
+- `docs/firmware-install.md` (Windows flashing guide for both boards)
+
 ## Build / flash
 
 Install ESP-IDF, then:

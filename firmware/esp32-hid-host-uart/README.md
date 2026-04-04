@@ -2,6 +2,11 @@
 
 ESP-IDF app that acts as a **Bluetooth HID Host** and forwards key events over UART to the USB-keyboard-side device.
 
+For full setup instructions:
+
+- `docs/wiring.md` (one-USB dongle wiring + power)
+- `docs/firmware-install.md` (Windows flashing guide for both boards)
+
 ## Reality check (important)
 
 - Joy-Cons commonly use **Bluetooth Classic HID**.
@@ -40,6 +45,8 @@ idf.py menuconfig
 idf.py build
 idf.py flash monitor
 ```
+
+Tip: during development you’ll typically flash this ESP32 over its own USB. In the final “one custom USB dongle” build, this ESP32 is powered from the ESP32-S3’s USB 5V via `VIN/5V`.
 
 ## UART (default)
 

@@ -1,5 +1,10 @@
 # Board checklist (truth-first)
 
+If you’re building the intended **one custom USB dongle** (two boards inside, one USB plug to the PC), read these first:
+
+- `docs/wiring.md` (one-USB power model + UART wiring)
+- `docs/firmware-install.md` (Windows flashing guide for both boards)
+
 I cannot open Amazon product pages from a short link and I can’t see your listing.
 To verify a board is right for this project, use **the chip marking on the board** or the exact product title/specs.
 

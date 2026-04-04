@@ -2,6 +2,10 @@
 
 This helper app talks to the bridge over a **serial (COM) port**.
 
+That COM port is provided by the **ESP32-S3 USB keyboard firmware** (USB CDC-ACM). If you haven’t flashed the ESP32-S3 yet, start with:
+
+- `docs/firmware-install.md`
+
 Minimum goals:
 
 - Select a COM port and connect
