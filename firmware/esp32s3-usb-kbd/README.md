@@ -26,6 +26,14 @@ idf.py build
 idf.py flash monitor
 ```
 
+### VS Code IntelliSense (includePath squiggles)
+
+If VS Code shows `#include errors detected` in C files, build once so ESP-IDF generates:
+
+- `firmware/esp32s3-usb-kbd/build/compile_commands.json`
+
+Then reload VS Code. The workspace includes a `.vscode/settings.json` that points the C/C++ extension at that file.
+
 ## Helper app (USB serial)
 
 When plugged into Windows, the board should enumerate as:

@@ -1,0 +1,5 @@
+{
+  // For the C/C++ extension (ms-vscode.cpptools): prefer ESP-IDF compile_commands.json
+  // This removes "#include errors detected" squiggles once you've built at least once.
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/firmware/esp32s3-usb-kbd/build/compile_commands.json"
+}
