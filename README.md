@@ -26,6 +26,7 @@ Before buying parts, read `docs/board-checklist.md`.
 - `firmware/pico-usb-kbd/` — RP2040 firmware (USB HID keyboard)
 - `firmware/esp32-hid-host-uart/` — ESP32 firmware (HID host → UART)
 - `tools/` — optional offline helpers (log decoding)
+- `helper-app/` — optional PC helper (serial UI for profiles/logs)
 - `docs/` — wiring + notes
 
 ## Hardware assumptions (default)
