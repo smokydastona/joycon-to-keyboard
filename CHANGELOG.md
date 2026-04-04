@@ -33,7 +33,7 @@ Until then, entries are grouped by date.
 
 ### Removed
 
-- RP2040 / Pico USB keyboard path (project is ESP32-S3-only on the USB keyboard/device side).
+- Legacy USB keyboard/device firmware path (project is ESP32-S3-only on the USB keyboard/device side).
 
 ### Docs / repo presentation
 
