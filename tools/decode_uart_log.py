@@ -47,10 +47,22 @@ def main() -> int:
     data = open(path, "rb").read()
 
     for payload in iter_frames(data):
-        (event,) = payload
-        pressed = bool(event & 0x80)
-        key_id = event & 0x7F
-        print(f"key_id={key_id:3d} {'DOWN' if pressed else 'UP'}")
+        if len(payload) == 1:
+            (event,) = payload
+            pressed = bool(event & 0x80)
+            key_id = event & 0x7F
+            print(f"key_id={key_id:3d} {'DOWN' if pressed else 'UP'}")
+            continue
+
+        # Optional debug frames (see docs/serial-protocol.md):
+        # 0xFF, N, then N bytes of HID report.
+        if len(payload) >= 2 and payload[0] == 0xFF:
+            n = payload[1]
+            report = payload[2 : 2 + n]
+            print(f"hid_report[{len(report)}]: {report.hex(' ')}")
+            continue
+
+        print(f"unknown_payload[{len(payload)}]: {payload.hex(' ')}")
 
     return 0
 

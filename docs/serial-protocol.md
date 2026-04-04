@@ -24,6 +24,17 @@ bits 6..0: key_id (0-127)
 
 `key_id` is mapped to a USB HID keycode + modifier inside the USB-keyboard-side firmware.
 
+## Optional debug frames (raw HID report capture)
+
+For evidence-based development, the Classic-BT host ESP32 can optionally send **debug frames**
+with payload length `> 1`. The ESP32-S3 keyboard firmware ignores these frames.
+
+Debug payload format:
+
+- `0xFF` — debug marker
+- `N` — number of HID report bytes included
+- `N bytes` — raw HID report bytes (truncated)
+
 ## Why this design
 
 - Keeps ESP32 code simple: it only needs to emit key_id up/down.

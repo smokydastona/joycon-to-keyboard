@@ -1,0 +1,41 @@
+menu "JoyCon Bridge (ESP32 Classic-BT Host)"
+
+config JOYCON_HOST_NAME_SUBSTR
+    string "Target device name substring"
+    default "Joy-Con"
+    help
+        Substring match against discovered device names.
+        For Binbok / third-party controllers you may need to change this
+        (e.g. "Binbok", "Pro Controller", etc.).
+
+config JOYCON_HOST_DISCOVERY_SECONDS
+    int "Inquiry scan duration (seconds)"
+    range 1 60
+    default 10
+    help
+        How long each Bluetooth inquiry scan should run.
+
+config JOYCON_HOST_LOG_REPORTS
+    bool "Log HID input reports (on change)"
+    default y
+    help
+        When enabled, logs input report bytes when they change.
+        This is the evidence-first workflow for implementing a correct mapper.
+
+config JOYCON_HOST_UART_DEBUG_REPORTS
+    bool "Forward raw HID reports over UART (debug frames)"
+    default n
+    help
+        When enabled, raw HID reports are also forwarded over the existing UART
+        framing (length > 1). The ESP32-S3 receiver ignores these frames.
+        Use this only for offline capture with a USB-UART dongle.
+
+config JOYCON_HOST_UART_DEBUG_MAX_BYTES
+    int "Max HID report bytes to forward"
+    range 8 200
+    default 48
+    depends on JOYCON_HOST_UART_DEBUG_REPORTS
+    help
+        HID reports can be long; forward only the first N bytes.
+
+endmenu

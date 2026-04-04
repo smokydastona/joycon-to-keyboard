@@ -15,16 +15,20 @@
 #include "esp_log.h"
 
 #include "joycon_mapper.h"
+#include "uart_framing.h"
 
 static const char* TAG = "bt-hidh";
 
 static bool s_connecting = false;
 static esp_bd_addr_t s_target_bda = {0};
 
-static bool name_matches_joycon(const char* name) {
+static bool name_matches_target(const char* name) {
     if (!name) return false;
-    // Common names include: "Joy-Con (L)" / "Joy-Con (R)" / "Pro Controller"
-    return (strstr(name, "Joy-Con") != NULL);
+    const char* needle = CONFIG_JOYCON_HOST_NAME_SUBSTR;
+    if (!needle || needle[0] == 0) {
+        return false;
+    }
+    return (strstr(name, needle) != NULL);
 }
 
 static const char* bda_to_str(const esp_bd_addr_t bda, char* out, size_t out_len) {
@@ -51,7 +55,6 @@ static void try_connect(const esp_bd_addr_t bda) {
 }
 
 static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
-    static uint32_t s_logged_reports = 0;
     switch (event) {
         case ESP_HIDH_INIT_EVT:
             ESP_LOGI(TAG, "HID host init: status=%d", param->init.status);
@@ -76,14 +79,44 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
             break;
         case ESP_HIDH_DATA_IND_EVT:
             if (param->data_ind.status == ESP_HIDH_OK && param->data_ind.data && param->data_ind.len) {
-                // Log only the first few reports to avoid flooding.
-                if (s_logged_reports < 25) {
-                    ESP_LOGI(TAG, "HID report len=%u", (unsigned)param->data_ind.len);
-                    ESP_LOG_BUFFER_HEX_LEVEL(TAG, param->data_ind.data,
-                                             (param->data_ind.len > 32) ? 32 : param->data_ind.len,
-                                             ESP_LOG_INFO);
-                    s_logged_reports++;
+                // Evidence-first workflow: only log when report bytes change.
+                // This avoids flooding and makes it easier to identify toggling bits.
+                if (CONFIG_JOYCON_HOST_LOG_REPORTS) {
+                    static uint8_t last[96];
+                    static uint16_t last_len = 0;
+
+                    uint16_t now_len = param->data_ind.len;
+                    if (now_len > sizeof(last)) {
+                        now_len = sizeof(last);
+                    }
+
+                    bool changed = false;
+                    if (last_len != now_len) {
+                        changed = true;
+                    } else if (last_len != 0) {
+                        changed = (memcmp(last, param->data_ind.data, now_len) != 0);
+                    } else {
+                        changed = true;
+                    }
+                    if (changed) {
+                        memcpy(last, param->data_ind.data, now_len);
+                        last_len = now_len;
+
+                        ESP_LOGI(TAG, "HID report len=%u", (unsigned)param->data_ind.len);
+                        ESP_LOG_BUFFER_HEX_LEVEL(TAG, param->data_ind.data,
+                                                 (param->data_ind.len > 64) ? 64 : param->data_ind.len,
+                                                 ESP_LOG_INFO);
+                    }
                 }
+
+                if (CONFIG_JOYCON_HOST_UART_DEBUG_REPORTS) {
+                    uint16_t n = param->data_ind.len;
+                    if (n > (uint16_t)CONFIG_JOYCON_HOST_UART_DEBUG_MAX_BYTES) {
+                        n = (uint16_t)CONFIG_JOYCON_HOST_UART_DEBUG_MAX_BYTES;
+                    }
+                    bridge_send_debug_hid_report(param->data_ind.data, n);
+                }
+
                 joycon_mapper_on_report(param->data_ind.data, param->data_ind.len);
             }
             break;
@@ -122,7 +155,7 @@ static void gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t* param) {
                 }
             }
 
-            if (found_name && name_matches_joycon(found_name)) {
+            if (found_name && name_matches_target(found_name)) {
                 char bda_str[18];
                 ESP_LOGI(TAG, "Found %s @ %s", found_name, bda_to_str(param->disc_res.bda, bda_str, sizeof(bda_str)));
 
@@ -170,8 +203,10 @@ esp_err_t bt_hid_host_start(void) {
     ESP_ERROR_CHECK(esp_bt_hid_host_init());
 
     // Start discovery; Joy-Con should appear as a HID device.
-    ESP_LOGI(TAG, "Starting inquiry scan...");
-    ESP_ERROR_CHECK(esp_bt_gap_start_discovery(ESP_BT_INQ_MODE_GENERAL_INQUIRY, 10, 0));
+    ESP_LOGI(TAG, "Starting inquiry scan (match='%s', %ds)...", CONFIG_JOYCON_HOST_NAME_SUBSTR,
+             CONFIG_JOYCON_HOST_DISCOVERY_SECONDS);
+    ESP_ERROR_CHECK(esp_bt_gap_start_discovery(ESP_BT_INQ_MODE_GENERAL_INQUIRY,
+                                               CONFIG_JOYCON_HOST_DISCOVERY_SECONDS, 0));
 
     return ESP_OK;
 }
