@@ -1,3 +1,5 @@
+![Joy-Con Bridge Pinouts](pinouts.png)
+
 # Joy-Con → Hardware Keyboard (anti-cheat safe)
 
 This workspace contains firmware for a **two-chip adapter**:
