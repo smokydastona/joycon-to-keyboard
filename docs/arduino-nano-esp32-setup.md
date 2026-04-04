@@ -6,7 +6,7 @@ You bought: **Arduino Nano ESP32 with Headers (ABX00083)**, which uses an **ESP3
 
 - ✅ **USB HID keyboard** to the PC (anti-cheat sees a normal keyboard)
 - ✅ Wi‑Fi/BLE for other projects
-- ⚠️ Not the best bet for **Joy‑Con wireless** (Joy‑Cons commonly need **Bluetooth Classic HID host**)
+- ⚠️ Not the best bet for **Joy‑Con wireless** (Joy‑Cons commonly need **Bluetooth Classic HID host**; some sources claim BLE, but treat that as unproven until tested)
 
 So use this board as the **keyboard half**, not the Joy‑Con receiver half.
 

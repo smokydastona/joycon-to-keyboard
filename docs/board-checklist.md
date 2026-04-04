@@ -12,6 +12,17 @@ You need **both**:
 
 It is common that a single cheap board cannot do both reliably.
 
+## Important: Joy-Con Bluetooth mode is often mis-stated online
+
+You may see claims like: “Joy-Con uses Bluetooth LE, so ESP32-S3 can pair directly.”
+
+Treat that as **unproven** until you have device-side evidence.
+
+Quick way to get evidence: see `docs/ble-hid-check.md`.
+
+- If your Joy-Con works with a **Bluetooth Classic HID host** (like the ESP32 firmware in this repo), then the two-chip design is the right direction.
+- If you can prove your Joy-Con can be used as **BLE HID over GATT** with an ESP32-S3, then a one-chip ESP32-S3-only design may be possible (not implemented in this repo today).
+
 ## If your board is an ESP32-S3
 
 - ✅ Great at being a **USB device** (so it can pretend to be a keyboard over USB).

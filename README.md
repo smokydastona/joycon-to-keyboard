@@ -15,7 +15,9 @@ Why two chips?
 - Many boards that do USB HID well (RP2040, ESP32-S3) don’t also do **Bluetooth Classic HID host** well.
 - Joy-Cons commonly pair as **Bluetooth Classic HID** devices.
 
-> Truth / constraint: I can’t guarantee ESP32-S3 can talk to Joy-Con directly. This repo targets an ESP32 variant that supports **Bluetooth Classic** for the Joy-Con side.
+> Truth / constraint: Some online threads claim “Joy-Con uses BLE so an ESP32-S3 can do everything in one chip”. I can’t rely on that without evidence. This repo targets an ESP32 variant that supports **Bluetooth Classic** for the Joy-Con side.
+
+If you want to try a **one-chip ESP32-S3-only** build anyway, first prove that your controller exposes **BLE HID over GATT**: see `docs/ble-hid-check.md`. If it cannot, the two-chip design here is the practical route.
 
 Before buying parts, read `docs/board-checklist.md`.
 

@@ -20,6 +20,13 @@ Copy/paste these lines from the Amazon page:
 
 Plug the board in and tell me what device name appears in Device Manager (or copy its VID/PID).
 
+## Option D: BLE HID check (controller side)
+
+If you’re using a third-party controller (or you’re unsure), run the quick BLE check in `docs/ble-hid-check.md` and send:
+
+- Screenshot of the Services list (showing whether UUID `0x1812` exists)
+- Exact controller model name
+
 Once I have that, I can:
 - confirm if it can be the USB keyboard side
 - confirm if it can be the Joy-Con Bluetooth host side
