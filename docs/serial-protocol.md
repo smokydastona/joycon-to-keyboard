@@ -35,6 +35,11 @@ Debug payload format:
 - `N` — number of HID report bytes included
 - `N bytes` — raw HID report bytes (truncated)
 
+Offline tools that understand these debug frames:
+
+- `tools/decode_uart_log.py` (decodes frames into readable text)
+- `tools/analyze_hid_reports.py` (summarizes which byte offsets change most)
+
 ## Why this design
 
 - Keeps ESP32 code simple: it only needs to emit key_id up/down.

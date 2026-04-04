@@ -38,4 +38,26 @@ config JOYCON_HOST_UART_DEBUG_MAX_BYTES
     help
         HID reports can be long; forward only the first N bytes.
 
+config JOYCON_HOST_TRY_NINTENDO_0X30
+    bool "Try parse Nintendo-style 0x30 reports (candidate, optional)"
+    default n
+    help
+        When enabled, the mapper will attempt to parse reports that match a common
+        Nintendo-style signature (report_id=0x30). This is useful as a hint when
+        you are capturing evidence and want higher-level fields (buttons/sticks)
+        printed for validation.
+
+        It stays conservative:
+        - It only activates when the signature matches.
+        - It does not guess other layouts.
+
+config JOYCON_HOST_NINTENDO_0X30_EMIT_KEYS
+    bool "Emit key events from parsed 0x30 reports (advanced)"
+    default n
+    depends on JOYCON_HOST_TRY_NINTENDO_0X30
+    help
+        When enabled, the mapper will emit KEY_ID_* events from parsed stick data.
+        Keep this OFF until you've verified that the parsed fields match your
+        actual controller by comparing with raw report bytes.
+
 endmenu
