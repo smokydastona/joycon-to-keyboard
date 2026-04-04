@@ -1,0 +1,7 @@
+# Enable USB CDC-ACM (serial / COM port) alongside HID.
+# This file is applied by ESP-IDF when generating sdkconfig.
+
+CONFIG_TINYUSB_CDC_ENABLED=y
+
+# Ensure at least one HID interface instance exists.
+CONFIG_TINYUSB_HID_COUNT=1

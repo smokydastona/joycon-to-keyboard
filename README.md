@@ -8,6 +8,7 @@ This workspace contains firmware for a **two-chip adapter**:
 Alternative keyboard side:
 
 - **ESP32-S3 (e.g. Arduino Nano ESP32)** can be used instead of the RP2040 for the **USB HID keyboard** role. See `firmware/esp32s3-usb-kbd/`.
+  - It also exposes a **USB CDC-ACM serial (COM port)** for the `helper-app/` protocol.
 
 If you have an Arduino Nano ESP32 (ABX00083): see `docs/arduino-nano-esp32-setup.md`.
 

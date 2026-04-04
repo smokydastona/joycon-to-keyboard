@@ -3,6 +3,8 @@
 Use an **ESP32-S3** board (like Arduino Nano ESP32) as the **USB HID keyboard** device.
 It reads UART frames from the Joy-Con receiver (a Classic-BT-capable board) and sends real USB keyboard reports to the PC.
 
+This firmware also exposes a **USB CDC-ACM serial interface (COM port)** so the desktop helper app can upload/read profiles and monitor events.
+
 ## Why this exists
 
 Your Arduino Nano ESP32 is an **ESP32-S3** (u-blox NORA-W106 module). That makes it a great fit for the **PC-facing keyboard** side.
@@ -23,6 +25,17 @@ idf.py set-target esp32s3
 idf.py build
 idf.py flash monitor
 ```
+
+## Helper app (USB serial)
+
+When plugged into Windows, the board should enumerate as:
+
+- a USB keyboard (HID)
+- a USB serial device (CDC-ACM → COM port)
+
+The serial protocol is NDJSON (one JSON object per line). See:
+
+- `helper-app/protocol.md`
 
 ## UART settings
 
