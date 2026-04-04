@@ -8,6 +8,15 @@ Minimum goals:
 - View live text/JSON coming from the device
 - Upload a profile JSON (slot 0–3)
 - Set the active profile slot
+- One-click "Upload + Activate" for the selected slot
+
+Current UI tabs:
+
+- **Profile**: JSON editor, load/save/validate
+- **Macros**: macro list + step editor, optional record mode from incoming `mapped_key` events, and a small mapping helper
+- **Stick**: stores deadzone/curve settings into the profile JSON (not applied by firmware yet unless analog data exists)
+- **Share**: offline-only export/import of a compressed “profile code” string
+- **Overlay**: a safe always-on-top status window (no hooking/injection)
 
 ## Install
 

@@ -57,8 +57,8 @@ After **any** code/resource/doc change, follow this exact workflow:
    - State what was wrong, what changed, and why.
 
 5) Version control discipline
-   - Commit and push only (no tags/releases) when the user expects updated artifacts.
-   - After each commit, run `git push`.
+  - Default: **after every change set**, make a commit and run `git push` (no tags/releases).
+  - Only skip commit/push if the user explicitly asks you not to.
    - Do not commit generated outputs (`build/`, `.gradle/`, `managed_components/`, `.pio/`, etc.).
 
 6) Only stop when shippable

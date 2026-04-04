@@ -14,14 +14,18 @@
 
 #include "tusb.h"
 
+#include "profile_runtime.h"
+
 static const char *TAG = "bridge-serial";
 
 #define BRIDGE_PROFILE_NS "profiles"
 #define BRIDGE_ACTIVE_KEY "active"
 
 #define BRIDGE_MAX_SLOTS 4
-#define BRIDGE_MAX_LINE 1024
-#define BRIDGE_MAX_PROFILE_JSON 2048
+
+// Profiles can include mappings + macros; keep a reasonable cap but larger than 1KB.
+#define BRIDGE_MAX_LINE 8192
+#define BRIDGE_MAX_PROFILE_JSON 8192
 
 static char s_line[BRIDGE_MAX_LINE];
 static size_t s_line_len = 0;
@@ -171,6 +175,9 @@ static void handle_write_profile(cJSON *root) {
     cJSON_AddNumberToObject(rsp, "slot", slot->valueint);
     cdc_write_json(rsp);
     cJSON_Delete(rsp);
+
+    // If user overwrote the active slot, reload runtime mapping/macro tables.
+    profile_runtime_reload();
 }
 
 static void handle_read_profile(cJSON *root) {
@@ -234,6 +241,8 @@ static void handle_set_active_profile(cJSON *root) {
     cJSON_AddNumberToObject(rsp, "slot", slot->valueint);
     cdc_write_json(rsp);
     cJSON_Delete(rsp);
+
+    profile_runtime_reload();
 }
 
 static void handle_line(const char *line) {
@@ -315,6 +324,21 @@ void bridge_serial_emit_mapped_key(bool pressed, uint8_t key_id) {
     cJSON_AddStringToObject(evt, "evt", "mapped_key");
     cJSON_AddBoolToObject(evt, "pressed", pressed);
     cJSON_AddNumberToObject(evt, "key_id", key_id);
+
+    cdc_write_json(evt);
+    cJSON_Delete(evt);
+}
+
+void bridge_serial_emit_macro_state(const char *id, bool started) {
+    if (!tud_cdc_connected() || !s_host_open) return;
+    if (!id) return;
+
+    cJSON *evt = cJSON_CreateObject();
+    if (!evt) return;
+
+    cJSON_AddStringToObject(evt, "evt", "macro");
+    cJSON_AddStringToObject(evt, "id", id);
+    cJSON_AddStringToObject(evt, "state", started ? "start" : "end");
 
     cdc_write_json(evt);
     cJSON_Delete(evt);
