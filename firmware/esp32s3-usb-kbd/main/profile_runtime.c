@@ -60,17 +60,47 @@ typedef enum {
     MAP_DISABLED = 1,
     MAP_REMAP = 2,
     MAP_MACRO = 3,
+    MAP_REMAP_HID = 4,
 } map_mode_t;
 
 typedef struct {
     map_mode_t mode;
     uint8_t remap_to;
     int8_t macro_index;  // -1 when none
+    uint8_t hid_mod;     // for MAP_REMAP_HID
+    uint8_t hid_keycode; // for MAP_REMAP_HID
 } map_entry_t;
+
+// --- Layer system ---
+
+#define MAX_LAYERS 4
+#define MAX_LAYER_OVERRIDES 32
+
+typedef enum {
+    LAYER_HOLD = 0,
+    LAYER_TOGGLE = 1,
+} layer_mode_t;
+
+typedef struct {
+    uint8_t key_id;
+    map_entry_t entry;
+} layer_override_t;
+
+typedef struct {
+    char name[24];
+    uint8_t activation_key_id;
+    layer_mode_t mode;
+    bool active;
+    size_t override_count;
+    layer_override_t overrides[MAX_LAYER_OVERRIDES];
+} layer_t;
 
 static map_entry_t s_map[INPUT_KEY_ID_MAX];
 static macro_t s_macros[PROFILE_MAX_MACROS];
 static size_t s_macro_count = 0;
+
+static layer_t s_layers[MAX_LAYERS];
+static size_t s_layer_count = 0;
 
 static QueueHandle_t s_macro_q = NULL;
 
@@ -94,7 +124,14 @@ static void free_profile(void) {
         // - right input ids (128..255) passthrough mirrors to base id (0..127)
         s_map[i].remap_to = (uint8_t)((i < 128) ? i : (i - 128));
         s_map[i].macro_index = -1;
+        s_map[i].hid_mod = 0;
+        s_map[i].hid_keycode = 0;
     }
+
+    for (size_t l = 0; l < MAX_LAYERS; l++) {
+        memset(&s_layers[l], 0, sizeof(layer_t));
+    }
+    s_layer_count = 0;
 }
 
 static esp_err_t nvs_get_active_slot(int *out_slot) {
@@ -283,7 +320,114 @@ static void parse_mappings(cJSON *root) {
             }
             continue;
         }
+
+        if (strcmp(type->valuestring, "remap_hid") == 0) {
+            cJSON *mod_j = cJSON_GetObjectItemCaseSensitive(entry, "mod");
+            cJSON *kc_j = cJSON_GetObjectItemCaseSensitive(entry, "keycode");
+            if (cJSON_IsNumber(mod_j) && cJSON_IsNumber(kc_j)) {
+                s_map[key_id].mode = MAP_REMAP_HID;
+                s_map[key_id].hid_mod = (uint8_t)mod_j->valueint;
+                s_map[key_id].hid_keycode = (uint8_t)kc_j->valueint;
+            }
+            continue;
+        }
     }
+}
+
+static void parse_layer_mappings(cJSON *mappings_obj, layer_t *layer) {
+    if (!cJSON_IsObject(mappings_obj)) return;
+
+    cJSON *entry = NULL;
+    cJSON_ArrayForEach(entry, mappings_obj) {
+        if (!entry || !entry->string) continue;
+        if (layer->override_count >= MAX_LAYER_OVERRIDES) break;
+
+        int key_id = atoi(entry->string);
+        if (key_id < 0 || key_id >= INPUT_KEY_ID_MAX) continue;
+        if (!cJSON_IsObject(entry)) continue;
+
+        cJSON *type = cJSON_GetObjectItemCaseSensitive(entry, "type");
+        if (!cJSON_IsString(type) || !type->valuestring) continue;
+
+        layer_override_t *ov = &layer->overrides[layer->override_count];
+        ov->key_id = (uint8_t)key_id;
+        memset(&ov->entry, 0, sizeof(ov->entry));
+        ov->entry.mode = MAP_PASSTHROUGH;
+        ov->entry.macro_index = -1;
+
+        if (strcmp(type->valuestring, "disable") == 0) {
+            ov->entry.mode = MAP_DISABLED;
+        } else if (strcmp(type->valuestring, "remap") == 0) {
+            cJSON *to = cJSON_GetObjectItemCaseSensitive(entry, "to");
+            if (!cJSON_IsNumber(to) || to->valueint < 0 || to->valueint > 127) continue;
+            ov->entry.mode = MAP_REMAP;
+            ov->entry.remap_to = (uint8_t)to->valueint;
+        } else if (strcmp(type->valuestring, "remap_hid") == 0) {
+            cJSON *mod_j = cJSON_GetObjectItemCaseSensitive(entry, "mod");
+            cJSON *kc_j = cJSON_GetObjectItemCaseSensitive(entry, "keycode");
+            if (!cJSON_IsNumber(mod_j) || !cJSON_IsNumber(kc_j)) continue;
+            ov->entry.mode = MAP_REMAP_HID;
+            ov->entry.hid_mod = (uint8_t)mod_j->valueint;
+            ov->entry.hid_keycode = (uint8_t)kc_j->valueint;
+        } else if (strcmp(type->valuestring, "macro") == 0) {
+            cJSON *id = cJSON_GetObjectItemCaseSensitive(entry, "id");
+            if (!cJSON_IsString(id) || !id->valuestring) continue;
+            int8_t idx = find_macro_index(id->valuestring);
+            if (idx < 0) continue;
+            ov->entry.mode = MAP_MACRO;
+            ov->entry.macro_index = idx;
+        } else {
+            continue;
+        }
+
+        layer->override_count++;
+    }
+}
+
+static void parse_layers(cJSON *root) {
+    cJSON *layers = cJSON_GetObjectItemCaseSensitive(root, "layers");
+    if (!cJSON_IsArray(layers)) return;
+
+    size_t count = 0;
+    cJSON *layer_obj;
+    cJSON_ArrayForEach(layer_obj, layers) {
+        if (!cJSON_IsObject(layer_obj)) continue;
+        if (count >= MAX_LAYERS) break;
+
+        cJSON *name = cJSON_GetObjectItemCaseSensitive(layer_obj, "name");
+        cJSON *key_id_j = cJSON_GetObjectItemCaseSensitive(layer_obj, "key_id");
+        cJSON *mode_j = cJSON_GetObjectItemCaseSensitive(layer_obj, "mode");
+        cJSON *mappings = cJSON_GetObjectItemCaseSensitive(layer_obj, "mappings");
+
+        if (!cJSON_IsNumber(key_id_j)) continue;
+
+        layer_t *l = &s_layers[count];
+        memset(l, 0, sizeof(*l));
+
+        if (cJSON_IsString(name) && name->valuestring) {
+            strncpy(l->name, name->valuestring, sizeof(l->name) - 1);
+        } else {
+            snprintf(l->name, sizeof(l->name), "layer%u", (unsigned)count);
+        }
+
+        l->activation_key_id = (uint8_t)key_id_j->valueint;
+        l->mode = LAYER_HOLD;
+        if (cJSON_IsString(mode_j) && mode_j->valuestring &&
+            strcmp(mode_j->valuestring, "toggle") == 0) {
+            l->mode = LAYER_TOGGLE;
+        }
+        l->active = false;
+
+        parse_layer_mappings(mappings, l);
+
+        ESP_LOGI(TAG, "Layer '%s': activation=key_id %u, mode=%s, %u overrides",
+                 l->name, l->activation_key_id,
+                 l->mode == LAYER_TOGGLE ? "toggle" : "hold",
+                 (unsigned)l->override_count);
+        count++;
+    }
+
+    s_layer_count = count;
 }
 
 static void load_profile_json(const char *json) {
@@ -301,10 +445,13 @@ static void load_profile_json(const char *json) {
 
     parse_macros(root);
     parse_mappings(root);
+    parse_layers(root);
 
     cJSON_Delete(root);
 
-    ESP_LOGI(TAG, "Loaded profile: %u mappings, %u macros", (unsigned)INPUT_KEY_ID_MAX, (unsigned)s_macro_count);
+    ESP_LOGI(TAG, "Loaded profile: %u mappings, %u macros, %u layers",
+             (unsigned)INPUT_KEY_ID_MAX, (unsigned)s_macro_count,
+             (unsigned)s_layer_count);
 }
 
 static void macro_task(void *arg) {
@@ -430,15 +577,30 @@ static void send_key_id(bool pressed, uint8_t key_id) {
     usb_kbd_set_key(mod, keycode, pressed);
 }
 
-void profile_runtime_handle_input(bool pressed, uint8_t key_id) {
-    map_entry_t *m = &s_map[key_id];
+static map_entry_t *find_layer_override(uint8_t key_id) {
+    // Check layers in reverse priority (last active layer wins).
+    for (int l = (int)s_layer_count - 1; l >= 0; l--) {
+        if (!s_layers[l].active) continue;
+        for (size_t i = 0; i < s_layers[l].override_count; i++) {
+            if (s_layers[l].overrides[i].key_id == key_id) {
+                return &s_layers[l].overrides[i].entry;
+            }
+        }
+    }
+    return NULL;
+}
 
+static void dispatch_mapping(map_entry_t *m, bool pressed, uint8_t key_id) {
     switch (m->mode) {
         case MAP_DISABLED:
             return;
 
         case MAP_REMAP:
             send_key_id(pressed, m->remap_to);
+            return;
+
+        case MAP_REMAP_HID:
+            usb_kbd_set_key(m->hid_mod, m->hid_keycode, pressed);
             return;
 
         case MAP_MACRO:
@@ -453,4 +615,25 @@ void profile_runtime_handle_input(bool pressed, uint8_t key_id) {
             send_key_id(pressed, m->remap_to);
             return;
     }
+}
+
+void profile_runtime_handle_input(bool pressed, uint8_t key_id) {
+    // Check if this key_id activates a layer.
+    for (size_t l = 0; l < s_layer_count; l++) {
+        if (s_layers[l].activation_key_id == key_id) {
+            if (s_layers[l].mode == LAYER_HOLD) {
+                s_layers[l].active = pressed;
+            } else if (s_layers[l].mode == LAYER_TOGGLE && pressed) {
+                s_layers[l].active = !s_layers[l].active;
+            }
+            bridge_serial_emit_layer_state(s_layers[l].name, s_layers[l].active);
+            return;  // Consumed by layer activation.
+        }
+    }
+
+    // Look for a layer override, then fall back to the base mapping.
+    map_entry_t *override = find_layer_override(key_id);
+    map_entry_t *m = override ? override : &s_map[key_id];
+
+    dispatch_mapping(m, pressed, key_id);
 }

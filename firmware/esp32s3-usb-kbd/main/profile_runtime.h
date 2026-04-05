@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 // Loads the active profile (from NVS) and applies it to incoming key_id events.
-// Supports: disable/remap/macro-on-press.
+// Supports: disable/remap/remap_hid/macro-on-press, with optional layers.
 
 void profile_runtime_init(void);
 

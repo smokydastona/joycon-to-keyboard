@@ -38,7 +38,8 @@ Profile schema (expected by the ESP32-S3 keyboard-side firmware):
 	"mappings": {
 		"1": {"type": "disable"},
 		"2": {"type": "remap", "to": 10},
-		"3": {"type": "macro", "id": "jump"}
+		"3": {"type": "macro", "id": "jump"},
+		"4": {"type": "remap_hid", "mod": 0, "keycode": 26}
 	},
 	"macros": [
 		{
@@ -48,6 +49,16 @@ Profile schema (expected by the ESP32-S3 keyboard-side firmware):
 				{"type": "delay", "ms": 50},
 				{"type": "key", "key_id": 44, "pressed": false}
 			]
+		}
+	],
+	"layers": [
+		{
+			"name": "alt",
+			"key_id": 6,
+			"mode": "hold",
+			"mappings": {
+				"1": {"type": "remap_hid", "mod": 0, "keycode": 30}
+			}
 		}
 	],
 	"stick": {
@@ -71,6 +82,31 @@ Notes:
 - `stick` is stored for future analog support; it may be ignored by current firmware.
 - `ui.hotspots` is helper-app-only UI state (Controller tab). It maps a visual control name to an observed input `key_id`.
 - Firmware ignores unknown profile fields.
+
+### Mapping types
+
+| type | description |
+|------|-------------|
+| `passthrough` | Input key_id is looked up in the static `keymap.c` table (default). Not stored in JSON — absence of a mapping means passthrough. |
+| `disable` | Input is ignored. |
+| `remap` | Input key_id is remapped to a different output key_id, then looked up in `keymap.c`. |
+| `macro` | A macro is triggered on press. |
+| `remap_hid` | **Bypasses keymap.c entirely.** Sends an arbitrary HID modifier+keycode. `mod` is a bitmask (0x01=LCtrl, 0x02=LShift, 0x04=LAlt, 0x08=LGUI). `keycode` is a USB HID usage code (e.g. 0x04=A, 0x1A=W, 0x2C=Space). |
+
+### Layers (optional)
+
+The `layers` array defines overlay mapping layers activated by a controller button.
+
+Each layer:
+
+| field | type | description |
+|-------|------|-------------|
+| `name` | string | Display name for the layer. |
+| `key_id` | int | The input key_id that activates this layer. This key is **consumed** (not passed through to the base mapping). |
+| `mode` | string | `"hold"` (active while held) or `"toggle"` (press to activate, press again to deactivate). |
+| `mappings` | object | Sparse overrides — only listed key_ids are overridden. Unlisted keys fall through to the base `mappings`. |
+
+Maximum 4 layers. When multiple layers are active, higher-index layers take priority.
 
 ```json
 {"cmd":"write_profile","slot":0,"profile":{}}
@@ -243,6 +279,16 @@ Macro execution events (optional):
 
 ```json
 {"evt":"macro","id":"jump","state":"end"}
+```
+
+Layer state events (emitted when a layer is activated/deactivated):
+
+```json
+{"evt":"layer","name":"alt","active":true}
+```
+
+```json
+{"evt":"layer","name":"alt","active":false}
 ```
 
 This helper app is tolerant of non-JSON log lines; it will display them as text.

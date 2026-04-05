@@ -57,3 +57,5 @@ Versioning is automatic:
 2) Build and flash ESP32-S3 firmware: see `firmware/esp32s3-usb-kbd/README.md`
 3) Build and flash ESP32 firmware: see `firmware/esp32-hid-host-uart/README.md`
 4) Edit key mapping in `docs/keymap.md` (then update the ESP32 mapping table)
+5) Use the helper app's **Bind key** feature to remap any controller button to any keyboard key (see `docs/keymap.md` / `remap_hid`)
+6) Define up to 4 **layers** for alternate mappings activated by a controller button (see `helper-app/protocol.md`)

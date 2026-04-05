@@ -20,6 +20,7 @@ from .serial_client import SerialClient
 from ._version import __version__
 from . import updater
 from . import fw_updater
+from . import hid_keycodes
 
 log = logging.getLogger("joycon_helper.app")
 
@@ -403,6 +404,16 @@ class App(tk.Tk):
         self._keymap_img_scaled: Optional[tk.PhotoImage] = None
         self._keymap_hotspot_px: Dict[str, Tuple[float, float]] = {}
 
+        # Press-to-bind state
+        self._bind_mode = False  # True = waiting for a keyboard key press
+        self._bind_hotspot: Optional[str] = None  # hotspot name being bound
+
+        # Live input state: set of currently-pressed key_ids
+        self._active_key_ids: set[int] = set()
+
+        # Layer editor state
+        self._layer_edit_index = tk.IntVar(value=-1)  # -1 = base layer
+
         self._build_ui()
         self._apply_widget_theme()
         self._refresh_ports()
@@ -612,6 +623,7 @@ class App(tk.Tk):
         self.tab_share = ttk.Frame(self.tabs)
         self.tab_overlay = ttk.Frame(self.tabs)
         self.tab_controller = ttk.Frame(self.tabs)
+        self.tab_input_test = ttk.Frame(self.tabs)
 
         self.tabs.add(self.tab_profile, text="Profile")
         self.tabs.add(self.tab_macros, text="Macros")
@@ -619,6 +631,7 @@ class App(tk.Tk):
         self.tabs.add(self.tab_share, text="Share")
         self.tabs.add(self.tab_overlay, text="Overlay")
         self.tabs.add(self.tab_controller, text="Controller")
+        self.tabs.add(self.tab_input_test, text="Input Test")
 
         self._build_profile_tab()
         self._build_macros_tab()
@@ -626,6 +639,7 @@ class App(tk.Tk):
         self._build_share_tab()
         self._build_overlay_tab()
         self._build_controller_tab()
+        self._build_input_test_tab()
 
         # Log view (below tabs)
         ttk.Label(left, text="Device log / events").pack(anchor="w", pady=(6, 0))
@@ -680,6 +694,17 @@ class App(tk.Tk):
         self._pending_fw_update: Optional[Dict[str, Any]] = None
 
     def _build_profile_tab(self) -> None:
+        # Profile management row
+        mgmt = ttk.Frame(self.tab_profile)
+        mgmt.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(mgmt, text="Name:").pack(side=tk.LEFT)
+        self._profile_name_var = tk.StringVar(value="default")
+        self._profile_name_entry = ttk.Entry(mgmt, textvariable=self._profile_name_var, width=20)
+        self._profile_name_entry.pack(side=tk.LEFT, padx=(4, 8))
+        ttk.Button(mgmt, text="Rename", command=self._profile_rename).pack(side=tk.LEFT)
+        ttk.Button(mgmt, text="Duplicate", command=self._profile_duplicate).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Button(mgmt, text="Reset to defaults", command=self._profile_reset_defaults).pack(side=tk.LEFT, padx=(6, 0))
+
         ttk.Label(self.tab_profile, text="Profile JSON").pack(anchor="w")
         self.profile_text = ScrolledText(self.tab_profile, height=18)
         self.profile_text.pack(fill=tk.BOTH, expand=True)
@@ -1042,6 +1067,11 @@ class App(tk.Tk):
             self._mapping_type.set("remap")
             to = entry.get("to")
             self._mapping_remap_to.set(str(int(to)) if isinstance(to, (int, float)) else "0")
+        elif et == "remap_hid":
+            self._mapping_type.set("remap_hid")
+            mod = entry.get("mod", 0)
+            kc = entry.get("keycode", 0)
+            self._mapping_remap_to.set(f"0x{kc:02X}" if isinstance(kc, int) else "0")
         elif et == "macro":
             self._mapping_type.set("macro")
             mid = entry.get("id")
@@ -1060,7 +1090,10 @@ class App(tk.Tk):
         btns = ttk.Frame(top)
         btns.pack(side=tk.RIGHT)
         ttk.Button(btns, text="Learn selected", command=self._keymap_begin_learn).pack(side=tk.LEFT)
+        self._bind_btn = ttk.Button(btns, text="Bind key", command=self._keymap_begin_bind)
+        self._bind_btn.pack(side=tk.LEFT, padx=(6, 0))
         ttk.Button(btns, text="Clear binding", command=self._keymap_clear_selected).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Button(btns, text="Reset button", command=self._keymap_reset_selected).pack(side=tk.LEFT, padx=(6, 0))
 
         self._keymap_canvas = tk.Canvas(box, height=340, highlightthickness=1)
         self._keymap_canvas.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
@@ -1072,10 +1105,41 @@ class App(tk.Tk):
         self._keymap_canvas.bind("<Button-1>", self._keymap_on_click)
         self._keymap_canvas.bind("<Configure>", lambda _e: self._keymap_redraw())
 
+        # Bind keyboard events for press-to-bind.
+        self.bind("<KeyPress>", self._on_keypress_bind)
+
         self._keymap_img_paths = self._find_joycons_png_variants()
         self._set_keymap_image_state()
 
         self._keymap_redraw()
+
+        # Layer selector
+        layer_box = ttk.LabelFrame(box, text="Layer")
+        layer_box.pack(fill=tk.X, padx=8, pady=(0, 4))
+        layer_row = ttk.Frame(layer_box)
+        layer_row.pack(fill=tk.X, padx=8, pady=(4, 4))
+        ttk.Radiobutton(layer_row, text="Base", variable=self._layer_edit_index, value=-1,
+                        command=self._keymap_redraw).pack(side=tk.LEFT)
+        for li in range(4):
+            ttk.Radiobutton(layer_row, text=f"Layer {li+1}", variable=self._layer_edit_index, value=li,
+                            command=self._keymap_redraw).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Button(layer_row, text="Add layer", command=self._layer_add).pack(side=tk.LEFT, padx=(16, 0))
+        ttk.Button(layer_row, text="Remove layer", command=self._layer_remove).pack(side=tk.LEFT, padx=(6, 0))
+
+        # Layer activation config (only visible when a layer is selected)
+        self._layer_cfg_frame = ttk.Frame(layer_box)
+        self._layer_cfg_frame.pack(fill=tk.X, padx=8, pady=(0, 4))
+        ttk.Label(self._layer_cfg_frame, text="Activation key_id:").pack(side=tk.LEFT)
+        self._layer_key_id_var = tk.StringVar(value="")
+        ttk.Entry(self._layer_cfg_frame, textvariable=self._layer_key_id_var, width=6).pack(side=tk.LEFT, padx=(4, 8))
+        self._layer_mode_var = tk.StringVar(value="hold")
+        ttk.Label(self._layer_cfg_frame, text="Mode:").pack(side=tk.LEFT)
+        ttk.Combobox(self._layer_cfg_frame, textvariable=self._layer_mode_var,
+                     values=["hold", "toggle"], width=8, state="readonly").pack(side=tk.LEFT, padx=(4, 8))
+        ttk.Label(self._layer_cfg_frame, text="Name:").pack(side=tk.LEFT)
+        self._layer_name_var = tk.StringVar(value="")
+        ttk.Entry(self._layer_cfg_frame, textvariable=self._layer_name_var, width=14).pack(side=tk.LEFT, padx=(4, 8))
+        ttk.Button(self._layer_cfg_frame, text="Apply layer config", command=self._layer_apply_config).pack(side=tk.LEFT)
 
         # Minimal inline mapping controls for the selected/bound input key_id.
         map_box = ttk.LabelFrame(box, text="Selected input mapping")
@@ -1090,7 +1154,7 @@ class App(tk.Tk):
         ttk.Combobox(
             r,
             textvariable=self._mapping_type,
-            values=["passthrough", "disable", "remap", "macro"],
+            values=["passthrough", "disable", "remap", "remap_hid", "macro"],
             width=14,
             state="readonly",
         ).pack(side=tk.LEFT, padx=(6, 12))
@@ -1102,6 +1166,50 @@ class App(tk.Tk):
         ttk.Entry(r, textvariable=self._mapping_macro_id, width=14).pack(side=tk.LEFT, padx=(6, 12))
 
         ttk.Button(r, text="Apply", command=self._mapping_apply).pack(side=tk.LEFT)
+
+        # Conflict warning label
+        self._conflict_var = tk.StringVar(value="")
+        self._conflict_label = ttk.Label(box, textvariable=self._conflict_var, foreground=self._colors.get("danger", "red"))
+        self._conflict_label.pack(fill=tk.X, padx=8, pady=(0, 4))
+
+    def _get_mapping_output(self, key_id: int) -> Optional[Tuple[int, int]]:
+        """Return the (mod, keycode) output for a key_id, or None if passthrough/default."""
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return None
+        mappings = prof.get("mappings", {})
+        if not isinstance(mappings, dict):
+            return None
+        entry = mappings.get(str(key_id))
+        if not isinstance(entry, dict):
+            # Passthrough — use default keymap
+            return hid_keycodes.DEFAULT_KEYMAP.get(key_id)
+        et = entry.get("type")
+        if et == "remap_hid":
+            mod = entry.get("mod", 0)
+            kc = entry.get("keycode", 0)
+            if isinstance(mod, int) and isinstance(kc, int):
+                return (mod, kc)
+        elif et == "remap":
+            to = entry.get("to")
+            if isinstance(to, int):
+                return hid_keycodes.DEFAULT_KEYMAP.get(to)
+        elif et == "disable":
+            return None
+        return None
+
+    def _detect_conflicts(self) -> Dict[str, List[str]]:
+        """Return a dict mapping output key name → list of hotspot names that produce it."""
+        hs_bindings = self._keymap_hotspots()
+        output_map: Dict[str, List[str]] = {}
+        for name, key_id in hs_bindings.items():
+            out = self._get_mapping_output(key_id)
+            if out is None:
+                continue
+            label = hid_keycodes.hid_to_name(out[0], out[1])
+            output_map.setdefault(label, []).append(name)
+        return {k: v for k, v in output_map.items() if len(v) > 1}
 
     def _keymap_redraw(self) -> None:
         c = self._keymap_canvas
@@ -1141,6 +1249,21 @@ class App(tk.Tk):
         c.create_image(ox, oy, image=self._keymap_img_scaled, anchor="nw")
 
         hs_bindings = self._keymap_hotspots()
+        conflicts = self._detect_conflicts()
+        conflict_hotspots: set[str] = set()
+        for names in conflicts.values():
+            conflict_hotspots.update(names)
+
+        # Update conflict label
+        if conflicts:
+            parts = [f"{key}: {', '.join(names)}" for key, names in conflicts.items()]
+            self._conflict_var.set("Conflicts: " + "; ".join(parts))
+        else:
+            self._conflict_var.set("")
+
+        # Reverse lookup: key_id → hotspot name
+        key_id_to_hotspot: Dict[int, str] = {v: k for k, v in hs_bindings.items()}
+
         self._keymap_hotspot_px = {}
         radius = max(14, int(min(img_w, img_h) * 0.02))
 
@@ -1150,20 +1273,68 @@ class App(tk.Tk):
             self._keymap_hotspot_px[name] = (px, py)
 
             selected = (name == self._keymap_selected_name)
-            bound = hs_bindings.get(name)
+            bound_key_id = hs_bindings.get(name)
+            is_active = bound_key_id is not None and bound_key_id in self._active_key_ids
+            is_conflict = name in conflict_hotspots
+            has_mapping = False
+            mapping_label = ""
 
-            outline = self._colors.get("accent", "#2b63ff") if selected else self._colors.get("border", "#333")
-            fill = self._colors.get("panel", "#fff")
-            text_col = self._colors.get("text", "#111")
+            if bound_key_id is not None:
+                try:
+                    prof = self._current_profile()
+                    entry = prof.get("mappings", {}).get(str(bound_key_id))
+                    if isinstance(entry, dict):
+                        has_mapping = True
+                        et = entry.get("type", "")
+                        if et == "remap_hid":
+                            mapping_label = hid_keycodes.hid_to_name(
+                                entry.get("mod", 0), entry.get("keycode", 0)
+                            )
+                        elif et == "remap":
+                            to = entry.get("to", 0)
+                            dk = hid_keycodes.DEFAULT_KEYMAP.get(to)
+                            mapping_label = hid_keycodes.hid_to_name(dk[0], dk[1]) if dk else f"→{to}"
+                        elif et == "disable":
+                            mapping_label = "OFF"
+                        elif et == "macro":
+                            mapping_label = f"M:{entry.get('id', '?')}"
+                    else:
+                        # Passthrough
+                        dk = hid_keycodes.DEFAULT_KEYMAP.get(bound_key_id)
+                        if dk:
+                            mapping_label = hid_keycodes.hid_to_name(dk[0], dk[1])
+                except Exception:
+                    pass
+
+            # Color coding
+            if is_active:
+                fill = self._colors.get("accent2", "#3a8a5c")  # green
+                outline = self._colors.get("accent2", "#3a8a5c")
+            elif is_conflict:
+                fill = self._colors.get("danger", "#c84848")  # red
+                outline = self._colors.get("danger", "#c84848")
+            elif selected:
+                fill = self._colors.get("accent", "#4a7cc8")  # blue
+                outline = self._colors.get("accent", "#4a7cc8")
+            elif has_mapping:
+                fill = self._colors.get("warning", "#b89030")  # yellow
+                outline = self._colors.get("warning", "#b89030")
+            else:
+                fill = self._colors.get("panel", "#fff")
+                outline = self._colors.get("border", "#333")
+
+            text_col = _contrast_on(fill)
 
             c.create_oval(px - radius, py - radius, px + radius, py + radius, outline=outline, width=2, fill=fill)
-            label = name if bound is None else f"{name} {bound}"
+            label = name
+            if mapping_label:
+                label = f"{name}\n{mapping_label}"
             c.create_text(
                 px,
                 py,
                 text=label,
                 fill=text_col,
-                font=(self._typo.get("font_family", "Segoe UI"), 9, "bold"),
+                font=(self._typo.get("font_family", "Segoe UI"), 8, "bold"),
             )
 
     def _keymap_pick_hotspot(self, x: float, y: float) -> Optional[str]:
@@ -1205,6 +1376,233 @@ class App(tk.Tk):
             return
         self._keymap_learn_name = self._keymap_selected_name
         self._keymap_status.set(f"Learning {self._keymap_selected_name}… press that controller button now.")
+
+    def _keymap_begin_bind(self) -> None:
+        """Start press-to-bind: wait for a keyboard key press to map to the selected hotspot."""
+        if not self._keymap_selected_name:
+            self._keymap_status.set("Select a control first.")
+            return
+        hs = self._keymap_hotspots()
+        bound_key_id = hs.get(self._keymap_selected_name)
+        if bound_key_id is None:
+            self._keymap_status.set(f"Use Learn first to assign a key_id to {self._keymap_selected_name}.")
+            return
+        self._bind_mode = True
+        self._bind_hotspot = self._keymap_selected_name
+        self._keymap_status.set(f"Press a keyboard key to bind to {self._keymap_selected_name}… (Escape to cancel)")
+
+    def _on_keypress_bind(self, event: tk.Event) -> None:
+        """Handle keyboard key press for press-to-bind mode."""
+        if not self._bind_mode:
+            return
+
+        keysym = getattr(event, "keysym", "")
+        if keysym == "Escape":
+            self._bind_mode = False
+            self._bind_hotspot = None
+            self._keymap_status.set("Bind cancelled.")
+            return
+
+        hid = hid_keycodes.keysym_to_hid(keysym)
+        if hid is None:
+            self._keymap_status.set(f"Unrecognised key: {keysym}. Try another key, or Escape to cancel.")
+            return
+
+        mod, keycode = hid
+        hotspot = self._bind_hotspot
+        self._bind_mode = False
+        self._bind_hotspot = None
+
+        if not hotspot:
+            return
+
+        # Get the key_id for this hotspot
+        hs = self._keymap_hotspots()
+        key_id = hs.get(hotspot)
+        if key_id is None:
+            return
+
+        # Apply remap_hid mapping
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return
+
+        mappings = prof.setdefault("mappings", {})
+        if not isinstance(mappings, dict):
+            mappings = {}
+            prof["mappings"] = mappings
+
+        mappings[str(key_id)] = {"type": "remap_hid", "mod": mod, "keycode": keycode}
+        self._set_profile_obj(prof)
+
+        key_name = hid_keycodes.hid_to_name(mod, keycode)
+        self._keymap_status.set(f"Bound {hotspot} → {key_name}")
+        self._mapping_key_id.set(str(key_id))
+        self._mapping_type.set("remap_hid")
+        self._keymap_redraw()
+
+    def _keymap_reset_selected(self) -> None:
+        """Remove the mapping for the currently selected hotspot (revert to passthrough)."""
+        if not self._keymap_selected_name:
+            self._keymap_status.set("Select a control first.")
+            return
+        hs = self._keymap_hotspots()
+        key_id = hs.get(self._keymap_selected_name)
+        if key_id is None:
+            self._keymap_status.set(f"{self._keymap_selected_name} has no key_id bound.")
+            return
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return
+        mappings = prof.get("mappings", {})
+        if isinstance(mappings, dict):
+            mappings.pop(str(key_id), None)
+        self._set_profile_obj(prof)
+        self._mapping_type.set("passthrough")
+        self._keymap_status.set(f"Reset {self._keymap_selected_name} to passthrough.")
+        self._keymap_redraw()
+
+    def _profile_rename(self) -> None:
+        """Rename the current profile using the Name entry field."""
+        new_name = self._profile_name_var.get().strip()
+        if not new_name:
+            return
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return
+        prof["name"] = new_name
+        self._set_profile_obj(prof)
+        self._log_line(f"[host] Profile renamed to '{new_name}'")
+
+    def _profile_duplicate(self) -> None:
+        """Duplicate the current profile with a new name and load it into the editor."""
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return
+        import copy as _copy
+        dup = _copy.deepcopy(prof)
+        old_name = dup.get("name", "default")
+        dup["name"] = f"{old_name} (copy)"
+        self._set_profile_obj(dup)
+        self._profile_name_var.set(dup["name"])
+        self._log_line(f"[host] Duplicated profile '{old_name}' → '{dup['name']}'")
+
+    def _profile_reset_defaults(self) -> None:
+        """Reset the profile to a clean default state (keeps name)."""
+        try:
+            prof = self._current_profile()
+        except Exception:
+            prof = {}
+        name = prof.get("name", "default")
+        fresh = _ensure_profile_defaults({"name": name})
+        self._set_profile_obj(fresh)
+        self._profile_name_var.set(name)
+        self._keymap_redraw()
+        self._log_line(f"[host] Profile '{name}' reset to defaults.")
+
+    def _layer_add(self) -> None:
+        """Add a new layer to the profile."""
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return
+        layers = prof.setdefault("layers", [])
+        if not isinstance(layers, list):
+            layers = []
+            prof["layers"] = layers
+        if len(layers) >= 4:
+            messagebox.showinfo("Layer limit", "Maximum 4 layers supported.")
+            return
+        idx = len(layers)
+        layers.append({
+            "name": f"layer{idx + 1}",
+            "key_id": 0,
+            "mode": "hold",
+            "mappings": {},
+        })
+        self._set_profile_obj(prof)
+        self._layer_edit_index.set(idx)
+        self._keymap_redraw()
+        self._log_line(f"[host] Added layer {idx + 1}")
+
+    def _layer_remove(self) -> None:
+        """Remove the currently selected layer."""
+        idx = self._layer_edit_index.get()
+        if idx < 0:
+            messagebox.showinfo("Select layer", "Select a layer (not Base) to remove.")
+            return
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return
+        layers = prof.get("layers", [])
+        if not isinstance(layers, list) or idx >= len(layers):
+            return
+        removed = layers.pop(idx)
+        self._set_profile_obj(prof)
+        self._layer_edit_index.set(-1)
+        self._keymap_redraw()
+        self._log_line(f"[host] Removed layer '{removed.get('name', idx)}'")
+
+    def _layer_apply_config(self) -> None:
+        """Apply the layer configuration (activation key_id, mode, name) from the UI."""
+        idx = self._layer_edit_index.get()
+        if idx < 0:
+            return
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return
+        layers = prof.get("layers", [])
+        if not isinstance(layers, list) or idx >= len(layers):
+            return
+        try:
+            key_id = int(self._layer_key_id_var.get())
+        except ValueError:
+            messagebox.showerror("Bad key_id", "Activation key_id must be an integer.")
+            return
+        layers[idx]["key_id"] = key_id
+        layers[idx]["mode"] = self._layer_mode_var.get() or "hold"
+        name = self._layer_name_var.get().strip()
+        if name:
+            layers[idx]["name"] = name
+        self._set_profile_obj(prof)
+        self._log_line(f"[host] Layer {idx + 1} config updated")
+
+    def _build_input_test_tab(self) -> None:
+        """Build the Input Test tab: live event log + active key summary."""
+        top = ttk.Frame(self.tab_input_test)
+        top.pack(fill=tk.X, padx=8, pady=(8, 4))
+        ttk.Label(top, text="Active keys:").pack(side=tk.LEFT)
+        self._input_test_active_var = tk.StringVar(value="(none)")
+        ttk.Label(top, textvariable=self._input_test_active_var, wraplength=700, justify="left").pack(
+            side=tk.LEFT, padx=(8, 0)
+        )
+        ttk.Button(top, text="Clear log", command=self._input_test_clear).pack(side=tk.RIGHT)
+
+        ttk.Label(self.tab_input_test, text="Event log (newest first)").pack(anchor="w", padx=8)
+        self._input_test_log = ScrolledText(self.tab_input_test, height=20, state="disabled")
+        self._input_test_log.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
+        self._theme_scrolled_text(self._input_test_log)
+
+    def _input_test_clear(self) -> None:
+        self._input_test_log.configure(state="normal")
+        self._input_test_log.delete("1.0", "end")
+        self._input_test_log.configure(state="disabled")
+
+    def _input_test_append(self, line: str) -> None:
+        log_w = self._input_test_log
+        log_w.configure(state="normal")
+        log_w.insert("1.0", line + "\n")
+        # Trim to 500 lines
+        total = int(log_w.index("end-1c").split(".")[0])
+        if total > 500:
+            log_w.delete(f"{501}.0", "end")
+        log_w.configure(state="disabled")
 
     def _keymap_bind_selected(self, key_id: int) -> None:
         if not self._keymap_learn_name:
@@ -1490,6 +1888,46 @@ class App(tk.Tk):
             # Keymap editor learn mode: bind hotspot -> observed input key_id.
             if pressed and self._keymap_learn_name:
                 self._keymap_bind_selected(key_id)
+
+            # Live input visualization: track active keys for hotspot highlighting.
+            if pressed:
+                self._active_key_ids.add(key_id)
+            else:
+                self._active_key_ids.discard(key_id)
+            self._keymap_redraw()
+
+            # Input test tab: log the event and update active display.
+            try:
+                ts = time.strftime("%H:%M:%S")
+                action = "pressed" if pressed else "released"
+                # Try to find a hotspot name for this key_id
+                hs = self._keymap_hotspots()
+                hs_rev = {v: k for k, v in hs.items()}
+                name = hs_rev.get(key_id, f"key_id={key_id}")
+                self._input_test_append(f"[{ts}] {name} {action}")
+
+                if self._active_key_ids:
+                    names = []
+                    for kid in sorted(self._active_key_ids):
+                        n = hs_rev.get(kid, f"#{kid}")
+                        names.append(n)
+                    self._input_test_active_var.set(", ".join(names))
+                else:
+                    self._input_test_active_var.set("(none)")
+            except Exception:
+                pass
+
+        if evt == "layer":
+            # Layer state change from firmware.
+            name = obj.get("name", "?")
+            active = obj.get("active", False)
+            ts = time.strftime("%H:%M:%S")
+            state_str = "activated" if active else "deactivated"
+            self._log_line(f"[device] Layer '{name}' {state_str}")
+            try:
+                self._input_test_append(f"[{ts}] Layer '{name}' {state_str}")
+            except Exception:
+                pass
 
         if evt == "macro":
             macro_id = str(obj.get("id", ""))
@@ -1785,8 +2223,21 @@ class App(tk.Tk):
                 messagebox.showerror("Bad macro", "Macro id is required")
                 return
             mappings[key] = {"type": "macro", "id": macro_id}
+        elif mtype == "remap_hid":
+            # Use the Remap-to field as the HID keycode (hex or int)
+            rto = self._mapping_remap_to.get().strip()
+            try:
+                kc = int(rto, 0)  # Accept hex (0x1A) or decimal
+            except ValueError:
+                messagebox.showerror("Bad keycode", "Remap-to must be a HID keycode (integer or 0xHH)")
+                return
+            if kc < 0 or kc > 255:
+                messagebox.showerror("Bad keycode", "HID keycode must be 0..255")
+                return
+            mappings[key] = {"type": "remap_hid", "mod": 0, "keycode": kc}
 
         self._set_profile_obj(prof)
+        self._keymap_redraw()
 
     def _share_export(self) -> None:
         try:

@@ -11,6 +11,22 @@ Until then, entries are grouped by date.
 
 ### Added
 
+- **Press-to-bind remapping** (helper app + firmware):
+  - New `remap_hid` mapping type: bypasses compiled `keymap.c` entirely, sends arbitrary USB HID modifier + keycode directly.
+  - Controller tab "Bind key" button: click a hotspot, press any keyboard key, instantly mapped.
+  - `hid_keycodes.py` module: ~100 tkinter keysym → USB HID keycode mappings with reverse lookup.
+- **Layer system** (firmware + helper app):
+  - Profiles can define up to 4 overlay layers, each activated by a controller button (hold or toggle mode).
+  - Layer overrides are sparse: only listed key_ids are overridden, others fall through to base.
+  - Firmware emits `{"evt":"layer","name":"...","active":true/false}` events over CDC serial.
+  - Controller tab has layer selector (Base + Layer 1–4), activation key_id/mode/name configuration.
+- **Live input visualization**: controller hotspots light up green when the corresponding button is physically pressed.
+- **Conflict detection**: hotspots producing the same output key are highlighted red, with a conflict summary below the editor.
+- **Color-coded hotspots**: green = active, red = conflict, blue = selected, yellow = has custom mapping.
+- **Input Test tab**: real-time event log showing controller button presses/releases with timestamps and active-key summary.
+- **Profile management**: rename, duplicate, and reset-to-defaults buttons on the Profile tab.
+- **Reset button**: per-hotspot "Reset button" reverts individual mappings to passthrough.
+
 - **Logging & crash-log infrastructure** (`helper-app/joycon_helper/logger.py`):
   - `logs/` folder with daily rotating `helper.log` (kept 15 days).
   - `crash-logs/` folder with timestamped crash dumps for unhandled exceptions (main thread + worker threads).

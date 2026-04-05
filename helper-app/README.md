@@ -16,12 +16,19 @@ Minimum goals:
 
 Current UI tabs:
 
-- **Profile**: JSON editor, load/save/validate
+- **Profile**: JSON editor, load/save/validate; profile rename/duplicate/reset-to-defaults buttons
 - **Macros**: macro list + step editor, optional record mode from incoming `mapped_key` events, and a small mapping helper
 - **Stick**: stores deadzone/curve settings into the profile JSON (not applied by firmware yet unless analog data exists)
-- **Share**: offline-only export/import of a compressed “profile code” string
+- **Share**: offline-only export/import of a compressed "profile code" string
 - **Overlay**: a safe always-on-top status window (no hooking/injection)
-- **Controller**: set target name substring and trigger BT scan/connect via the device (requires return UART wiring); includes a keymap editor that lets you bind controller hotspots to observed input `key_id`s (Learn) and edit the mapping
+- **Controller**: set target name substring and trigger BT scan/connect via the device (requires return UART wiring); includes a keymap editor with:
+  - **Press-to-bind**: click a controller hotspot, click "Bind key", press any keyboard key — instantly mapped via `remap_hid`
+  - **Live input visualization**: hotspots light up green when the corresponding controller button is physically pressed
+  - **Conflict detection**: hotspots that produce the same output key are highlighted red with a warning
+  - **Color-coded hotspots**: green = active, red = conflict, blue = selected, yellow = has custom mapping
+  - **Layer system**: select Base or Layer 1–4 to edit overlay mappings; layers are activated by holding/toggling a controller button
+  - Learn mode, clear binding, and reset-to-passthrough
+- **Input Test**: live event log showing controller button presses/releases with timestamps, and a summary of currently active keys
 
 The Controller tab keymap artwork switches between four Joy-Con states based on BT status: disconnected (`joycons-none.png`), left only, right only, and both connected.
 

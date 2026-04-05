@@ -646,6 +646,21 @@ void bridge_serial_emit_macro_state(const char *id, bool started) {
     cJSON_Delete(evt);
 }
 
+void bridge_serial_emit_layer_state(const char *name, bool active) {
+    if (!tud_cdc_connected() || !s_host_open) return;
+    if (!name) return;
+
+    cJSON *evt = cJSON_CreateObject();
+    if (!evt) return;
+
+    cJSON_AddStringToObject(evt, "evt", "layer");
+    cJSON_AddStringToObject(evt, "name", name);
+    cJSON_AddBoolToObject(evt, "active", active);
+
+    cdc_write_json(evt);
+    cJSON_Delete(evt);
+}
+
 void bridge_serial_emit_bt_status(const char *state, const char *name, const char *bda_str) {
     if (!tud_cdc_connected() || !s_host_open) return;
     if (!state) return;

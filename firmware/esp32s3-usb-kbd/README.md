@@ -73,3 +73,15 @@ See `helper-app/protocol.md` (firmware OTA commands) and `docs/serial-protocol.m
 ## Mapping
 
 The key IDs are the same as in `docs/keymap.md`.
+
+The profile system supports these mapping modes:
+
+- **passthrough** — looks up the incoming key_id in the compiled `keymap.c` table (WASD + modifiers)
+- **remap** — remaps one key_id to another, then uses `keymap.c`
+- **remap_hid** — bypasses `keymap.c` entirely, sending an arbitrary USB HID modifier + keycode
+- **macro** — triggers a macro sequence
+- **disable** — silently drops the input
+
+### Layers
+
+Profiles may include up to 4 **overlay layers**. Each layer is activated by a controller button (hold or toggle mode). While active, a layer's sparse mapping overrides replace the base mappings for the listed key_ids; unlisted keys fall through to the base. See `helper-app/protocol.md` for the JSON schema.
