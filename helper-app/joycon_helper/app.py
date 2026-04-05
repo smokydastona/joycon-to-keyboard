@@ -131,6 +131,7 @@ class App(tk.Tk):
         self._stick_curve_exp = tk.DoubleVar(value=1.0)
 
         self._bt_target_substr = tk.StringVar(value="Joy-Con")
+        self._bt_target_preset = tk.StringVar(value="Either (Joy-Con)")
         self._bt_status = tk.StringVar(value="BT: -")
 
         self._build_ui()
@@ -392,6 +393,17 @@ class App(tk.Tk):
 
         row1 = tk.Frame(box)
         row1.pack(fill=tk.X, pady=(6, 0), padx=8)
+        tk.Label(row1, text="Preset:").pack(side=tk.LEFT)
+        preset = ttk.Combobox(
+            row1,
+            textvariable=self._bt_target_preset,
+            values=["Either (Joy-Con)", "Left (Joy-Con (L))", "Right (Joy-Con (R))", "Custom"],
+            width=20,
+            state="readonly",
+        )
+        preset.pack(side=tk.LEFT, padx=(8, 12))
+        preset.bind("<<ComboboxSelected>>", lambda _e: self._bt_apply_preset())
+
         tk.Label(row1, text="Target name contains:").pack(side=tk.LEFT)
         tk.Entry(row1, textvariable=self._bt_target_substr, width=30).pack(side=tk.LEFT, padx=(8, 0))
 
@@ -405,6 +417,16 @@ class App(tk.Tk):
             "Your controller may still need to be put into pairing mode (e.g. Joy-Con sync button)."
         )
         tk.Label(self.tab_controller, text=note, wraplength=900, justify="left").pack(anchor="w", padx=12, pady=(4, 0))
+
+    def _bt_apply_preset(self) -> None:
+        p = self._bt_target_preset.get().strip()
+        if p == "Either (Joy-Con)":
+            self._bt_target_substr.set("Joy-Con")
+        elif p == "Left (Joy-Con (L))":
+            self._bt_target_substr.set("Joy-Con (L)")
+        elif p == "Right (Joy-Con (R))":
+            self._bt_target_substr.set("Joy-Con (R)")
+        # Custom: leave the text box alone
 
     def _refresh_ports(self) -> None:
         ports = [p.device for p in list_ports.comports()]
