@@ -47,6 +47,20 @@ pip install -r requirements.txt
 python -m joycon_helper
 ```
 
+## Build a Windows `.exe`
+
+Install the build-time dependency set and generate the UI bundle first:
+
+```powershell
+pip install -r requirements-build.txt
+python ..\tools\generate_ui_artifacts.py
+python -m PyInstaller --noconfirm --clean --onefile --windowed --name JoyConBridgeHelper joycon_helper\__main__.py --paths . --distpath dist --workpath build --add-data "..\.ui-bundle;.ui-bundle" --hidden-import serial.tools.list_ports_windows
+```
+
+The executable is written to `helper-app\dist\JoyConBridgeHelper.exe`.
+
+On GitHub, `.github/workflows/build-release-bundle.yml` builds that executable and bundles it together with both firmware outputs into one downloadable artifact.
+
 ## Protocol
 
 This app assumes the device understands **newline-delimited JSON** commands and may emit newline-delimited JSON events.

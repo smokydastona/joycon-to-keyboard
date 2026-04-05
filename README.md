@@ -33,6 +33,15 @@ Before buying parts, read `docs/board-checklist.md`.
 - Joy-Con connects **wirelessly** to ESP32 over Bluetooth.
 - Adapter connects to PC via **one USB cable** (ESP32-S3 → PC). This is what makes the PC see a normal hardware keyboard.
 
+## CI bundle
+
+Pushes to `main` can produce a single downloadable GitHub Actions artifact containing:
+
+- both firmware build outputs (ESP32 Classic-BT host and ESP32-S3 USB keyboard)
+- a packaged Windows helper app executable
+
+The workflow definition lives in `.github/workflows/build-release-bundle.yml`.
+
 ## Next
 
 0) Wiring (one USB dongle): see `docs/wiring.md`

@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import json
 import math
+import sys
 import tkinter as tk
 import tkinter.ttk as ttk
 import time
@@ -83,6 +84,96 @@ def _load_theme_json(path: Path) -> dict:
     if not isinstance(obj.get("colors"), dict) or not isinstance(obj.get("typography"), dict):
         raise ValueError("theme.json missing required keys")
     return obj
+
+
+def _frozen_bundle_root() -> Optional[Path]:
+    base = getattr(sys, "_MEIPASS", None)
+    if not isinstance(base, str) or not base:
+        return None
+    try:
+        return Path(base).resolve()
+    except Exception:
+        return None
+
+
+def _executable_dir() -> Optional[Path]:
+    if not getattr(sys, "frozen", False):
+        return None
+    try:
+        return Path(sys.executable).resolve().parent
+    except Exception:
+        return None
+
+
+def _dedupe_paths(paths: List[Path]) -> List[Path]:
+    seen: set[str] = set()
+    unique: List[Path] = []
+    for path in paths:
+        key = str(path)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(path)
+    return unique
+
+
+def _ui_bundle_search_roots() -> List[Path]:
+    roots: List[Path] = []
+    try:
+        roots.append(Path.cwd() / ".ui-bundle")
+    except Exception:
+        pass
+
+    exe_dir = _executable_dir()
+    if exe_dir is not None:
+        roots.append(exe_dir / ".ui-bundle")
+
+    bundle_root = _frozen_bundle_root()
+    if bundle_root is not None:
+        roots.append(bundle_root / ".ui-bundle")
+
+    here = Path(__file__).resolve()
+    roots.extend(
+        [
+            here.parents[1] / ".ui-bundle",  # helper-app/.ui-bundle
+            here.parents[3] / ".ui-bundle",  # repo root/.ui-bundle
+        ]
+    )
+    return _dedupe_paths(roots)
+
+
+def _joycons_search_roots() -> List[Path]:
+    roots: List[Path] = []
+    try:
+        roots.extend(
+            [
+                Path.cwd(),
+                Path.cwd() / ".ui-bundle",
+                Path.cwd() / "docs" / "ui" / "assets",
+            ]
+        )
+    except Exception:
+        pass
+
+    exe_dir = _executable_dir()
+    if exe_dir is not None:
+        roots.extend([exe_dir, exe_dir / ".ui-bundle"])
+
+    bundle_root = _frozen_bundle_root()
+    if bundle_root is not None:
+        roots.extend([bundle_root, bundle_root / ".ui-bundle"])
+
+    here = Path(__file__).resolve()
+    roots.extend(
+        [
+            here.parents[1],  # helper-app/
+            here.parents[1] / ".ui-bundle",  # helper-app/.ui-bundle/
+            here.parents[3],  # repo root/
+            here.parents[3] / ".ui-bundle",  # repo root/.ui-bundle/
+            here.parents[3] / "docs" / "ui" / "assets",  # repo root/docs/ui/assets/
+        ]
+    )
+    return _dedupe_paths(roots)
 
 
 def _ensure_profile_defaults(profile: dict) -> dict:
@@ -284,19 +375,7 @@ class App(tk.Tk):
 
     def _load_ui_theme(self) -> dict:
         # Load a local UI bundle theme if present; otherwise use defaults.
-        candidates: List[Path] = []
-        try:
-            candidates.append(Path.cwd() / ".ui-bundle" / "theme.json")
-        except Exception:
-            pass
-
-        here = Path(__file__).resolve()
-        # .../helper-app/joycon_helper/app.py -> repo root is parents[3]
-        for p in (
-            here.parents[1] / ".ui-bundle" / "theme.json",  # helper-app/.ui-bundle
-            here.parents[3] / ".ui-bundle" / "theme.json",  # repo root/.ui-bundle
-        ):
-            candidates.append(p)
+        candidates = [root / "theme.json" for root in _ui_bundle_search_roots()]
 
         for c in candidates:
             try:
@@ -733,28 +812,7 @@ class App(tk.Tk):
             "right": "joycons-right.png",
             "both": "joycons-both.png",
         }
-        search_roots: List[Path] = []
-        try:
-            search_roots.extend(
-                [
-                    Path.cwd(),
-                    Path.cwd() / ".ui-bundle",
-                    Path.cwd() / "docs" / "ui" / "assets",
-                ]
-            )
-        except Exception:
-            pass
-
-        here = Path(__file__).resolve()
-        search_roots.extend(
-            [
-                here.parents[1],  # helper-app/
-                here.parents[1] / ".ui-bundle",  # helper-app/.ui-bundle/
-                here.parents[3],  # repo root/
-                here.parents[3] / ".ui-bundle",  # repo root/.ui-bundle/
-                here.parents[3] / "docs" / "ui" / "assets",  # repo root/docs/ui/assets/
-            ]
-        )
+        search_roots = _joycons_search_roots()
 
         found: Dict[str, Path] = {}
         for state, file_name in variant_names.items():
@@ -769,18 +827,8 @@ class App(tk.Tk):
 
         fallback_base: Optional[Path] = None
         fallback_none: Optional[Path] = None
-        fallback_candidates = [
-            Path.cwd() / "joycons.png",
-            here.parents[1] / "joycons.png",
-            here.parents[3] / "joycons.png",
-            Path.cwd() / ".ui-bundle" / "joycons.png",
-            here.parents[1] / ".ui-bundle" / "joycons.png",
-            here.parents[3] / ".ui-bundle" / "joycons.png",
-        ]
-        none_candidates = [
-            Path.cwd() / "joycons-grey.png",
-            here.parents[3] / "joycons-grey.png",
-        ]
+        fallback_candidates = [root / "joycons.png" for root in search_roots]
+        none_candidates = [root / "joycons-grey.png" for root in search_roots]
         for candidate in fallback_candidates:
             try:
                 if candidate.exists():
