@@ -52,13 +52,14 @@ Tip: during development you’ll typically flash this ESP32 over its own USB. In
 
 - Baud: 115200
 - TX pin: GPIO 17
-- RX pin: GPIO 16 (unused)
+- RX pin: GPIO 16 (optional helper-app control)
 
 Set in `main/config.h`.
 
 ## What this firmware does today
 
 - Initializes UART framing to match `docs/serial-protocol.md`.
-- Contains a stub that can be wired to a HID input callback.
+- Scans + connects to a Classic-BT HID device and forwards input reports to `main/joycon_mapper.c`.
+- Optionally accepts helper-app control commands over UART RX (requires the return UART wire).
 
-Next step is to implement Joy-Con report parsing in `main/joycon_parser.c`.
+Next step is to capture real reports and implement correct mappings in `main/joycon_mapper.c`.

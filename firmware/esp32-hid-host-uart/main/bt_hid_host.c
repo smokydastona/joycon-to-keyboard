@@ -22,9 +22,11 @@ static const char* TAG = "bt-hidh";
 static bool s_connecting = false;
 static esp_bd_addr_t s_target_bda = {0};
 
+static char s_target_name_override[64] = {0};
+
 static bool name_matches_target(const char* name) {
     if (!name) return false;
-    const char* needle = CONFIG_JOYCON_HOST_NAME_SUBSTR;
+    const char* needle = (s_target_name_override[0] != 0) ? s_target_name_override : CONFIG_JOYCON_HOST_NAME_SUBSTR;
     if (!needle || needle[0] == 0) {
         return false;
     }
@@ -46,6 +48,7 @@ static void try_connect(const esp_bd_addr_t bda) {
 
     char bda_str[18];
     ESP_LOGI(TAG, "Connecting to %s", bda_to_str(bda, bda_str, sizeof(bda_str)));
+    bridge_send_bt_status(3, bda, NULL);
 
     esp_err_t err = esp_bt_hid_host_connect((esp_bd_addr_t)bda);
     if (err != ESP_OK) {
@@ -67,6 +70,8 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
                      (int)param->open.is_orig,
                      param->open.handle,
                      bda_to_str(param->open.bd_addr, bda_str, sizeof(bda_str)));
+
+            bridge_send_bt_status(4, param->open.bd_addr, NULL);
             break;
         }
         case ESP_HIDH_CLOSE_EVT:
@@ -76,6 +81,7 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
                      param->close.conn_status,
                      param->close.handle);
             s_connecting = false;
+            bridge_send_bt_status(5, s_target_bda, NULL);
             break;
         case ESP_HIDH_DATA_IND_EVT:
             if (param->data_ind.status == ESP_HIDH_OK && param->data_ind.data && param->data_ind.len) {
@@ -159,6 +165,8 @@ static void gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t* param) {
                 char bda_str[18];
                 ESP_LOGI(TAG, "Found %s @ %s", found_name, bda_to_str(param->disc_res.bda, bda_str, sizeof(bda_str)));
 
+                bridge_send_bt_status(2, param->disc_res.bda, found_name);
+
                 // Stop discovery to reduce noise, then connect.
                 esp_bt_gap_cancel_discovery();
                 try_connect(param->disc_res.bda);
@@ -174,6 +182,33 @@ static void gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t* param) {
         default:
             break;
     }
+}
+
+void bt_hid_host_set_target_substr(const char* name_substr, uint8_t len) {
+    if (!name_substr || len == 0) {
+        s_target_name_override[0] = 0;
+        ESP_LOGI(TAG, "Target name substring override cleared; using Kconfig '%s'", CONFIG_JOYCON_HOST_NAME_SUBSTR);
+        return;
+    }
+
+    if (len >= sizeof(s_target_name_override)) {
+        len = (uint8_t)(sizeof(s_target_name_override) - 1);
+    }
+    memcpy(s_target_name_override, name_substr, len);
+    s_target_name_override[len] = 0;
+    ESP_LOGI(TAG, "Target name substring override='%s'", s_target_name_override);
+}
+
+esp_err_t bt_hid_host_start_discovery(void) {
+    const char* needle = (s_target_name_override[0] != 0) ? s_target_name_override : CONFIG_JOYCON_HOST_NAME_SUBSTR;
+    ESP_LOGI(TAG, "Starting inquiry scan (match='%s', %ds)...", needle, CONFIG_JOYCON_HOST_DISCOVERY_SECONDS);
+    bridge_send_bt_status(1, NULL, needle);
+
+    // Best-effort: ignore cancel errors if not currently discovering.
+    (void)esp_bt_gap_cancel_discovery();
+
+    return esp_bt_gap_start_discovery(ESP_BT_INQ_MODE_GENERAL_INQUIRY,
+                                     CONFIG_JOYCON_HOST_DISCOVERY_SECONDS, 0);
 }
 
 esp_err_t bt_hid_host_start(void) {
@@ -203,10 +238,7 @@ esp_err_t bt_hid_host_start(void) {
     ESP_ERROR_CHECK(esp_bt_hid_host_init());
 
     // Start discovery; Joy-Con should appear as a HID device.
-    ESP_LOGI(TAG, "Starting inquiry scan (match='%s', %ds)...", CONFIG_JOYCON_HOST_NAME_SUBSTR,
-             CONFIG_JOYCON_HOST_DISCOVERY_SECONDS);
-    ESP_ERROR_CHECK(esp_bt_gap_start_discovery(ESP_BT_INQ_MODE_GENERAL_INQUIRY,
-                                               CONFIG_JOYCON_HOST_DISCOVERY_SECONDS, 0));
+    ESP_ERROR_CHECK(bt_hid_host_start_discovery());
 
     return ESP_OK;
 }

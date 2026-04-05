@@ -130,6 +130,9 @@ class App(tk.Tk):
         self._stick_curve = tk.StringVar(value="linear")
         self._stick_curve_exp = tk.DoubleVar(value=1.0)
 
+        self._bt_target_substr = tk.StringVar(value="Joy-Con")
+        self._bt_status = tk.StringVar(value="BT: -")
+
         self._build_ui()
         self._refresh_ports()
         self.after(50, self._drain_rx)
@@ -169,18 +172,21 @@ class App(tk.Tk):
         self.tab_stick = tk.Frame(self.tabs)
         self.tab_share = tk.Frame(self.tabs)
         self.tab_overlay = tk.Frame(self.tabs)
+        self.tab_controller = tk.Frame(self.tabs)
 
         self.tabs.add(self.tab_profile, text="Profile")
         self.tabs.add(self.tab_macros, text="Macros")
         self.tabs.add(self.tab_stick, text="Stick")
         self.tabs.add(self.tab_share, text="Share")
         self.tabs.add(self.tab_overlay, text="Overlay")
+        self.tabs.add(self.tab_controller, text="Controller")
 
         self._build_profile_tab()
         self._build_macros_tab()
         self._build_stick_tab()
         self._build_share_tab()
         self._build_overlay_tab()
+        self._build_controller_tab()
 
         # Log view (below tabs)
         tk.Label(left, text="Device log / events").pack(anchor="w", pady=(6, 0))
@@ -380,6 +386,26 @@ class App(tk.Tk):
         tk.Button(btns, text="Open overlay", command=self._overlay_open).pack(side=tk.LEFT)
         tk.Button(btns, text="Close overlay", command=self._overlay_close).pack(side=tk.LEFT, padx=(6, 0))
 
+    def _build_controller_tab(self) -> None:
+        box = tk.LabelFrame(self.tab_controller, text="Controller connection")
+        box.pack(fill=tk.X, padx=8, pady=8)
+
+        row1 = tk.Frame(box)
+        row1.pack(fill=tk.X, pady=(6, 0), padx=8)
+        tk.Label(row1, text="Target name contains:").pack(side=tk.LEFT)
+        tk.Entry(row1, textvariable=self._bt_target_substr, width=30).pack(side=tk.LEFT, padx=(8, 0))
+
+        row2 = tk.Frame(box)
+        row2.pack(fill=tk.X, pady=(10, 6), padx=8)
+        tk.Button(row2, text="Connect / Scan", command=self._cmd_bt_connect, width=18).pack(side=tk.LEFT)
+        tk.Label(row2, textvariable=self._bt_status).pack(side=tk.LEFT, padx=(12, 0))
+
+        note = (
+            "This sends commands to the ESP32 BT host so you don't need to press buttons on the boards. "
+            "Your controller may still need to be put into pairing mode (e.g. Joy-Con sync button)."
+        )
+        tk.Label(self.tab_controller, text=note, wraplength=900, justify="left").pack(anchor="w", padx=12, pady=(4, 0))
+
     def _refresh_ports(self) -> None:
         ports = [p.device for p in list_ports.comports()]
         if not ports:
@@ -474,6 +500,11 @@ class App(tk.Tk):
     def _cmd_ping(self) -> None:
         self._send_cmd({"cmd": "ping"})
 
+    def _cmd_bt_connect(self) -> None:
+        target = self._bt_target_substr.get().strip()
+        self._send_cmd({"cmd": "bt_set_target", "name_substr": target})
+        self._send_cmd({"cmd": "bt_connect"})
+
     def _cmd_upload_and_set_active(self) -> None:
         try:
             profile = self._validate_profile()
@@ -562,6 +593,18 @@ class App(tk.Tk):
             state = str(obj.get("state", ""))
             if self._overlay and not self._overlay.is_closed:
                 self._overlay.set_macro(macro_id, state)
+
+        if evt == "bt_status":
+            state = str(obj.get("state", "-"))
+            name = obj.get("name")
+            bda = obj.get("bda")
+
+            suffix = ""
+            if isinstance(name, str) and name:
+                suffix += f"  name={name}"
+            if isinstance(bda, str) and bda:
+                suffix += f"  bda={bda}"
+            self._bt_status.set(f"BT: {state}{suffix}")
 
     def _current_profile(self) -> dict:
         return self._validate_profile()

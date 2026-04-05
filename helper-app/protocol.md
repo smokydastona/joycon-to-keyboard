@@ -80,6 +80,27 @@ Notes:
 {"cmd":"set_active_profile","slot":0}
 ```
 
+### BT set target (runtime)
+
+Sets the target device name substring used by the ESP32 Classic-BT HID host while scanning.
+
+```json
+{"cmd":"bt_set_target","name_substr":"Joy-Con"}
+```
+
+Notes:
+
+- This is runtime-only (not persisted).
+- Requires the *return UART* wire so the ESP32-S3 can send UART frames back to the ESP32 host.
+
+### BT connect / scan
+
+Triggers an inquiry scan on the ESP32 BT host. If a discovered device name matches the current target substring, the host will attempt to connect.
+
+```json
+{"cmd":"bt_connect"}
+```
+
 ## Events (device -> PC)
 
 The device may emit events for:
@@ -105,6 +126,16 @@ Macro execution events (optional):
 ```
 
 This helper app is tolerant of non-JSON log lines; it will display them as text.
+
+BT host status events (optional):
+
+```json
+{"evt":"bt_status","state":"discovering","name":"Joy-Con"}
+```
+
+```json
+{"evt":"bt_status","state":"connected","bda":"aa:bb:cc:dd:ee:ff"}
+```
 
 ## Share codes (helper app only)
 

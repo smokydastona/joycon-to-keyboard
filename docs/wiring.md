@@ -80,7 +80,9 @@ This is what makes it a *single dongle*: the Nano powers the NodeMCU.
 
 ### Optional return UART (ESP32-S3 → ESP32)
 
-Not required for basic operation, but recommended if you can spare the wire.
+Not required for basic one-way key output.
+
+Required if you want the **helper app to initiate controller connect/scan** (no button presses on the boards).
 
 - Nano **D1 / TX0 (GPIO43)** → NodeMCU **UART2_RX (GPIO16)**
 

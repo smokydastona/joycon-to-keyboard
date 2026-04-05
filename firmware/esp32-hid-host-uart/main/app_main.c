@@ -7,6 +7,7 @@
 
 #include "joycon_mapper.h"
 #include "bt_hid_host.h"
+#include "bridge_ctrl.h"
 
 static const char* TAG = "joycon-bridge";
 
@@ -36,6 +37,8 @@ void app_main(void) {
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "bt_hid_host_start failed: %s", esp_err_to_name(err));
     }
+
+    bridge_ctrl_init();
 
     // Idle loop
     while (1) {

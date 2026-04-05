@@ -50,6 +50,8 @@ The serial protocol is NDJSON (one JSON object per line). See:
 
 - `helper-app/protocol.md`
 
+If you wire the *return UART* line (ESP32-S3 TX → ESP32 RX), the helper app can also send BT control commands (set target substring + trigger scan/connect) and receive BT status events.
+
 ## UART settings
 
 Configured via `menuconfig`:

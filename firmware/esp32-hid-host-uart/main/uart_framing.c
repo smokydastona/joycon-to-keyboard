@@ -4,6 +4,8 @@
 
 #include "driver/uart.h"
 
+#include <string.h>
+
 static inline uint8_t xor_checksum(uint8_t length, const uint8_t* payload) {
     uint8_t x = length;
     for (uint8_t i = 0; i < length; i++) {
@@ -58,4 +60,31 @@ void bridge_send_debug_hid_report(const uint8_t* report, uint16_t report_len) {
 
     uint8_t length = (uint8_t)(2 + n);
     bridge_send_frame(buf, length);
+}
+
+void bridge_send_bt_status(uint8_t status_id, const uint8_t* bda6, const char* name) {
+    // Status payload format (length > 1):
+    //   [0]=0xFD, [1]=status_id, [2..7]=bda, [8]=name_len, [9..]=name
+    uint8_t bda_zeros[6] = {0};
+    if (!bda6) bda6 = bda_zeros;
+
+    uint8_t name_len = 0;
+    const char* nm = name;
+    if (nm) {
+        size_t n = strlen(nm);
+        if (n > 48) n = 48;
+        name_len = (uint8_t)n;
+    }
+
+    uint8_t payload[1 + 1 + 6 + 1 + 48];
+    payload[0] = 0xFD;
+    payload[1] = status_id;
+    memcpy(&payload[2], bda6, 6);
+    payload[8] = name_len;
+    if (name_len && nm) {
+        memcpy(&payload[9], nm, name_len);
+    }
+
+    uint8_t length = (uint8_t)(9 + name_len);
+    bridge_send_frame(payload, length);
 }

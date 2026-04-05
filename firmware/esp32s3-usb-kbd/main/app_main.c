@@ -1,6 +1,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include <stdio.h>
+#include <string.h>
+
 #include "esp_log.h"
 
 #include "uart_proto.h"
@@ -10,6 +13,26 @@
 #include "profile_runtime.h"
 
 static const char* TAG = "s3-kbd";
+
+#define STATUS_MARKER 0xFD
+
+static const char* status_id_to_state(uint8_t id) {
+    switch (id) {
+        case 1: return "discovering";
+        case 2: return "found";
+        case 3: return "connecting";
+        case 4: return "connected";
+        case 5: return "disconnected";
+        default: return "unknown";
+    }
+}
+
+static const char* bda_to_str(const uint8_t* bda, char* out, size_t out_len) {
+    if (!bda || !out || out_len < 18) return NULL;
+    snprintf(out, out_len, "%02x:%02x:%02x:%02x:%02x:%02x",
+             bda[0], bda[1], bda[2], bda[3], bda[4], bda[5]);
+    return out;
+}
 
 void app_main(void) {
     usb_kbd_init();
@@ -22,12 +45,42 @@ void app_main(void) {
     while (1) {
         bridge_serial_poll();
 
-        uint8_t event;
-        if (uart_proto_poll_event(&event)) {
-            bool pressed = (event & 0x80u) != 0;
-            uint8_t key_id = event & 0x7Fu;
-            bridge_serial_emit_mapped_key(pressed, key_id);
-            profile_runtime_handle_input(pressed, key_id);
+        uart_frame_t f;
+        while (uart_proto_poll_frame(&f)) {
+            if (f.type == UART_FRAME_KEY_EVENT && f.length == 1) {
+                uint8_t event = f.payload[0];
+                bool pressed = (event & 0x80u) != 0;
+                uint8_t key_id = event & 0x7Fu;
+                bridge_serial_emit_mapped_key(pressed, key_id);
+                profile_runtime_handle_input(pressed, key_id);
+                continue;
+            }
+
+            if (f.type == UART_FRAME_STATUS && f.length >= 2 && f.payload[0] == STATUS_MARKER) {
+                uint8_t status_id = f.payload[1];
+                const char* state = status_id_to_state(status_id);
+
+                const char* name = NULL;
+                char bda_str[18];
+                const char* bda_out = NULL;
+
+                if (f.length >= 9) {
+                    bda_out = bda_to_str(&f.payload[2], bda_str, sizeof(bda_str));
+
+                    uint8_t name_len = f.payload[8];
+                    if (name_len > 0 && (uint16_t)(9 + name_len) <= f.length) {
+                        static char name_buf[64];
+                        uint8_t n = name_len;
+                        if (n >= sizeof(name_buf)) n = (uint8_t)(sizeof(name_buf) - 1);
+                        memcpy(name_buf, &f.payload[9], n);
+                        name_buf[n] = 0;
+                        name = name_buf;
+                    }
+                }
+
+                bridge_serial_emit_bt_status(state, name, bda_out);
+                continue;
+            }
         }
 
         // Let TinyUSB run.

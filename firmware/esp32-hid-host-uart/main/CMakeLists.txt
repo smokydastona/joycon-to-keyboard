@@ -2,6 +2,7 @@ idf_component_register(
     SRCS
         "app_main.c"
         "bt_hid_host.c"
+        "bridge_ctrl.c"
         "uart_framing.c"
         "joycon_mapper.c"
         "nintendo_candidate.c"

@@ -15,8 +15,14 @@
 #include "tusb.h"
 
 #include "profile_runtime.h"
+#include "uart_proto.h"
 
 static const char *TAG = "bridge-serial";
+
+// UART control commands to the ESP32 BT host.
+// payload: 0xFE, cmd_id, ...
+#define CTRL_CMD_SET_TARGET_SUBSTR 0x01
+#define CTRL_CMD_START_DISCOVERY   0x02
 
 #define BRIDGE_PROFILE_NS "profiles"
 #define BRIDGE_ACTIVE_KEY "active"
@@ -245,6 +251,45 @@ static void handle_set_active_profile(cJSON *root) {
     profile_runtime_reload();
 }
 
+static void respond_ok_simple(const char *rsp_name) {
+    cJSON *rsp = cJSON_CreateObject();
+    if (!rsp) return;
+    cJSON_AddStringToObject(rsp, "rsp", rsp_name ? rsp_name : "ok");
+    cJSON_AddBoolToObject(rsp, "ok", true);
+    cdc_write_json(rsp);
+    cJSON_Delete(rsp);
+}
+
+static void handle_bt_set_target(cJSON *root) {
+    cJSON *name_substr = cJSON_GetObjectItemCaseSensitive(root, "name_substr");
+    if (!cJSON_IsString(name_substr) || !name_substr->valuestring) {
+        respond_error("bt_set_target", "missing_name_substr");
+        return;
+    }
+
+    const char *s = name_substr->valuestring;
+    size_t n = strlen(s);
+    if (n > 48) {
+        respond_error("bt_set_target", "name_substr_too_long");
+        return;
+    }
+
+    if (!uart_proto_send_ctrl(CTRL_CMD_SET_TARGET_SUBSTR, (const uint8_t *)s, (uint8_t)n)) {
+        respond_error("bt_set_target", "uart_send_failed");
+        return;
+    }
+
+    respond_ok_simple("bt_set_target");
+}
+
+static void handle_bt_connect(void) {
+    if (!uart_proto_send_ctrl(CTRL_CMD_START_DISCOVERY, NULL, 0)) {
+        respond_error("bt_connect", "uart_send_failed");
+        return;
+    }
+    respond_ok_simple("bt_connect");
+}
+
 static void handle_line(const char *line) {
     cJSON *root = cJSON_Parse(line);
     if (!root) {
@@ -267,6 +312,10 @@ static void handle_line(const char *line) {
         handle_read_profile(root);
     } else if (strcmp(cmd->valuestring, "set_active_profile") == 0) {
         handle_set_active_profile(root);
+    } else if (strcmp(cmd->valuestring, "bt_set_target") == 0) {
+        handle_bt_set_target(root);
+    } else if (strcmp(cmd->valuestring, "bt_connect") == 0) {
+        handle_bt_connect();
     } else {
         respond_error(cmd->valuestring, "unknown_cmd");
     }
@@ -339,6 +388,26 @@ void bridge_serial_emit_macro_state(const char *id, bool started) {
     cJSON_AddStringToObject(evt, "evt", "macro");
     cJSON_AddStringToObject(evt, "id", id);
     cJSON_AddStringToObject(evt, "state", started ? "start" : "end");
+
+    cdc_write_json(evt);
+    cJSON_Delete(evt);
+}
+
+void bridge_serial_emit_bt_status(const char *state, const char *name, const char *bda_str) {
+    if (!tud_cdc_connected() || !s_host_open) return;
+    if (!state) return;
+
+    cJSON *evt = cJSON_CreateObject();
+    if (!evt) return;
+
+    cJSON_AddStringToObject(evt, "evt", "bt_status");
+    cJSON_AddStringToObject(evt, "state", state);
+    if (name) {
+        cJSON_AddStringToObject(evt, "name", name);
+    }
+    if (bda_str) {
+        cJSON_AddStringToObject(evt, "bda", bda_str);
+    }
 
     cdc_write_json(evt);
     cJSON_Delete(evt);

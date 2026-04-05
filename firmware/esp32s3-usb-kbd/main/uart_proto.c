@@ -1,5 +1,7 @@
 #include "uart_proto.h"
 
+#include <string.h>
+
 #include "driver/uart.h"
 
 #include "esp_log.h"
@@ -8,6 +10,14 @@ static const char* TAG = "uart-proto";
 
 #define SYNC0 0xAA
 #define SYNC1 0x55
+
+#define CTRL_MARKER   0xFE
+#define DEBUG_MARKER  0xFF
+#define STATUS_MARKER 0xFD
+
+// Keep this comfortably under 255 (len is uint8_t) and large enough for
+// status frames that include an optional device name.
+#define UART_PAYLOAD_MAX 220
 
 static inline uint8_t xor_checksum(uint8_t length, const uint8_t* payload) {
     uint8_t x = length;
@@ -41,11 +51,45 @@ void uart_proto_init(void) {
              CONFIG_BRIDGE_UART_TX_GPIO);
 }
 
-bool uart_proto_poll_event(uint8_t* event_byte) {
+static void uart_proto_send_frame(const uint8_t* payload, uint8_t length) {
+    if (!payload || length == 0) {
+        return;
+    }
+
+    uart_port_t port = (uart_port_t)CONFIG_BRIDGE_UART_PORT;
+
+    // Frame format: AA 55 <len> <payload...> <checksum>
+    uint8_t header[3] = {SYNC0, SYNC1, length};
+    uint8_t checksum = xor_checksum(length, payload);
+
+    uart_write_bytes(port, (const char*)header, sizeof(header));
+    uart_write_bytes(port, (const char*)payload, length);
+    uart_write_bytes(port, (const char*)&checksum, 1);
+}
+
+bool uart_proto_send_ctrl(uint8_t cmd_id, const uint8_t* data, uint8_t data_len) {
+    // payload = 0xFE, cmd_id, data...
+    if (data_len > (uint8_t)(UART_PAYLOAD_MAX - 2)) {
+        return false;
+    }
+
+    static uint8_t buf[UART_PAYLOAD_MAX];
+    buf[0] = CTRL_MARKER;
+    buf[1] = cmd_id;
+    if (data_len && data) {
+        memcpy(&buf[2], data, data_len);
+    }
+    uart_proto_send_frame(buf, (uint8_t)(2 + data_len));
+    return true;
+}
+
+bool uart_proto_poll_frame(uart_frame_t* out) {
     static uint8_t state = 0;
     static uint8_t length = 0;
-    static uint8_t payload[8];
+    static uint8_t payload[UART_PAYLOAD_MAX];
     static uint8_t payload_i = 0;
+
+    if (!out) return false;
 
     uart_port_t port = (uart_port_t)CONFIG_BRIDGE_UART_PORT;
 
@@ -81,11 +125,20 @@ bool uart_proto_poll_event(uint8_t* event_byte) {
                 if (calc != b) {
                     break;
                 }
+
+                out->length = length;
+                out->payload = payload;
+
                 if (length == 1) {
-                    *event_byte = payload[0];
-                    return true;
+                    out->type = UART_FRAME_KEY_EVENT;
+                } else if (payload[0] == DEBUG_MARKER) {
+                    out->type = UART_FRAME_DEBUG;
+                } else if (payload[0] == STATUS_MARKER) {
+                    out->type = UART_FRAME_STATUS;
+                } else {
+                    out->type = UART_FRAME_UNKNOWN;
                 }
-                break;
+                return true;
             }
             default:
                 state = 0;
@@ -93,5 +146,17 @@ bool uart_proto_poll_event(uint8_t* event_byte) {
         }
     }
 
+    return false;
+}
+
+bool uart_proto_poll_event(uint8_t* event_byte) {
+    uart_frame_t f;
+    while (uart_proto_poll_frame(&f)) {
+        if (f.type == UART_FRAME_KEY_EVENT && f.length == 1) {
+            *event_byte = f.payload[0];
+            return true;
+        }
+        // ignore other frame types
+    }
     return false;
 }

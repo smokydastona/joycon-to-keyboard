@@ -21,6 +21,7 @@ Current UI tabs:
 - **Stick**: stores deadzone/curve settings into the profile JSON (not applied by firmware yet unless analog data exists)
 - **Share**: offline-only export/import of a compressed “profile code” string
 - **Overlay**: a safe always-on-top status window (no hooking/injection)
+- **Controller**: set target name substring and trigger BT scan/connect via the device (requires return UART wiring)
 
 ## Install
 
