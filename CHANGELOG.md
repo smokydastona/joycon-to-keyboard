@@ -11,7 +11,10 @@ Until then, entries are grouped by date.
 
 ### Added
 
-- **Mouse tab: IncediusMod custom button map editor** — since the IncediusMod is a physical rewiring mod, each user's button IDs may differ. The "Edit Map…" button (visible when IncediusMod layout is selected) opens a dialog where users can reassign which M913 side button corresponds to each Thumb/Finger position, with duplicate detection. The custom map is saved per-profile.
+- **Full Joy-Con button support (Nintendo 0x30 reports)**: expanded from 7 key_ids (WASD + jump/sprint/crouch) to 25 key_ids covering all Joy-Con buttons — face buttons (A/B/X/Y), shoulders (L/R), triggers (ZL/ZR), system (Plus/Minus/Home/Capture), stick clicks, and right stick virtual directions. All button bitmask definitions added to `nintendo_candidate.h`.
+- **Stick auto-calibration**: replaced the fixed center value (2048) with per-axis auto-calibration that tracks min/center/max at runtime. The first 8 samples establish the center via running average, then min/max expand as the stick reaches its limits. Raw values are normalized to a ±4096 scale for deadzone comparison. Inspired by GamepadPhoenix's `StickCal` approach.
+- **Right stick → key events**: right stick now emits directional key_ids (22–25), mapped to arrow keys by default. Useful for camera/look controls or as remappable UI navigation.
+- **Default keymaps for all buttons**: new key_ids have sensible defaults for FPS-style games (A→E, B→Q, X→R, Y→F, L→Tab, Plus→Escape, etc.). All mappings are overridable via the profile system / helper app.
 - **Code signing + cosign support** — CI workflow now optionally signs the EXE with Authenticode (via `CODESIGN_PFX_BASE64` / `CODESIGN_PFX_PASSWORD` GitHub Secrets) and publishes Sigstore/cosign keyless provenance signatures. Added `scripts/new-self-signed-codesign-cert.ps1`, `scripts/pfx-to-base64.ps1`, and `scripts/sign.ps1` for local signing workflows.
 
 ### Changed

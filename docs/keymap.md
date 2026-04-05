@@ -1,26 +1,104 @@
 # Key mapping
 
-This repo is set up for a minimal WASD + modifiers mapping.
+This repo supports a full Joy-Con button set: movement, face buttons, shoulders/triggers, system buttons, stick clicks, and right stick directions.
 
 ## Logical actions (key_id)
 
-- `1` = Forward
-- `2` = Back
-- `3` = Left
-- `4` = Right
-- `5` = Jump
-- `6` = Sprint
-- `7` = Crouch
+### Movement (left stick)
+
+| key_id | Action  |
+|--------|---------|
+| `1`    | Forward |
+| `2`    | Back    |
+| `3`    | Left    |
+| `4`    | Right   |
+| `5`    | Jump    |
+| `6`    | Sprint  |
+| `7`    | Crouch  |
+
+### Face buttons
+
+| key_id | Button |
+|--------|--------|
+| `8`    | A      |
+| `9`    | B      |
+| `10`   | X      |
+| `11`   | Y      |
+
+### Shoulder / trigger
+
+| key_id | Button |
+|--------|--------|
+| `12`   | L      |
+| `13`   | R      |
+| `14`   | ZL     |
+| `15`   | ZR     |
+
+### System buttons
+
+| key_id | Button  |
+|--------|---------|
+| `16`   | Plus    |
+| `17`   | Minus   |
+| `18`   | Home    |
+| `19`   | Capture |
+
+### Stick clicks
+
+| key_id | Button       |
+|--------|--------------|
+| `20`   | LStick click |
+| `21`   | RStick click |
+
+### Right stick directions
+
+| key_id | Direction    |
+|--------|--------------|
+| `22`   | RStick Up    |
+| `23`   | RStick Down  |
+| `24`   | RStick Left  |
+| `25`   | RStick Right |
 
 ## Default USB outputs
 
-- Forward  -> `W`
-- Back     -> `S`
-- Left     -> `A`
-- Right    -> `D`
-- Jump     -> `Space`
-- Sprint   -> `Left Shift`
-- Crouch   -> `Left Ctrl`
+| key_id | Action       | Default output |
+|--------|-------------|----------------|
+| 1      | Forward     | `W`            |
+| 2      | Back        | `S`            |
+| 3      | Left        | `A`            |
+| 4      | Right       | `D`            |
+| 5      | Jump        | `Space`        |
+| 6      | Sprint      | `Left Shift`   |
+| 7      | Crouch      | `Left Ctrl`    |
+| 8      | A           | `E`            |
+| 9      | B           | `Q`            |
+| 10     | X           | `R`            |
+| 11     | Y           | `F`            |
+| 12     | L           | `Tab`          |
+| 13     | R           | `Enter`        |
+| 14     | ZL          | `Right Alt`    |
+| 15     | ZR          | `Left Alt`     |
+| 16     | Plus        | `Escape`       |
+| 17     | Minus       | `` ` `` (Grave)|
+| 18     | Home        | *(unmapped)*   |
+| 19     | Capture     | `G`            |
+| 20     | LStick click| `Left Shift`   |
+| 21     | RStick click| `V`            |
+| 22     | RStick Up   | `Arrow Up`     |
+| 23     | RStick Down | `Arrow Down`   |
+| 24     | RStick Left | `Arrow Left`   |
+| 25     | RStick Right| `Arrow Right`  |
+
+## Stick auto-calibration
+
+Both sticks use automatic calibration rather than a hardcoded center value.
+The firmware tracks min / center / max per axis at runtime:
+
+- The first 8 samples establish the center (running average during warm-up).
+- Min and max expand as the stick reaches its physical limits.
+- Raw values are normalized to a ±4096 scale, then compared against a configurable deadzone.
+
+This approach adapts to individual controller stick drift and range variations (inspired by the `StickCal` pattern from GamepadPhoenix).
 
 ## Custom remapping via `remap_hid`
 

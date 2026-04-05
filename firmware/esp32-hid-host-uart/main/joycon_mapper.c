@@ -45,6 +45,78 @@ static void emit_if_changed_ex(uint8_t device_id, uint8_t key_id, bool now_press
     *prev_pressed = now_pressed;
 }
 
+// --- Stick auto-calibration ---
+// Tracks min/center/max per axis and maps raw values to a normalized
+// -1.0..+1.0 range. Inspired by GamepadPhoenix's StickCal approach.
+
+typedef struct {
+    uint16_t min;
+    uint16_t center;
+    uint16_t max;
+    bool initialized;
+} axis_cal_t;
+
+typedef struct {
+    axis_cal_t lx, ly, rx, ry;
+    uint16_t sample_count;
+} stick_cal_t;
+
+#define CAL_WARMUP_SAMPLES 8  // first N samples establish center
+
+static stick_cal_t s_cal = {0};
+
+static void cal_update_axis(axis_cal_t* a, uint16_t raw) {
+    if (!a->initialized) {
+        a->min = raw;
+        a->max = raw;
+        a->center = raw;
+        a->initialized = true;
+        return;
+    }
+    if (raw < a->min) a->min = raw;
+    if (raw > a->max) a->max = raw;
+}
+
+static void cal_update(stick_cal_t* c, const nintendo_0x30_state_t* st) {
+    cal_update_axis(&c->lx, st->lx);
+    cal_update_axis(&c->ly, st->ly);
+    cal_update_axis(&c->rx, st->rx);
+    cal_update_axis(&c->ry, st->ry);
+
+    // During warmup, refine center as the average of first samples.
+    if (c->sample_count < CAL_WARMUP_SAMPLES) {
+        // Running average: center = center + (raw - center) / (n+1)
+        uint16_t n = c->sample_count + 1;
+        c->lx.center = (uint16_t)(c->lx.center + ((int)st->lx - (int)c->lx.center) / (int)n);
+        c->ly.center = (uint16_t)(c->ly.center + ((int)st->ly - (int)c->ly.center) / (int)n);
+        c->rx.center = (uint16_t)(c->rx.center + ((int)st->rx - (int)c->rx.center) / (int)n);
+        c->ry.center = (uint16_t)(c->ry.center + ((int)st->ry - (int)c->ry.center) / (int)n);
+    }
+
+    if (c->sample_count < 0xFFFF) c->sample_count++;
+}
+
+// Returns normalized value in range roughly -4096..+4096 using calibration.
+// Positive = above center, negative = below center.
+static int cal_normalize(const axis_cal_t* a, uint16_t raw) {
+    if (!a->initialized) return 0;
+
+    int val = (int)raw - (int)a->center;
+
+    // Scale based on which side of center we're on.
+    int range;
+    if (val > 0) {
+        range = (int)a->max - (int)a->center;
+    } else {
+        range = (int)a->center - (int)a->min;
+    }
+
+    if (range < 32) return 0; // not enough data yet
+
+    // Normalize to 4096 scale
+    return (val * 4096) / range;
+}
+
 void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16_t len) {
     (void)s_threshold;
 
@@ -79,23 +151,82 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
         }
 
 #if CONFIG_JOYCON_HOST_NINTENDO_0X30_EMIT_KEYS
-        // Advanced mode: use left stick as WASD.
-        // Keep disabled until you verify the parsed fields match real inputs.
-        const int center = 2048;
-        const int deadzone = ((int)s_threshold) << 3;  // simple scaling: 32 -> 256
+        // --- Auto-calibration ---
+        cal_update(&s_cal, &st);
 
-        const int dx = (int)st.lx - center;
-        const int dy = (int)st.ly - center;
+        // --- Deadzone (scaled from threshold) ---
+        const int deadzone = ((int)s_threshold) << 5;  // 32 -> 1024 on 4096 scale
 
-        const bool now_right = dx > deadzone;
-        const bool now_left = dx < -deadzone;
-        const bool now_up = dy < -deadzone;
-        const bool now_down = dy > deadzone;
+        // --- Left stick → WASD ---
+        {
+            int dx = cal_normalize(&s_cal.lx, st.lx);
+            int dy = cal_normalize(&s_cal.ly, st.ly);
 
-        emit_if_changed_ex(device_id, KEY_ID_FORWARD, now_up, &prev_forward);
-        emit_if_changed_ex(device_id, KEY_ID_BACK, now_down, &prev_back);
-        emit_if_changed_ex(device_id, KEY_ID_LEFT, now_left, &prev_left);
-        emit_if_changed_ex(device_id, KEY_ID_RIGHT, now_right, &prev_right);
+            bool now_right = dx > deadzone;
+            bool now_left  = dx < -deadzone;
+            bool now_up    = dy < -deadzone;
+            bool now_down  = dy > deadzone;
+
+            emit_if_changed_ex(device_id, KEY_ID_FORWARD, now_up, &prev_forward);
+            emit_if_changed_ex(device_id, KEY_ID_BACK, now_down, &prev_back);
+            emit_if_changed_ex(device_id, KEY_ID_LEFT, now_left, &prev_left);
+            emit_if_changed_ex(device_id, KEY_ID_RIGHT, now_right, &prev_right);
+        }
+
+        // --- Right stick → virtual directions ---
+        {
+            static bool prev_rup = false, prev_rdn = false;
+            static bool prev_rlt = false, prev_rrt = false;
+
+            int rdx = cal_normalize(&s_cal.rx, st.rx);
+            int rdy = cal_normalize(&s_cal.ry, st.ry);
+
+            emit_if_changed_ex(device_id, KEY_ID_RSTICK_UP,    rdy < -deadzone, &prev_rup);
+            emit_if_changed_ex(device_id, KEY_ID_RSTICK_DOWN,  rdy >  deadzone, &prev_rdn);
+            emit_if_changed_ex(device_id, KEY_ID_RSTICK_LEFT,  rdx < -deadzone, &prev_rlt);
+            emit_if_changed_ex(device_id, KEY_ID_RSTICK_RIGHT, rdx >  deadzone, &prev_rrt);
+        }
+
+        // --- Face buttons ---
+        {
+            static bool prev_a = false, prev_b = false;
+            static bool prev_x = false, prev_y = false;
+
+            emit_if_changed_ex(device_id, KEY_ID_BTN_A, (st.buttons1 & NIN_BTN1_A) != 0, &prev_a);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_B, (st.buttons1 & NIN_BTN1_B) != 0, &prev_b);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_X, (st.buttons1 & NIN_BTN1_X) != 0, &prev_x);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_Y, (st.buttons1 & NIN_BTN1_Y) != 0, &prev_y);
+        }
+
+        // --- Shoulder / trigger buttons ---
+        {
+            static bool prev_l = false, prev_r = false;
+            static bool prev_zl = false, prev_zr = false;
+
+            emit_if_changed_ex(device_id, KEY_ID_BTN_L,  (st.buttons3 & NIN_BTN3_L)  != 0, &prev_l);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_R,  (st.buttons1 & NIN_BTN1_R)  != 0, &prev_r);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_ZL, (st.buttons3 & NIN_BTN3_ZL) != 0, &prev_zl);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_ZR, (st.buttons1 & NIN_BTN1_ZR) != 0, &prev_zr);
+        }
+
+        // --- System buttons ---
+        {
+            static bool prev_plus = false, prev_minus = false;
+            static bool prev_home = false, prev_capture = false;
+
+            emit_if_changed_ex(device_id, KEY_ID_BTN_PLUS,    (st.buttons2 & NIN_BTN2_PLUS)    != 0, &prev_plus);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_MINUS,   (st.buttons2 & NIN_BTN2_MINUS)   != 0, &prev_minus);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_HOME,    (st.buttons2 & NIN_BTN2_HOME)    != 0, &prev_home);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_CAPTURE, (st.buttons2 & NIN_BTN2_CAPTURE) != 0, &prev_capture);
+        }
+
+        // --- Stick clicks ---
+        {
+            static bool prev_ls = false, prev_rs = false;
+
+            emit_if_changed_ex(device_id, KEY_ID_LSTICK_CLICK, (st.buttons2 & NIN_BTN2_LSTICK) != 0, &prev_ls);
+            emit_if_changed_ex(device_id, KEY_ID_RSTICK_CLICK, (st.buttons2 & NIN_BTN2_RSTICK) != 0, &prev_rs);
+        }
 
         return;
 #endif

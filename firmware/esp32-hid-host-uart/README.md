@@ -65,5 +65,8 @@ Set in `main/config.h`.
 - Initializes UART framing to match `docs/serial-protocol.md`.
 - Scans + connects to a Classic-BT HID device and forwards input reports to `main/joycon_mapper.c`.
 - Optionally accepts helper-app control commands over UART RX (requires the return UART wire).
+- **Nintendo 0x30 button + stick parsing** (when enabled via menuconfig): fully parses all Joy-Con buttons (A/B/X/Y, L/R, ZL/ZR, Plus/Minus, Home, Capture, stick clicks) and both sticks.
+- **Stick auto-calibration**: per-axis min/center/max tracking adapts to individual controller characteristics instead of assuming a fixed center.
+- **25 key_ids**: all Joy-Con inputs (left stick WASD, face buttons, shoulders, triggers, system buttons, stick clicks, right stick directions) are mapped to unique key_ids and emitted over UART.
 
-Next step is to capture real reports and implement correct mappings in `main/joycon_mapper.c`.
+Next step is to capture real reports and verify the correct mappings in `main/joycon_mapper.c`.
