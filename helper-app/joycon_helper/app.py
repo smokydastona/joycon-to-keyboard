@@ -2724,6 +2724,21 @@ class App(tk.Tk):
         sister_cb.pack(side=tk.LEFT, padx=4)
         sister_cb.bind("<<ComboboxSelected>>", lambda _: self._m913_on_sister_changed())
 
+        # ── Layout mode (Stock M913 vs IncediusMod) ──
+        layout_row = ttk.Frame(dev_frame)
+        layout_row.pack(fill=tk.X, padx=6, pady=(0, 4))
+        ttk.Label(layout_row, text="Layout:").pack(side=tk.LEFT)
+        self._m913_layout_var = tk.StringVar(value=self._m913_profile.layout)
+        layout_display = {"stock": "Stock M913", "incedius": "IncediusMod"}
+        self._m913_layout_display = layout_display
+        self._m913_layout_reverse = {v: k for k, v in layout_display.items()}
+        layout_cb = ttk.Combobox(layout_row, textvariable=self._m913_layout_var,
+                                 values=list(layout_display.values()),
+                                 state="readonly", width=14)
+        layout_cb.set(layout_display.get(self._m913_profile.layout, "Stock M913"))
+        layout_cb.pack(side=tk.LEFT, padx=4)
+        layout_cb.bind("<<ComboboxSelected>>", lambda _: self._m913_on_layout_changed())
+
         # ── M913 overlay image ──
         self._m913_overlay_canvas = tk.Canvas(parent, height=220, highlightthickness=1)
         self._m913_overlay_canvas.pack(fill=tk.X, padx=6, pady=(3, 3))
@@ -2760,11 +2775,16 @@ class App(tk.Tk):
 
         action_choices = m913_device.ALL_ACTIONS + m913_device.ALL_KEY_NAMES
 
+        self._m913_button_labels: Dict[str, ttk.Label] = {}
+        display_names = m913_device.LAYOUT_DISPLAY_NAMES.get(
+            self._m913_profile.layout, m913_device.BUTTON_DISPLAY_NAMES)
         for i, btn_name in enumerate(m913_device.BUTTON_ORDER):
             r = ttk.Frame(btn_frame)
             r.pack(fill=tk.X, padx=4, pady=1)
-            display = m913_device.BUTTON_DISPLAY_NAMES.get(btn_name, btn_name)
-            ttk.Label(r, text=f"{display}:", width=14, anchor="w").pack(side=tk.LEFT)
+            display = display_names.get(btn_name, btn_name)
+            lbl = ttk.Label(r, text=f"{display}:", width=14, anchor="w")
+            lbl.pack(side=tk.LEFT)
+            self._m913_button_labels[btn_name] = lbl
             var = tk.StringVar(value=self._m913_profile.buttons.get(btn_name, "none"))
             self._m913_button_vars[btn_name] = var
             cb = ttk.Combobox(r, textvariable=var, values=action_choices, width=24)
@@ -2895,10 +2915,22 @@ class App(tk.Tk):
         else:
             self._m913_profile.sister_slot = None
 
+    def _m913_on_layout_changed(self) -> None:
+        """Switch button display names when layout mode changes."""
+        selected = self._m913_layout_var.get()
+        mode = self._m913_layout_reverse.get(selected, "stock")
+        self._m913_profile.layout = mode
+        display_names = m913_device.LAYOUT_DISPLAY_NAMES.get(
+            mode, m913_device.BUTTON_DISPLAY_NAMES)
+        for btn_name, lbl in self._m913_button_labels.items():
+            lbl.configure(text=f"{display_names.get(btn_name, btn_name)}:")
+
     def _m913_ui_to_profile(self) -> None:
         """Sync UI widget values into self._m913_profile."""
         p = self._m913_profile
         p.name = self._m913_prof_name_var.get().strip() or "Default"
+        selected_layout = self._m913_layout_var.get()
+        p.layout = self._m913_layout_reverse.get(selected_layout, "stock")
         for btn_name, var in self._m913_button_vars.items():
             p.buttons[btn_name] = var.get().strip().lower() or "none"
         p.dpi_values = [max(100, min(16000, v.get())) for v in self._m913_dpi_vars]
@@ -2930,6 +2962,10 @@ class App(tk.Tk):
             self._m913_sister_var.set(f"Slot {p.sister_slot}")
         else:
             self._m913_sister_var.set("None")
+        # Layout mode
+        display = self._m913_layout_display.get(p.layout, "Stock M913")
+        self._m913_layout_var.set(display)
+        self._m913_on_layout_changed()
 
     def _m913_apply_config(self) -> None:
         """Apply current UI settings to the selected M913 mouse."""

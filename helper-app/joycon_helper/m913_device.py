@@ -86,6 +86,36 @@ BUTTON_DISPLAY_NAMES: Dict[str, str] = {
     "side12": "Side 12",
 }
 
+# ---------------------------------------------------------------------------
+# Layout modes — alternative display-name sets for physical mods.
+# The button indices / protocol bytes are identical; only UI labels change.
+# ---------------------------------------------------------------------------
+LAYOUT_MODES: List[str] = ["stock", "incedius"]
+
+INCEDIUS_DISPLAY_NAMES: Dict[str, str] = {
+    "left": "Left Click",
+    "right": "Right Click",
+    "middle": "Middle Click",
+    "fire": "Fire",
+    "side1": "Thumb 1",
+    "side2": "Thumb 2",
+    "side3": "Thumb 3",
+    "side4": "Thumb 4",
+    "side5": "Thumb 5",
+    "side6": "Thumb 6",
+    "side7": "Finger 1",
+    "side8": "Finger 2",
+    "side9": "Finger 3",
+    "side10": "Finger 4",
+    "side11": "Finger 5",
+    "side12": "Finger 6",
+}
+
+LAYOUT_DISPLAY_NAMES: Dict[str, Dict[str, str]] = {
+    "stock": BUTTON_DISPLAY_NAMES,
+    "incedius": INCEDIUS_DISPLAY_NAMES,
+}
+
 # Ordered for UI display (logical grouping)
 BUTTON_ORDER = [
     "left", "right", "middle", "fire",
@@ -688,10 +718,14 @@ class M913Profile:
     # Sister profile linking: which Joy-Con slot this should auto-apply with
     sister_slot: Optional[int] = None  # 1–4, or None
 
+    # Layout mode: "stock" (default M913) or "incedius" (IncediusMod)
+    layout: str = "stock"
+
     def to_dict(self) -> dict:
         return {
             "ver": 1,
             "name": self.name,
+            "layout": self.layout,
             "buttons": dict(self.buttons),
             "dpi": {
                 "values": list(self.dpi_values),
@@ -726,6 +760,8 @@ class M913Profile:
         p.led_speed = led.get("speed", 3)
         p.polling_rate = d.get("polling_rate", 1000)
         p.sister_slot = d.get("sister_slot", None)
+        layout = d.get("layout", "stock")
+        p.layout = layout if layout in LAYOUT_MODES else "stock"
         return p
 
     def save(self, path: str) -> None:
