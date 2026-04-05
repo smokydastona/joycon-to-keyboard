@@ -95,7 +95,7 @@ static void try_connect(const esp_bd_addr_t bda, uint8_t device_id, const char* 
     ESP_LOGI(TAG, "Connecting to %s", bda_to_str(bda, bda_str, sizeof(bda_str)));
     bridge_send_bt_status(3, bda, NULL);
 
-    esp_err_t err = esp_bt_hid_host_connect((esp_bd_addr_t)bda);
+    esp_err_t err = esp_bt_hid_host_connect((uint8_t *)bda);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "esp_bt_hid_host_connect failed: %s", esp_err_to_name(err));
         s_connecting = false;
@@ -189,13 +189,15 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
                     }
                 }
 
-                if (CONFIG_JOYCON_HOST_UART_DEBUG_REPORTS) {
+#if CONFIG_JOYCON_HOST_UART_DEBUG_REPORTS
+                {
                     uint16_t n = param->data_ind.len;
                     if (n > (uint16_t)CONFIG_JOYCON_HOST_UART_DEBUG_MAX_BYTES) {
                         n = (uint16_t)CONFIG_JOYCON_HOST_UART_DEBUG_MAX_BYTES;
                     }
                     bridge_send_debug_hid_report(param->data_ind.data, n);
                 }
+#endif
 
                 uint8_t device_id = 0;
                 for (int i = 0; i < 2; i++) {
