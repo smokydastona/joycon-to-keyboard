@@ -23,11 +23,11 @@ Sketch / sketchbook-ink visual direction (torn parchment):
 - Tea/coffee stain gradients and heavy paper-grain noise add age character.
 
 Dark mode (sketchbook-ink-dark):
-- Same torn-parchment aesthetic but inverted for dark surfaces.
-- Background is very dark warm brown (#1e1a14), panels are deep charred
-  parchment (#2a2418, #342a1e). Text is light parchment (#d4c8aa).
-- Accent/success/warning/danger colors are brightened slightly for contrast
-  on dark backgrounds (accent #5c8ae6, danger #e04838, etc.).
+- Dark blue ballpoint pen aesthetic — cool blue-grey tones instead of warm sepia.
+- Background is very dark blue-black (#10141c), panels are deep blue-grey
+  (#181e2c, #202838). Text is light blue-grey (#a8bcd0).
+- Accent/success/warning/danger colors are cooler-toned for the blue palette
+  (accent #4a7cc8, danger #c84848, etc.).
 - The dark bundle is generated alongside the light bundle: .ui-bundle-dark/.
 - The helper app auto-detects Windows dark mode via the registry
   (AppsUseLightTheme = 0), or accepts JOYCON_THEME=dark env var / --dark flag.
