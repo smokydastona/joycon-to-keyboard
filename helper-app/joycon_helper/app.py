@@ -17,19 +17,19 @@ from .serial_client import SerialClient
 
 
 DEFAULT_UI_THEME: dict = {
-    "name": "midnight-grid",
+    "name": "sketchbook-ink",
     "version": 1,
     "colors": {
-        "bg": "#0b1220",
-        "panel": "#0f1a2e",
-        "panel2": "#111f37",
-        "text": "#e5e7eb",
-        "muted": "#94a3b8",
-        "border": "#22314f",
-        "accent": "#2b63ff",
-        "accent2": "#22c55e",
-        "danger": "#ef4444",
-        "warning": "#f59e0b",
+        "bg": "#f2e4c6",
+        "panel": "#fff6e1",
+        "panel2": "#f7ebd1",
+        "text": "#1b1b1b",
+        "muted": "#5b554a",
+        "border": "#c6ad7d",
+        "accent": "#2f4a9e",
+        "accent2": "#2b6a4b",
+        "danger": "#b42318",
+        "warning": "#a16207",
     },
     "typography": {
         "font_family": "Segoe UI",
@@ -62,6 +62,17 @@ def _blend_hex(a: str, b: str, t: float) -> str:
     rg = int(ag + (bg - ag) * t)
     rb = int(ab + (bb - ab) * t)
     return _rgb_to_hex((rr, rg, rb))
+
+
+def _relative_luma(h: str) -> float:
+    # Rough relative luminance in [0,1] for contrast decisions.
+    r, g, b = _hex_to_rgb(h)
+    return (0.2126 * (r / 255.0)) + (0.7152 * (g / 255.0)) + (0.0722 * (b / 255.0))
+
+
+def _contrast_on(bg: str) -> str:
+    # Choose an ink/light color that will read on bg.
+    return "#111111" if _relative_luma(bg) > 0.6 else "#fff6e1"
 
 
 def _load_theme_json(path: Path) -> dict:
@@ -291,13 +302,14 @@ class App(tk.Tk):
     def _theme_scrolled_text(self, w: ScrolledText) -> None:
         colors = self._colors
         typo = self._typo
+        sel_fg = _contrast_on(colors.get("accent", "#2f4a9e"))
         try:
             w.configure(
                 bg=colors["panel2"],
                 fg=colors["text"],
                 insertbackground=colors["text"],
                 selectbackground=colors["accent"],
-                selectforeground=colors["text"],
+                selectforeground=sel_fg,
                 highlightthickness=1,
                 highlightbackground=colors["border"],
                 highlightcolor=colors["accent"],
@@ -309,12 +321,13 @@ class App(tk.Tk):
     def _theme_listbox(self, w: tk.Listbox) -> None:
         colors = self._colors
         typo = self._typo
+        sel_fg = _contrast_on(colors.get("accent", "#2f4a9e"))
         try:
             w.configure(
                 bg=colors["panel2"],
                 fg=colors["text"],
                 selectbackground=colors["accent"],
-                selectforeground=colors["text"],
+                selectforeground=sel_fg,
                 highlightthickness=1,
                 highlightbackground=colors["border"],
                 highlightcolor=colors["accent"],
@@ -661,7 +674,7 @@ class App(tk.Tk):
 
         # Theme-matched colors (see tools/generate_ui_bundle.py for the theme.json tokens)
         neutral_bg = self._colors["panel2"]
-        neutral_fg = self._colors["text"]
+        neutral_fg = _contrast_on(neutral_bg)
         left_bg = self._colors["accent"]
         right_bg = self._colors["accent2"]
         both_bg = _blend_hex(left_bg, right_bg, 0.5)
@@ -676,7 +689,7 @@ class App(tk.Tk):
             bg = neutral_bg
 
         self._bt_banner.configure(bg=bg)
-        self._bt_banner_label.configure(bg=bg, fg=neutral_fg)
+        self._bt_banner_label.configure(bg=bg, fg=_contrast_on(bg))
 
     def _bt_apply_preset(self) -> None:
         p = self._bt_target_preset.get().strip()

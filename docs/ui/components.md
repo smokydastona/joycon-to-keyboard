@@ -1,6 +1,6 @@
 # UI components (theme-matched)
 
-This file describes how buttons/toggles/dials/icons should match the `midnight-grid` theme tokens.
+This file describes how buttons/toggles/dials/icons should match the `sketchbook-ink` theme tokens.
 
 - Theme tokens: generate a bundle with `python tools/generate_ui_bundle.py --out ./.ui-bundle` then use `./.ui-bundle/theme.json`
 - Icon set (SVG): `docs/ui/assets/icons.svg`
@@ -17,7 +17,7 @@ Use the icon set for:
 
 Guidelines:
 
-- Stroke-based icons (no fills) for readability on dark panels.
+- Stroke-based icons (no fills) for readability on paper panels.
 - Keep stroke width consistent (~2.5px in SVG, scale as needed).
 - Use semantic token colors:
   - `accent` for primary actions

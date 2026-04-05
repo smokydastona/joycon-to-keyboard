@@ -25,19 +25,19 @@ from pathlib import Path
 
 
 DEFAULT_THEME = {
-    "name": "midnight-grid",
+    "name": "sketchbook-ink",
     "version": 1,
     "colors": {
-        "bg": "#0b1220",
-        "panel": "#0f1a2e",
-        "panel2": "#111f37",
-        "text": "#e5e7eb",
-        "muted": "#94a3b8",
-        "border": "#22314f",
-        "accent": "#2b63ff",
-        "accent2": "#22c55e",
-        "danger": "#ef4444",
-        "warning": "#f59e0b",
+        "bg": "#f2e4c6",
+        "panel": "#fff6e1",
+        "panel2": "#f7ebd1",
+        "text": "#1b1b1b",
+        "muted": "#5b554a",
+        "border": "#c6ad7d",
+        "accent": "#2f4a9e",
+        "accent2": "#2b6a4b",
+        "danger": "#b42318",
+        "warning": "#a16207",
     },
     "typography": {
         "font_family": "Segoe UI",

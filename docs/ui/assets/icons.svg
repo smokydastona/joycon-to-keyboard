@@ -2,13 +2,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="160" viewBox="0 0 960 160" role="img" aria-label="Themed UI icons">
   <defs>
     <style>
-      .s { stroke: #e5e7eb; stroke-opacity: 0.92; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; fill: none; }
-      .m { stroke: #94a3b8; stroke-opacity: 0.75; }
-      .a { stroke: #2b63ff; stroke-opacity: 0.95; }
-      .g { stroke: #22c55e; stroke-opacity: 0.95; }
-      .w { stroke: #f59e0b; stroke-opacity: 0.95; }
-      .d { stroke: #ef4444; stroke-opacity: 0.95; }
-      .t { fill: #94a3b8; fill-opacity: 0.95; font-family: Segoe UI, Arial, sans-serif; font-size: 12px; }
+      .s { stroke: #1b1b1b; stroke-opacity: 0.86; stroke-width: 2.6; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+      .m { stroke: #5b554a; stroke-opacity: 0.65; }
+      .a { stroke: #2f4a9e; stroke-opacity: 0.95; }
+      .g { stroke: #2b6a4b; stroke-opacity: 0.95; }
+      .w { stroke: #a16207; stroke-opacity: 0.95; }
+      .d { stroke: #b42318; stroke-opacity: 0.95; }
+      .t { fill: #5b554a; fill-opacity: 0.95; font-family: Segoe UI, Arial, sans-serif; font-size: 12px; }
     </style>
   </defs>
 
@@ -16,7 +16,7 @@
 
   <!-- Refresh -->
   <g transform="translate(24,16)">
-    <rect x="0" y="0" width="96" height="96" rx="14" fill="#0f1a2e" stroke="#22314f" stroke-opacity="0.9"/>
+    <rect x="0" y="0" width="96" height="96" rx="14" fill="#fff6e1" stroke="#c6ad7d" stroke-opacity="0.9"/>
     <path class="s a" d="M64 36a22 22 0 1 0 6 16"/>
     <path class="s a" d="M70 26v26h-26"/>
     <text class="t" x="48" y="130" text-anchor="middle">refresh</text>
@@ -24,7 +24,7 @@
 
   <!-- Bluetooth -->
   <g transform="translate(144,16)">
-    <rect x="0" y="0" width="96" height="96" rx="14" fill="#0f1a2e" stroke="#22314f" stroke-opacity="0.9"/>
+    <rect x="0" y="0" width="96" height="96" rx="14" fill="#fff6e1" stroke="#c6ad7d" stroke-opacity="0.9"/>
     <path class="s" d="M48 16v64l18-16-18-16 18-16-18-16z"/>
     <path class="s m" d="M48 48 30 32"/>
     <path class="s m" d="M48 48 30 64"/>
@@ -33,7 +33,7 @@
 
   <!-- USB plug -->
   <g transform="translate(264,16)">
-    <rect x="0" y="0" width="96" height="96" rx="14" fill="#0f1a2e" stroke="#22314f" stroke-opacity="0.9"/>
+    <rect x="0" y="0" width="96" height="96" rx="14" fill="#fff6e1" stroke="#c6ad7d" stroke-opacity="0.9"/>
     <path class="s" d="M34 22v26c0 8 6 14 14 14h0c8 0 14-6 14-14V22"/>
     <path class="s" d="M38 22v10"/>
     <path class="s" d="M58 22v10"/>
@@ -44,8 +44,8 @@
 
   <!-- Keyboard -->
   <g transform="translate(384,16)">
-    <rect x="0" y="0" width="96" height="96" rx="14" fill="#0f1a2e" stroke="#22314f" stroke-opacity="0.9"/>
-    <rect x="22" y="30" width="52" height="34" rx="6" fill="none" stroke="#e5e7eb" stroke-opacity="0.9" stroke-width="2.5"/>
+    <rect x="0" y="0" width="96" height="96" rx="14" fill="#fff6e1" stroke="#c6ad7d" stroke-opacity="0.9"/>
+    <rect x="22" y="30" width="52" height="34" rx="6" fill="none" stroke="#1b1b1b" stroke-opacity="0.85" stroke-width="2.6"/>
     <path class="s m" d="M28 40h6M38 40h6M48 40h6M58 40h6"/>
     <path class="s m" d="M28 50h10M42 50h10M56 50h10"/>
     <path class="s" d="M30 60h36"/>
@@ -54,7 +54,7 @@
 
   <!-- Upload -->
   <g transform="translate(504,16)">
-    <rect x="0" y="0" width="96" height="96" rx="14" fill="#0f1a2e" stroke="#22314f" stroke-opacity="0.9"/>
+    <rect x="0" y="0" width="96" height="96" rx="14" fill="#fff6e1" stroke="#c6ad7d" stroke-opacity="0.9"/>
     <path class="s g" d="M48 64V28"/>
     <path class="s g" d="M36 40l12-12 12 12"/>
     <path class="s" d="M30 70h36a10 10 0 0 0 10-10v0"/>
@@ -63,7 +63,7 @@
 
   <!-- Download -->
   <g transform="translate(624,16)">
-    <rect x="0" y="0" width="96" height="96" rx="14" fill="#0f1a2e" stroke="#22314f" stroke-opacity="0.9"/>
+    <rect x="0" y="0" width="96" height="96" rx="14" fill="#fff6e1" stroke="#c6ad7d" stroke-opacity="0.9"/>
     <path class="s a" d="M48 32v36"/>
     <path class="s a" d="M36 56l12 12 12-12"/>
     <path class="s" d="M30 70h36a10 10 0 0 0 10-10v0"/>
@@ -72,7 +72,7 @@
 
   <!-- Warning -->
   <g transform="translate(744,16)">
-    <rect x="0" y="0" width="96" height="96" rx="14" fill="#0f1a2e" stroke="#22314f" stroke-opacity="0.9"/>
+    <rect x="0" y="0" width="96" height="96" rx="14" fill="#fff6e1" stroke="#c6ad7d" stroke-opacity="0.9"/>
     <path class="s w" d="M48 22 76 72H20z"/>
     <path class="s w" d="M48 40v14"/>
     <path class="s w" d="M48 62v1"/>
@@ -81,7 +81,7 @@
 
   <!-- Error -->
   <g transform="translate(864,16)">
-    <rect x="0" y="0" width="96" height="96" rx="14" fill="#0f1a2e" stroke="#22314f" stroke-opacity="0.9"/>
+    <rect x="0" y="0" width="96" height="96" rx="14" fill="#fff6e1" stroke="#c6ad7d" stroke-opacity="0.9"/>
     <circle cx="48" cy="48" r="26" class="s d"/>
     <path class="s d" d="M38 38l20 20"/>
     <path class="s d" d="M58 38l-20 20"/>
