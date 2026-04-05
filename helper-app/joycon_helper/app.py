@@ -772,6 +772,7 @@ class App(tk.Tk):
         self.tab_controller = ttk.Frame(self.tabs)
         self.tab_input_test = ttk.Frame(self.tabs)
         self.tab_mouse = ttk.Frame(self.tabs)
+        self.tab_help = ttk.Frame(self.tabs)
 
         self.tabs.add(self.tab_profile, text="Profile")
         self.tabs.add(self.tab_macros, text="Macros")
@@ -781,6 +782,7 @@ class App(tk.Tk):
         self.tabs.add(self.tab_controller, text="Controller")
         self.tabs.add(self.tab_input_test, text="Input Test")
         self.tabs.add(self.tab_mouse, text="Mouse")
+        self.tabs.add(self.tab_help, text="Help")
 
         # Build critical tabs eagerly; defer the rest until first selected.
         self._build_profile_tab()
@@ -889,6 +891,7 @@ class App(tk.Tk):
             "Overlay": self._build_overlay_tab,
             "Input Test": self._build_input_test_tab,
             "Mouse": self._build_mouse_tab,
+            "Help": self._build_help_tab,
         }
         builder = builders.get(tab_name)
         if builder:
@@ -2868,6 +2871,67 @@ class App(tk.Tk):
 
         # Auto-scan on tab open
         self.after(200, self._m913_scan_devices)
+
+    # ------------------------------------------------------------------
+    # Help tab
+    # ------------------------------------------------------------------
+
+    def _build_help_tab(self) -> None:
+        """Build the Help tab: pinout reference diagram."""
+        parent = self.tab_help
+
+        ttk.Label(parent, text="Board Pinout Reference",
+                  font=("TkDefaultFont", 12, "bold")).pack(anchor="w", padx=6, pady=(6, 2))
+        ttk.Label(parent, text="Arduino Nano ESP32-S3 (USB HID Keyboard)  ·  NodeMCU ESP32-WROOM-32 (BT Host)",
+                  foreground=self._colors.get("muted", "#666")).pack(anchor="w", padx=6, pady=(0, 4))
+
+        # Scrollable canvas for the pinout image
+        canvas_wrap = ttk.Frame(parent)
+        canvas_wrap.pack(fill=tk.BOTH, expand=True, padx=6, pady=3)
+
+        h_scroll = ttk.Scrollbar(canvas_wrap, orient=tk.HORIZONTAL)
+        v_scroll = ttk.Scrollbar(canvas_wrap, orient=tk.VERTICAL)
+        pinout_canvas = tk.Canvas(canvas_wrap, highlightthickness=0,
+                                  bg=self._colors.get("panel", "#f2e8d0"),
+                                  xscrollcommand=h_scroll.set,
+                                  yscrollcommand=v_scroll.set)
+        h_scroll.configure(command=pinout_canvas.xview)
+        v_scroll.configure(command=pinout_canvas.yview)
+
+        v_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        h_scroll.pack(side=tk.BOTTOM, fill=tk.X)
+        pinout_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Locate and load pinouts.png
+        self._help_pinout_base: Optional[tk.PhotoImage] = None
+        search_roots = _joycons_search_roots()
+        for root in search_roots:
+            candidate = root / "pinouts.png"
+            try:
+                if candidate.exists():
+                    self._help_pinout_base = tk.PhotoImage(file=str(candidate))
+                    break
+            except Exception:
+                continue
+
+        if self._help_pinout_base:
+            img_w = self._help_pinout_base.width()
+            img_h = self._help_pinout_base.height()
+            pinout_canvas.create_image(0, 0, image=self._help_pinout_base, anchor="nw")
+            pinout_canvas.configure(scrollregion=(0, 0, img_w, img_h))
+        else:
+            pinout_canvas.create_text(200, 100, text="pinouts.png not found",
+                                      fill=self._colors.get("muted", "#666"))
+
+        # Mouse-wheel scrolling
+        def _on_mousewheel(event: Any) -> None:
+            pinout_canvas.yview_scroll(-event.delta // 120, "units")
+
+        def _on_shift_mousewheel(event: Any) -> None:
+            pinout_canvas.xview_scroll(-event.delta // 120, "units")
+
+        pinout_canvas.bind("<MouseWheel>", _on_mousewheel)
+        pinout_canvas.bind("<Shift-MouseWheel>", _on_shift_mousewheel)
 
     # ── M913 helpers ──
 

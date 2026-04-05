@@ -50,6 +50,11 @@ M913_DARK_COPIES = {
     "m913-dark-none.png": "M913 mouse overlay (dark theme, disconnected)",
 }
 
+# Misc static assets — just copy.
+MISC_COPIES = {
+    "pinouts.png": "ESP32 / ESP32-S3 board pinout reference diagram",
+}
+
 GENERATOR_SRC = Path(__file__).resolve()
 
 UI_BUNDLE_DIR = REPO_ROOT / ".ui-bundle"
@@ -73,6 +78,7 @@ UI_BUNDLE_INPUTS = [
     REPO_ROOT / "docs" / "ui" / "assets" / "m913-none.png",
     REPO_ROOT / "docs" / "ui" / "assets" / "m913-dark.png",
     REPO_ROOT / "docs" / "ui" / "assets" / "m913-dark-none.png",
+    REPO_ROOT / "docs" / "ui" / "assets" / "pinouts.png",
 ]
 
 

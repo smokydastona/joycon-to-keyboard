@@ -42,6 +42,8 @@ Until then, entries are grouped by date.
 
 - **App icon**: converted `icon.png` (1024×1024 sketchbook-ink artwork) to a multi-size `icon.ico` (16–256 px) at `helper-app/icon.ico`. Used as the window icon at runtime and embedded in the PyInstaller `.exe`.
 
+- **Help tab with pinout diagram**: new "Help" tab (lazy-loaded) displays the `pinouts.png` board pinout reference for the Arduino Nano ESP32-S3 and NodeMCU ESP32-WROOM-32 in a scrollable canvas with horizontal/vertical scroll and mouse-wheel support. Image is bundled through the UI bundle pipeline.
+
 - **M913 mouse overlay artwork**: four sketchbook-ink themed M913 overlay PNGs (light connected/disconnected, dark connected/disconnected) wired into the Mouse tab, matching the Joy-Con overlay pattern in the Controller tab. The UI bundle generator and artifact generator now include M913 images alongside Joy-Con overlays.
 
 - **Redragon M913 Impact Elite mouse support** (helper app):
