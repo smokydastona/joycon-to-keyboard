@@ -11,6 +11,10 @@ Until then, entries are grouped by date.
 
 ### Added
 
+- **Dark controller overlay artwork**: `joycons-dark.png` + `joycons-dark-grey.png` source PNGs for the dark theme.
+  - Artifact pipeline now generates 4 dark inspection copies (`joycons-dark-none/left/right/both.png`) alongside the 4 light copies.
+  - Dark UI bundle (`.ui-bundle-dark/`) now uses the dark overlay PNGs instead of the light ones.
+  - `background-dark.svg` updated to reference `joycons-dark.png`.
 - **Dark mode UI bundle**: complete dark-mode variant of the torn-parchment theme.
   - `docs/ui/background-dark.svg` — dark parchment on very dark desk surface.
   - `docs/ui/assets/components-dark.svg` — dark-inverted component sheet (same shapes/paths as light).

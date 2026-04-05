@@ -23,12 +23,20 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 JOYCONS_SRC = REPO_ROOT / "joycons.png"
 JOYCONS_GREY_SRC = REPO_ROOT / "joycons-grey.png"
+JOYCONS_DARK_SRC = REPO_ROOT / "joycons-dark.png"
+JOYCONS_DARK_GREY_SRC = REPO_ROOT / "joycons-dark-grey.png"
 JOYCONS_OUT_DIR = REPO_ROOT / "docs" / "ui" / "assets"
 JOYCONS_COPIES = {
     "joycons-none.png": "Inspection copy (none disconnected) derived from joycons-grey.png",
     "joycons-left.png": "Inspection copy (left connected) composited from joycons.png + joycons-grey.png",
     "joycons-right.png": "Inspection copy (right connected) composited from joycons.png + joycons-grey.png",
     "joycons-both.png": "Inspection copy (both connected) derived from joycons.png",
+}
+JOYCONS_DARK_COPIES = {
+    "joycons-dark-none.png": "Dark inspection copy (none) derived from joycons-dark-grey.png",
+    "joycons-dark-left.png": "Dark inspection copy (left connected) composited from joycons-dark.png + joycons-dark-grey.png",
+    "joycons-dark-right.png": "Dark inspection copy (right connected) composited from joycons-dark.png + joycons-dark-grey.png",
+    "joycons-dark-both.png": "Dark inspection copy (both connected) derived from joycons-dark.png",
 }
 
 GENERATOR_SRC = Path(__file__).resolve()
@@ -39,12 +47,17 @@ UI_BUNDLE_INPUTS = [
     UI_BUNDLE_GENERATOR,
     JOYCONS_SRC,
     JOYCONS_GREY_SRC,
+    JOYCONS_DARK_SRC,
+    JOYCONS_DARK_GREY_SRC,
     REPO_ROOT / "docs" / "ui" / "background.svg",
     REPO_ROOT / "docs" / "ui" / "background-left.svg",
     REPO_ROOT / "docs" / "ui" / "background-right.svg",
     REPO_ROOT / "docs" / "ui" / "background-both.svg",
+    REPO_ROOT / "docs" / "ui" / "background-dark.svg",
     REPO_ROOT / "docs" / "ui" / "assets" / "components.svg",
     REPO_ROOT / "docs" / "ui" / "assets" / "icons.svg",
+    REPO_ROOT / "docs" / "ui" / "assets" / "components-dark.svg",
+    REPO_ROOT / "docs" / "ui" / "assets" / "icons-dark.svg",
 ]
 
 
@@ -66,10 +79,18 @@ def _copy_if_needed(src: Path, dst: Path) -> bool:
     return True
 
 
-def _render_joycons_variant(dst: Path, *, variant: str) -> bool:
-    """Render joycons-none/left/right/both from the color + grey source art."""
+def _render_joycons_variant(
+    dst: Path,
+    *,
+    variant: str,
+    color_src: Path | None = None,
+    grey_src: Path | None = None,
+) -> bool:
+    """Render joycons-none/left/right/both from a color + grey source pair."""
+    color_src = color_src or JOYCONS_SRC
+    grey_src = grey_src or JOYCONS_GREY_SRC
 
-    if not _needs_update([JOYCONS_SRC, JOYCONS_GREY_SRC, GENERATOR_SRC], dst):
+    if not _needs_update([color_src, grey_src, GENERATOR_SRC], dst):
         return False
 
     try:
@@ -82,11 +103,11 @@ def _render_joycons_variant(dst: Path, *, variant: str) -> bool:
         )
         raise
 
-    img = Image.open(JOYCONS_SRC).convert("RGBA")
-    grey = Image.open(JOYCONS_GREY_SRC).convert("RGBA")
+    img = Image.open(color_src).convert("RGBA")
+    grey = Image.open(grey_src).convert("RGBA")
     if img.size != grey.size:
         raise ValueError(
-            f"joycons.png and joycons-grey.png must have the same size, got {img.size} vs {grey.size}"
+            f"{color_src.name} and {grey_src.name} must have the same size, got {img.size} vs {grey.size}"
         )
 
     width, height = img.size
@@ -140,11 +161,32 @@ def main() -> int:
     elif not JOYCONS_GREY_SRC.exists():
         print(f"[ui-artifacts] joycons-grey.png not found: {JOYCONS_GREY_SRC}")
     else:
-        # Render the inspection copies.
+        # Render the light inspection copies.
         for name in JOYCONS_COPIES:
             dst = JOYCONS_OUT_DIR / name
             try:
                 did = _render_joycons_variant(dst, variant=name.removeprefix("joycons-").removesuffix(".png"))
+            except Exception:
+                return 3
+
+            if did:
+                changed.append(str(dst.relative_to(REPO_ROOT)))
+
+    # Render dark inspection copies.
+    if not JOYCONS_DARK_SRC.exists():
+        print(f"[ui-artifacts] joycons-dark.png not found: {JOYCONS_DARK_SRC}")
+    elif not JOYCONS_DARK_GREY_SRC.exists():
+        print(f"[ui-artifacts] joycons-dark-grey.png not found: {JOYCONS_DARK_GREY_SRC}")
+    else:
+        for name in JOYCONS_DARK_COPIES:
+            dst = JOYCONS_OUT_DIR / name
+            try:
+                did = _render_joycons_variant(
+                    dst,
+                    variant=name.removeprefix("joycons-dark-").removesuffix(".png"),
+                    color_src=JOYCONS_DARK_SRC,
+                    grey_src=JOYCONS_DARK_GREY_SRC,
+                )
             except Exception:
                 return 3
 

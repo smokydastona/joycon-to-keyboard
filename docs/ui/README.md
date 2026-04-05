@@ -22,19 +22,27 @@ UI kit (theme-matched controls):
 
 ## Mandatory artifacts (commit/push workflow)
 
-This repo relies on `joycons.png` as an overlay reference:
+This repo relies on `joycons.png` (light) and `joycons-dark.png` (dark) as overlay references:
 
-- `docs/ui/background.svg` links to it.
-- the helper app’s Controller-tab keymap editor uses it.
+- `docs/ui/background.svg` links to `joycons.png`.
+- `docs/ui/background-dark.svg` links to `joycons-dark.png`.
+- the helper app's Controller-tab keymap editor uses them.
 
 To keep reviewable inspection copies up-to-date, we also keep these files in git:
 
+**Light theme:**
 - `docs/ui/assets/joycons-none.png`
 - `docs/ui/assets/joycons-left.png`
 - `docs/ui/assets/joycons-right.png`
 - `docs/ui/assets/joycons-both.png`
 
-`joycons-none.png` is the fully-grey disconnected state. `joycons-left.png` and `joycons-right.png` now composite the active side from `joycons.png` with the inactive side from `joycons-grey.png`.
+**Dark theme:**
+- `docs/ui/assets/joycons-dark-none.png`
+- `docs/ui/assets/joycons-dark-left.png`
+- `docs/ui/assets/joycons-dark-right.png`
+- `docs/ui/assets/joycons-dark-both.png`
+
+`*-none.png` is the fully-grey disconnected state. `*-left.png` and `*-right.png` composite the active side from the color source with the inactive side from the grey source.
 
 Generate/update them (and refresh the local `.ui-bundle/` folder when needed) with:
 

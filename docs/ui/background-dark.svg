@@ -96,7 +96,7 @@
   <circle cx="500" cy="660" r="45" fill="url(#stain1)"/>
 
   <!-- Controller overlay artwork drawn on the dark parchment -->
-  <image href="../../joycons.png" x="0" y="0" width="980" height="680" preserveAspectRatio="xMidYMid slice" opacity="0.50"/>
+  <image href="../../joycons-dark.png" x="0" y="0" width="980" height="680" preserveAspectRatio="xMidYMid slice" opacity="0.50"/>
 
   <!-- Gold-ink construction lines on dark paper -->
   <g filter="url(#rough)" fill="none" stroke-linecap="round" stroke-linejoin="round">

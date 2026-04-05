@@ -121,10 +121,29 @@ def _read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _rewrite_bundle_svg(svg_text: str) -> str:
+def _rewrite_bundle_svg(svg_text: str, *, dark: bool = False) -> str:
     # Keep docs-friendly relative paths in repo sources, but ensure generated bundle
     # SVGs are self-contained within the output folder.
-    return svg_text.replace("../../joycons.png", "joycons.png")
+    text = svg_text.replace("../../joycons.png", "joycons.png")
+    text = text.replace("../../joycons-dark.png", "joycons.png")
+    return text
+
+
+LIGHT_OVERLAYS = {
+    "joycons.png": Path("joycons.png"),
+    "joycons-both.png": Path("docs/ui/assets/joycons-both.png"),
+    "joycons-left.png": Path("docs/ui/assets/joycons-left.png"),
+    "joycons-right.png": Path("docs/ui/assets/joycons-right.png"),
+    "joycons-none.png": Path("docs/ui/assets/joycons-none.png"),
+}
+
+DARK_OVERLAYS = {
+    "joycons.png": Path("joycons-dark.png"),
+    "joycons-both.png": Path("docs/ui/assets/joycons-dark-both.png"),
+    "joycons-left.png": Path("docs/ui/assets/joycons-dark-left.png"),
+    "joycons-right.png": Path("docs/ui/assets/joycons-dark-right.png"),
+    "joycons-none.png": Path("docs/ui/assets/joycons-dark-none.png"),
+}
 
 
 def _write_bundle(
@@ -135,25 +154,21 @@ def _write_bundle(
     bg_both_path: Path,
     icons_path: Path | None,
     components_path: Path | None,
+    *,
+    dark: bool = False,
 ) -> None:
     """Write a single UI bundle into *out_dir*."""
     out_dir.mkdir(parents=True, exist_ok=True)
 
     (out_dir / "theme.json").write_text(json.dumps(theme, indent=2), encoding="utf-8")
     (out_dir / "layout.json").write_text(json.dumps(DEFAULT_LAYOUT, indent=2), encoding="utf-8")
-    (out_dir / "background-left.svg").write_text(_rewrite_bundle_svg(_read_text(bg_left_path)), encoding="utf-8")
-    (out_dir / "background-right.svg").write_text(_rewrite_bundle_svg(_read_text(bg_right_path)), encoding="utf-8")
-    (out_dir / "background-both.svg").write_text(_rewrite_bundle_svg(_read_text(bg_both_path)), encoding="utf-8")
+    (out_dir / "background-left.svg").write_text(_rewrite_bundle_svg(_read_text(bg_left_path), dark=dark), encoding="utf-8")
+    (out_dir / "background-right.svg").write_text(_rewrite_bundle_svg(_read_text(bg_right_path), dark=dark), encoding="utf-8")
+    (out_dir / "background-both.svg").write_text(_rewrite_bundle_svg(_read_text(bg_both_path), dark=dark), encoding="utf-8")
     # Keep a compatibility copy for older docs/tools.
-    (out_dir / "background.svg").write_text(_rewrite_bundle_svg(_read_text(bg_both_path)), encoding="utf-8")
+    (out_dir / "background.svg").write_text(_rewrite_bundle_svg(_read_text(bg_both_path), dark=dark), encoding="utf-8")
 
-    overlays = {
-        "joycons.png": Path("joycons.png"),
-        "joycons-both.png": Path("docs/ui/assets/joycons-both.png"),
-        "joycons-left.png": Path("docs/ui/assets/joycons-left.png"),
-        "joycons-right.png": Path("docs/ui/assets/joycons-right.png"),
-        "joycons-none.png": Path("docs/ui/assets/joycons-none.png"),
-    }
+    overlays = DARK_OVERLAYS if dark else LIGHT_OVERLAYS
     for name, overlay_path in overlays.items():
         if overlay_path.exists():
             try:
@@ -294,7 +309,8 @@ def main() -> int:
 
         print("Dark bundle:")
         _write_bundle(dark_out, DARK_THEME, dark_left, dark_right, dark_both,
-                      Path(args.dark_icons), Path(args.dark_components))
+                      Path(args.dark_icons), Path(args.dark_components),
+                      dark=True)
 
     return 0
 
