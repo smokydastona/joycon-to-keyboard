@@ -1,4 +1,4 @@
-![Joy-Con Bridge Pinouts](pinouts.png)
+![Bind Bandit Pinouts](pinouts.png)
 
 # Joy-Con → Hardware Keyboard (anti-cheat safe)
 

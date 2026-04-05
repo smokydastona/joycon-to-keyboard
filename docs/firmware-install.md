@@ -120,7 +120,7 @@ Then check these settings:
 
 Menu path:
 
-- `JoyCon Bridge (ESP32-S3 USB Keyboard)`
+- `Bind Bandit (ESP32-S3 USB Keyboard)`
 
 Set:
 
@@ -193,7 +193,7 @@ Then:
 
 Menu path:
 
-- `JoyCon Bridge (ESP32 Classic-BT Host)`
+- `Bind Bandit (ESP32 Classic-BT Host)`
 
 Set:
 

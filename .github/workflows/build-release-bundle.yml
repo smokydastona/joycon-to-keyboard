@@ -180,7 +180,7 @@ jobs:
         shell: bash
         run: |
           cat > release-bundle/README.txt <<'EOF'
-          Joy-Con Bridge build bundle
+          Bind Bandit build bundle
 
           Version: ${{ needs.version-metadata.outputs.build_version }}
 
@@ -196,7 +196,7 @@ jobs:
       - name: Upload combined release bundle
         uses: actions/upload-artifact@v6
         with:
-          name: joycon-bridge-release-bundle-${{ needs.version-metadata.outputs.artifact_version }}
+          name: bind-bandit-release-bundle-${{ needs.version-metadata.outputs.artifact_version }}
           path: release-bundle
           if-no-files-found: error
 
@@ -245,7 +245,7 @@ jobs:
       - name: Download release bundle
         uses: actions/download-artifact@v7
         with:
-          name: joycon-bridge-release-bundle-${{ needs.version-metadata.outputs.artifact_version }}
+          name: bind-bandit-release-bundle-${{ needs.version-metadata.outputs.artifact_version }}
           path: release-bundle
 
       - name: Create GitHub Release
@@ -253,7 +253,7 @@ jobs:
         run: |
           set -euo pipefail
           TAG="v${{ needs.version-metadata.outputs.source_version }}"
-          TITLE="Joy-Con Bridge ${TAG}"
+          TITLE="Bind Bandit ${TAG}"
           NOTES="Build version: ${{ needs.version-metadata.outputs.build_version }}"
 
           # Prepare firmware binaries for direct OTA download.

@@ -1,4 +1,4 @@
-"""Auto-update support for Joy-Con Bridge Helper.
+"""Auto-update support for Bind Bandit.
 
 Checks the GitHub Releases API for a newer version and, when running as a
 frozen PyInstaller executable, downloads and installs the update.

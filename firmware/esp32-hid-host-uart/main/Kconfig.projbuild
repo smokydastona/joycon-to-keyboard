@@ -1,4 +1,4 @@
-menu "JoyCon Bridge (ESP32 Classic-BT Host)"
+menu "Bind Bandit (ESP32 Classic-BT Host)"
 
 config JOYCON_HOST_NAME_SUBSTR
     string "Target device name substring"

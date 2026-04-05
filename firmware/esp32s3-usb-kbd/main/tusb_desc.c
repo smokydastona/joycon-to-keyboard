@@ -62,10 +62,10 @@ uint8_t const desc_configuration[] = {
 // String descriptors (non-static so usb_kbd.c can pass them to tinyusb_driver_install)
 char const* string_desc_arr[] = {
     (const char[]){0x09, 0x04},
-    "JoyCon Bridge",
+    "Bind Bandit",
     "ESP32-S3 USB Keyboard",
     "00000001",
-    "JoyCon Bridge CDC",
+    "Bind Bandit CDC",
 };
 
 #define STRING_DESC_ARR_SIZE 5

@@ -45,7 +45,7 @@ For **Arduino Nano ESP32 (ABX00083)**, the official pinout maps:
 
 So set:
 
-`idf.py menuconfig` → `JoyCon Bridge (ESP32-S3 USB Keyboard)` → `Bridge UART RX GPIO` = `44`
+`idf.py menuconfig` → `Bind Bandit (ESP32-S3 USB Keyboard)` → `Bridge UART RX GPIO` = `44`
 
 Also set:
 - `Bridge UART baud` to `115200`

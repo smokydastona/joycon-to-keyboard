@@ -145,7 +145,7 @@ def _write_app_version(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Joy-Con Bridge version helpers")
+    parser = argparse.ArgumentParser(description="Bind Bandit version helpers")
     sub = parser.add_subparsers(dest="command", required=True)
 
     write_repo = sub.add_parser("write-repo-version", help="Write the tracked repo version JSON file")

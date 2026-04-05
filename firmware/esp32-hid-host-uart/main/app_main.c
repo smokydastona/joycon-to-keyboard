@@ -9,7 +9,7 @@
 #include "bt_hid_host.h"
 #include "bridge_ctrl.h"
 
-static const char* TAG = "joycon-bridge";
+static const char* TAG = "bind-bandit";
 
 static void uart_init_bridge(void) {
     const uart_config_t cfg = {

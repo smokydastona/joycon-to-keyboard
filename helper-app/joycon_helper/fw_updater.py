@@ -1,4 +1,4 @@
-"""Firmware OTA update support for Joy-Con Bridge Helper.
+"""Firmware OTA update support for Bind Bandit.
 
 Downloads firmware binaries from GitHub Releases and flashes them to the
 ESP32-S3 (USB keyboard) and ESP32 (BT host) over the existing CDC serial

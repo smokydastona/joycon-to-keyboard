@@ -1,4 +1,4 @@
-menu "JoyCon Bridge (ESP32-S3 USB Keyboard)"
+menu "Bind Bandit (ESP32-S3 USB Keyboard)"
 
 config BRIDGE_UART_PORT
     int "UART port" 

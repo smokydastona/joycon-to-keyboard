@@ -21,7 +21,7 @@ By default, this firmware connects to devices whose Bluetooth name contains `Joy
 
 For Binbok / third-party controllers, set this in:
 
-`idf.py menuconfig` → `JoyCon Bridge (ESP32 Classic-BT Host)` → `Target device name substring`
+`idf.py menuconfig` → `Bind Bandit (ESP32 Classic-BT Host)` → `Target device name substring`
 
 Example values:
 

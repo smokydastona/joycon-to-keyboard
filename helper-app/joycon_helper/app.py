@@ -4652,7 +4652,7 @@ class App(tk.Tk):
             return
 
         dlg = tk.Toplevel(self)
-        dlg.title("Update Joy-Con Bridge Helper")
+        dlg.title("Update Bind Bandit")
         dlg.geometry("440x280")
         dlg.resizable(False, False)
         dlg.transient(self)
