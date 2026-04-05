@@ -37,6 +37,9 @@ GITHUB_OWNER = "smokydastona"
 GITHUB_REPO = "joycon-to-keyboard"
 RELEASES_URL = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest"
 EXE_ASSET_NAME = "JoyConBridgeHelper.exe"
+FW_ASSET_S3 = "esp32s3-usb-kbd.bin"
+FW_ASSET_ESP32 = "esp32-hid-host-uart.bin"
+_PENDING_FW_DIR = "pending_fw"
 
 # How long to wait for GitHub API responses (seconds).
 _TIMEOUT = 15
@@ -129,6 +132,16 @@ def check_for_update() -> Optional[Dict[str, str]]:
         log.warning("Newer release %s found but no %s asset", tag, EXE_ASSET_NAME)
         return None
 
+    # Collect firmware assets from the same release.
+    fw_assets: Dict[str, Dict[str, Any]] = {}
+    for rel_asset in release.get("assets", []):
+        name = rel_asset.get("name", "")
+        if name in (FW_ASSET_S3, FW_ASSET_ESP32):
+            fw_assets[name] = {
+                "url": rel_asset["browser_download_url"],
+                "size": rel_asset.get("size", 0),
+            }
+
     log.info("Update available: %s → %s", __version__, tag)
     return {
         "tag": tag,
@@ -136,6 +149,7 @@ def check_for_update() -> Optional[Dict[str, str]]:
         "download_url": asset["browser_download_url"],
         "html_url": release.get("html_url", ""),
         "release_name": release.get("name", tag),
+        "fw_assets": fw_assets,
     }
 
 
@@ -232,6 +246,134 @@ def download_and_install(
         raise RuntimeError("Could not install the new executable. Rolled back to previous version.")
 
     return current_exe
+
+
+# ---------------------------------------------------------------------------
+# Generic asset download
+# ---------------------------------------------------------------------------
+
+def download_bytes(
+    url: str,
+    *,
+    progress_cb: Optional[Callable[[int, int], None]] = None,
+) -> bytes:
+    """Download a URL and return raw bytes with optional progress callback."""
+    req = Request(url)
+    ctx = ssl.create_default_context()
+    with urlopen(req, timeout=120, context=ctx) as resp:
+        total = int(resp.headers.get("Content-Length", 0))
+        data = bytearray()
+        while True:
+            chunk = resp.read(65536)
+            if not chunk:
+                break
+            data.extend(chunk)
+            if progress_cb and total > 0:
+                progress_cb(len(data), total)
+    return bytes(data)
+
+
+# ---------------------------------------------------------------------------
+# Pending firmware management
+# ---------------------------------------------------------------------------
+
+def _pending_fw_dir() -> Path:
+    """Return path to the pending firmware directory (next to the exe)."""
+    if is_frozen():
+        return Path(sys.executable).resolve().parent / _PENDING_FW_DIR
+    return Path(__file__).resolve().parent.parent / _PENDING_FW_DIR
+
+
+def save_pending_firmware(name: str, data: bytes) -> None:
+    """Save firmware bytes to the pending directory."""
+    d = _pending_fw_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    (d / name).write_bytes(data)
+    log.info("Saved pending firmware: %s (%d bytes)", name, len(data))
+
+
+def load_pending_firmware() -> Dict[str, Path]:
+    """Return {filename: path} for any saved firmware binaries."""
+    d = _pending_fw_dir()
+    if not d.is_dir():
+        return {}
+    result: Dict[str, Path] = {}
+    for f in d.iterdir():
+        if f.suffix == ".bin" and f.is_file():
+            result[f.name] = f
+    return result
+
+
+def clear_pending_firmware() -> None:
+    """Remove the pending firmware directory."""
+    d = _pending_fw_dir()
+    if d.is_dir():
+        shutil.rmtree(d, ignore_errors=True)
+        log.info("Cleared pending firmware directory")
+
+
+# ---------------------------------------------------------------------------
+# Install pre-downloaded exe
+# ---------------------------------------------------------------------------
+
+def install_exe(exe_bytes: bytes) -> Path:
+    """Write *exe_bytes* to a temp file and swap it into place.
+
+    Same rename strategy as ``download_and_install``, but separated from
+    the download step so callers can download everything first.
+
+    Returns the path of the newly-installed executable.
+    """
+    if not is_frozen():
+        raise RuntimeError("Auto-update is only supported for the packaged .exe build.")
+
+    current_exe = Path(sys.executable).resolve()
+    parent = current_exe.parent
+    old_exe = current_exe.with_suffix(".old.exe")
+    tmp_fd, tmp_path_str = tempfile.mkstemp(
+        suffix=".exe", prefix="jcb_update_", dir=str(parent)
+    )
+    try:
+        with os.fdopen(tmp_fd, "wb") as out:
+            out.write(exe_bytes)
+    except Exception:
+        try:
+            os.unlink(tmp_path_str)
+        except OSError:
+            pass
+        raise
+
+    tmp_path = Path(tmp_path_str)
+    try:
+        if old_exe.exists():
+            old_exe.unlink()
+        current_exe.rename(old_exe)
+    except OSError:
+        tmp_path.unlink(missing_ok=True)
+        raise RuntimeError("Could not move the current executable aside.")
+
+    try:
+        tmp_path.rename(current_exe)
+    except OSError:
+        old_exe.rename(current_exe)
+        tmp_path.unlink(missing_ok=True)
+        raise RuntimeError("Could not install the new executable. Rolled back.")
+
+    log.info("Installed new exe as %s", current_exe)
+    return current_exe
+
+
+# ---------------------------------------------------------------------------
+# Relaunch
+# ---------------------------------------------------------------------------
+
+def relaunch() -> None:
+    """Launch the (new) executable and exit this process."""
+    import subprocess
+    exe = Path(sys.executable).resolve()
+    log.info("Relaunching: %s", exe)
+    subprocess.Popen([str(exe)])
+    sys.exit(0)
 
 
 # ---------------------------------------------------------------------------

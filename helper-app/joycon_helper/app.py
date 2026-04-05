@@ -494,8 +494,14 @@ class App(tk.Tk):
         self.bind("<Control-Y>", lambda _e: self._redo())
 
         # Check for updates in the background after the UI is visible.
-        self._pending_update: Optional[Dict[str, str]] = None
+        self._pending_update: Optional[Dict[str, Any]] = None
         self.after(2000, self._start_update_check)
+
+        # Check for firmware left from a previous app update.
+        self._pending_fw_files = updater.load_pending_firmware()
+        self._pending_fw_offered = False
+        if self._pending_fw_files:
+            self.after(3000, self._check_pending_fw)
 
     def _load_ui_theme(self) -> dict:
         # Decide light vs dark: check --dark flag, env var, or Windows dark-mode setting.
@@ -678,6 +684,13 @@ class App(tk.Tk):
         self.connect_btn = ttk.Button(top, text="Connect", command=self._toggle_connect)
         self.connect_btn.pack(side=tk.LEFT)
 
+        # Update icon — hidden until an update is detected.
+        self._update_icon_btn = ttk.Button(
+            top, text=" \u2191 Update available ",
+            command=self._open_update_dialog,
+        )
+        # Not packed yet — _on_update_result shows it when an update exists.
+
         body = ttk.Frame(self)
         body.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
 
@@ -741,17 +754,10 @@ class App(tk.Tk):
         self.raw_entry.pack(pady=(4, 0))
         ttk.Button(right, text="Send", command=self._send_raw, width=22).pack(pady=(6, 0))
 
-        # Version & update (bottom of right panel)
+        # Version label (bottom of right panel)
         ver_frame = ttk.Frame(right)
         ver_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(12, 0))
         ttk.Label(ver_frame, text=f"v{__version__}", style="Muted.TLabel").pack(anchor="w")
-        self._update_btn = ttk.Button(
-            ver_frame, text="Check for updates…", command=self._do_update, width=22
-        )
-        self._update_btn.pack(pady=(4, 0))
-        self._update_status = tk.StringVar(value="")
-        self._update_label = ttk.Label(ver_frame, textvariable=self._update_status, style="Muted.TLabel", wraplength=180)
-        self._update_label.pack(anchor="w", pady=(2, 0))
 
         # Firmware update section
         fw_frame = ttk.LabelFrame(ver_frame, text="Firmware")
@@ -3855,90 +3861,311 @@ class App(tk.Tk):
 
     def _start_update_check(self) -> None:
         """Kick off a background update check."""
-        def _on_result(info: Optional[Dict[str, str]]) -> None:
+        def _on_result(info: Optional[Dict[str, Any]]) -> None:
             # Called from a background thread → schedule onto the Tk main loop.
             self.after(0, self._on_update_result, info)
 
         updater.check_in_background(_on_result)
 
-    def _on_update_result(self, info: Optional[Dict[str, str]]) -> None:
+    def _on_update_result(self, info: Optional[Dict[str, Any]]) -> None:
         if info is None:
-            self._update_status.set("Up to date.")
             return
         self._pending_update = info
-        self._update_btn.configure(text=f"Update to {info['version']}")
-        self._update_status.set(f"New version available: {info['version']}")
-        log.info("Update available: %s → %s", __version__, info["version"])
+        # Show the update icon in the top bar.
+        self._update_icon_btn.configure(text=f" \u2191 Update to {info['version']} ")
+        self._update_icon_btn.pack(side=tk.LEFT, padx=(12, 0))
+        log.info("Update available: %s \u2192 %s", __version__, info["version"])
 
-    def _do_update(self) -> None:
-        if self._pending_update is None:
-            # Manual recheck.
-            self._update_status.set("Checking…")
-            self._update_btn.configure(state="disabled")
-            def _on_result(info: Optional[Dict[str, str]]) -> None:
-                self.after(0, self._on_manual_check_result, info)
-            updater.check_in_background(_on_result)
-            return
-        self._apply_update()
+    # ------------------------------------------------------------------
+    # Update dialog — download, install, relaunch
+    # ------------------------------------------------------------------
 
-    def _on_manual_check_result(self, info: Optional[Dict[str, str]]) -> None:
-        self._update_btn.configure(state="normal")
-        if info is None:
-            self._update_status.set("Up to date.")
-            return
-        self._pending_update = info
-        self._update_btn.configure(text=f"Update to {info['version']}")
-        self._update_status.set(f"New version available: {info['version']}")
-
-    def _apply_update(self) -> None:
+    def _open_update_dialog(self) -> None:
+        """Open a modal dialog to download and install the update."""
         info = self._pending_update
         if not info:
             return
 
         if not updater.is_frozen():
-            self._update_status.set("Auto-update only works in the packaged .exe build.")
+            import webbrowser
+            url = info.get("html_url", "")
+            if url:
+                webbrowser.open(url)
+            return
+
+        dlg = tk.Toplevel(self)
+        dlg.title("Update Joy-Con Bridge Helper")
+        dlg.geometry("440x280")
+        dlg.resizable(False, False)
+        dlg.transient(self)
+        dlg.grab_set()
+        dlg.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() - 440) // 2
+        y = self.winfo_y() + (self.winfo_height() - 280) // 2
+        dlg.geometry(f"+{x}+{y}")
+
+        pad = ttk.Frame(dlg, padding=16)
+        pad.pack(fill=tk.BOTH, expand=True)
+
+        ttk.Label(
+            pad, text="Update Available",
+            font=("Segoe UI", 12, "bold"),
+        ).pack(anchor="w")
+        ttk.Label(
+            pad, text=f"v{__version__}  \u2192  v{info['version']}",
+        ).pack(anchor="w", pady=(4, 12))
+
+        step_var = tk.StringVar(value="Ready to update.")
+        ttk.Label(pad, textvariable=step_var, wraplength=400).pack(
+            anchor="w", pady=(0, 4),
+        )
+
+        progress = ttk.Progressbar(pad, length=400, mode="determinate")
+        progress.pack(fill=tk.X, pady=(0, 4))
+
+        detail_var = tk.StringVar(value="")
+        ttk.Label(pad, textvariable=detail_var, style="Muted.TLabel").pack(anchor="w")
+
+        btn_frame = ttk.Frame(pad)
+        btn_frame.pack(fill=tk.X, pady=(12, 0))
+
+        cancel_btn = ttk.Button(btn_frame, text="Cancel", command=dlg.destroy)
+        cancel_btn.pack(side=tk.RIGHT, padx=(8, 0))
+
+        install_btn = ttk.Button(
+            btn_frame, text="Download & Install",
+            command=lambda: self._run_update_flow(
+                dlg, info, step_var, progress, detail_var,
+                install_btn, cancel_btn,
+            ),
+        )
+        install_btn.pack(side=tk.RIGHT)
+
+        dlg._updating = False  # type: ignore[attr-defined]
+
+        def _on_close() -> None:
+            if getattr(dlg, "_updating", False):
+                return
+            dlg.destroy()
+
+        dlg.protocol("WM_DELETE_WINDOW", _on_close)
+
+    def _run_update_flow(
+        self,
+        dlg: tk.Toplevel,
+        info: Dict[str, Any],
+        step_var: tk.StringVar,
+        progress: ttk.Progressbar,
+        detail_var: tk.StringVar,
+        install_btn: ttk.Button,
+        cancel_btn: ttk.Button,
+    ) -> None:
+        """Execute the full download \u2192 install \u2192 relaunch pipeline on a thread."""
+        dlg._updating = True  # type: ignore[attr-defined]
+        install_btn.configure(state="disabled")
+        cancel_btn.configure(state="disabled")
+
+        def _set(step: str = "", detail: str = "", pct: int = 0) -> None:
+            def _apply() -> None:
+                step_var.set(step)
+                detail_var.set(detail)
+                progress.configure(value=pct)
+            self.after(0, _apply)
+
+        def _worker() -> None:
+            try:
+                # 1. Download app executable
+                _set("Downloading app update\u2026", "", 0)
+
+                def _app_cb(dl: int, tot: int) -> None:
+                    pct = int(dl * 100 / tot) if tot else 0
+                    _set(
+                        "Downloading app update\u2026",
+                        f"{dl // 1024} / {tot // 1024} KB",
+                        pct,
+                    )
+
+                exe_bytes = updater.download_bytes(
+                    info["download_url"], progress_cb=_app_cb,
+                )
+
+                # 2. Download firmware assets (if any in this release)
+                fw_assets = info.get("fw_assets", {})
+                fw_data: Dict[str, bytes] = {}
+                for name, asset_info in fw_assets.items():
+                    _set(f"Downloading firmware ({name})\u2026", "", 0)
+
+                    def _fw_cb(dl: int, tot: int, n: str = name) -> None:
+                        pct = int(dl * 100 / tot) if tot else 0
+                        _set(
+                            f"Downloading firmware ({n})\u2026",
+                            f"{dl // 1024} / {tot // 1024} KB",
+                            pct,
+                        )
+
+                    fw_data[name] = updater.download_bytes(
+                        asset_info["url"], progress_cb=_fw_cb,
+                    )
+
+                # 3. Save firmware for post-relaunch flashing
+                if fw_data:
+                    _set("Saving firmware\u2026", "", 0)
+                    for fname, fdata in fw_data.items():
+                        updater.save_pending_firmware(fname, fdata)
+
+                # 4. Install new exe
+                _set("Installing update\u2026", "Swapping executable\u2026", 50)
+                updater.install_exe(exe_bytes)
+                _set("Installing update\u2026", "Done!", 100)
+
+                # 5. Relaunch
+                _set("Restarting\u2026", "The app will relaunch now.", 100)
+                self.after(1200, updater.relaunch)
+
+            except Exception as e:
+                log.error("Update flow failed: %s", e, exc_info=True)
+                self.after(0, lambda: self._on_update_flow_error(
+                    dlg, str(e), install_btn, cancel_btn,
+                ))
+
+        threading.Thread(target=_worker, name="update-flow", daemon=True).start()
+
+    def _on_update_flow_error(
+        self,
+        dlg: tk.Toplevel,
+        error: str,
+        install_btn: ttk.Button,
+        cancel_btn: ttk.Button,
+    ) -> None:
+        dlg._updating = False  # type: ignore[attr-defined]
+        install_btn.configure(state="normal")
+        cancel_btn.configure(state="normal", text="Close")
+        messagebox.showerror("Update failed", error, parent=dlg)
+
+    # ------------------------------------------------------------------
+    # Pending firmware flash (runs after a successful app update + relaunch)
+    # ------------------------------------------------------------------
+
+    def _check_pending_fw(self) -> None:
+        """Periodically check whether we should offer to flash pending firmware."""
+        if not self._pending_fw_files:
+            return
+        if not self.serial.is_connected:
+            # Not connected yet — retry later.
+            self.after(5000, self._check_pending_fw)
+            return
+        if self._pending_fw_offered:
+            return
+        self._pending_fw_offered = True
+        self.after(500, self._offer_pending_fw_flash)
+
+    def _offer_pending_fw_flash(self) -> None:
+        files = self._pending_fw_files
+        board_names: List[str] = []
+        if updater.FW_ASSET_S3 in files:
+            board_names.append("ESP32-S3")
+        if updater.FW_ASSET_ESP32 in files:
+            board_names.append("ESP32")
+
+        if not board_names:
+            updater.clear_pending_firmware()
+            self._pending_fw_files = {}
             return
 
         confirm = messagebox.askyesno(
-            "Update available",
-            f"Download and install {info['release_name']}?\n\n"
-            f"Current: v{__version__}\n"
-            f"New: {info['version']}\n\n"
-            "The app will need to restart after updating.",
+            "Firmware Update Ready",
+            f"Updated firmware is ready for: {', '.join(board_names)}.\n\n"
+            "Flash now?\n\n"
+            "Do not disconnect during the update.",
         )
         if not confirm:
+            updater.clear_pending_firmware()
+            self._pending_fw_files = {}
             return
 
-        self._update_btn.configure(state="disabled")
-        self._update_status.set("Downloading…")
+        self._flash_pending_fw()
 
-        def _progress(downloaded: int, total: int) -> None:
-            pct = int(downloaded * 100 / total) if total > 0 else 0
-            self.after(0, lambda: self._update_status.set(f"Downloading… {pct}%"))
+    def _flash_pending_fw(self) -> None:
+        """Flash saved firmware binaries with a progress dialog."""
+        dlg = tk.Toplevel(self)
+        dlg.title("Flashing Firmware")
+        dlg.geometry("440x200")
+        dlg.resizable(False, False)
+        dlg.transient(self)
+        dlg.grab_set()
+        dlg.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width() - 440) // 2
+        y = self.winfo_y() + (self.winfo_height() - 200) // 2
+        dlg.geometry(f"+{x}+{y}")
 
-        def _download() -> None:
+        pad = ttk.Frame(dlg, padding=16)
+        pad.pack(fill=tk.BOTH, expand=True)
+
+        step_var = tk.StringVar(value="Preparing\u2026")
+        ttk.Label(
+            pad, textvariable=step_var,
+            font=("Segoe UI", 10, "bold"),
+        ).pack(anchor="w")
+
+        progress = ttk.Progressbar(pad, length=400, mode="determinate")
+        progress.pack(fill=tk.X, pady=(8, 4))
+
+        detail_var = tk.StringVar(value="")
+        ttk.Label(pad, textvariable=detail_var, style="Muted.TLabel").pack(anchor="w")
+
+        dlg.protocol("WM_DELETE_WINDOW", lambda: None)
+
+        def _set(step: str = "", detail: str = "", pct: int = 0) -> None:
+            def _apply() -> None:
+                step_var.set(step)
+                detail_var.set(detail)
+                progress.configure(value=pct)
+            self.after(0, _apply)
+
+        files = self._pending_fw_files
+        boards_to_flash: List[Tuple[str, Path]] = []
+        if updater.FW_ASSET_S3 in files:
+            boards_to_flash.append((fw_updater.BOARD_S3, files[updater.FW_ASSET_S3]))
+        if updater.FW_ASSET_ESP32 in files:
+            boards_to_flash.append((fw_updater.BOARD_ESP32, files[updater.FW_ASSET_ESP32]))
+
+        def _worker() -> None:
             try:
-                updater.download_and_install(info["download_url"], progress_cb=_progress)
-                self.after(0, self._on_update_installed)
+                flasher = fw_updater.FirmwareFlasher(self.serial)
+                for board, fw_path in boards_to_flash:
+                    _set(f"Flashing {board}\u2026", "Reading firmware\u2026", 0)
+                    fw_bytes = fw_path.read_bytes()
+
+                    def _progress(done: int, total: int, b: str = board) -> None:
+                        pct = int(done * 100 / total) if total else 0
+                        _set(
+                            f"Flashing {b}\u2026",
+                            f"{done // 1024} / {total // 1024} KB",
+                            pct,
+                        )
+
+                    flasher.flash(board, fw_bytes, progress_cb=_progress)
+
+                _set("Firmware update complete!", "Device will reboot.", 100)
+                updater.clear_pending_firmware()
+                self._pending_fw_files = {}
+                self.after(2000, dlg.destroy)
+                self.after(2100, lambda: messagebox.showinfo(
+                    "Firmware Updated",
+                    "Firmware has been updated successfully.\n"
+                    "The device will reboot. You may need to reconnect.",
+                ))
             except Exception as e:
-                log.error("Update failed: %s", e, exc_info=True)
-                self.after(0, lambda: self._on_update_failed(str(e)))
+                log.error("Pending FW flash failed: %s", e, exc_info=True)
+                _set(f"Error: {e}", "", 0)
+                updater.clear_pending_firmware()
+                self._pending_fw_files = {}
+                self.after(3000, dlg.destroy)
+                self.after(3100, lambda: messagebox.showerror(
+                    "Firmware Flash Failed", str(e),
+                ))
 
-        import threading
-        threading.Thread(target=_download, name="updater-dl", daemon=True).start()
-
-    def _on_update_installed(self) -> None:
-        self._update_status.set("Update installed! Restart to use the new version.")
-        messagebox.showinfo(
-            "Update installed",
-            "The update has been installed.\n\n"
-            "Please close and re-open the app to use the new version.",
-        )
-
-    def _on_update_failed(self, error: str) -> None:
-        self._update_btn.configure(state="normal")
-        self._update_status.set(f"Update failed: {error}")
-        messagebox.showerror("Update failed", error)
+        threading.Thread(target=_worker, name="pending-fw-flash", daemon=True).start()
 
     # ------------------------------------------------------------------
     # Firmware version check & OTA update
