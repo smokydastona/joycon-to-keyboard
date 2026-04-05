@@ -50,6 +50,53 @@ Versioning is automatic:
 - The helper app **auto-updates**: on startup it checks the latest GitHub Release and prompts the user to install newer versions.
 - **Firmware OTA updates**: the helper app can also flash new firmware to both boards (ESP32-S3 and ESP32) over USB serial, downloading binaries from GitHub Releases. Both boards use an A/B OTA partition layout for safe rollback.
 
+## Code signing / "Publisher"
+
+Windows shows a real Publisher in UAC/SmartScreen only when the EXE is code-signed.
+
+If you use a self-signed certificate:
+
+- It will show your publisher name only on machines that trust your certificate.
+- It will NOT automatically remove SmartScreen warnings for other users.
+
+This repo supports optional signing in GitHub Actions if you add these
+repository secrets:
+
+- `CODESIGN_PFX_BASE64`: base64-encoded `.pfx`
+- `CODESIGN_PFX_PASSWORD`: password for the `.pfx`
+- (optional) `CODESIGN_TIMESTAMP_URL`: default `http://timestamp.digicert.com`
+
+Self-signed quickstart (dev/testing):
+
+- Create + export a self-signed code-signing cert:
+  ```
+  pwsh scripts/new-self-signed-codesign-cert.ps1 -SubjectName SmokyDaStona -PfxCredential (New-Object PSCredential('pfx', (ConvertTo-SecureString 'your_password' -AsPlainText -Force))) -TrustForCurrentUser
+  ```
+- Convert the `.pfx` to base64 for GitHub Secrets:
+  ```
+  pwsh scripts/pfx-to-base64.ps1 -PfxPath .\codesign_dev\codesign_SmokyDaStona_dev.pfx
+  ```
+  Paste the output into `CODESIGN_PFX_BASE64`.
+
+To sign locally (requires Windows SDK SignTool):
+
+```
+pwsh scripts/sign.ps1 -File .\BindBandit.exe -PfxPath .\codesign_dev\codesign_SmokyDaStona_dev.pfx -PfxCredential (New-Object PSCredential('pfx', (ConvertTo-SecureString 'your_password' -AsPlainText -Force)))
+```
+
+### Sigstore / cosign (provenance signatures)
+
+This repo also publishes Sigstore/cosign keyless signatures for release artifacts (EXE). This helps users verify
+the file came from the tagged GitHub Actions release build.
+
+Note: cosign signatures do not replace Authenticode for Windows SmartScreen/UAC "Publisher" trust.
+
+Verify example (adjust filenames/version):
+
+```
+cosign verify-blob --signature .\BindBandit.exe.sig --certificate .\BindBandit.exe.crt --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp "^https://github.com/smokydastona/joy-con/.github/workflows/build-release-bundle.yml@refs/.*$" .\BindBandit.exe
+```
+
 ## Next
 
 0) Wiring (one USB dongle): see `docs/wiring.md`

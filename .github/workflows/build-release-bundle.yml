@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write
 
 env:
   REPO_VERSION_FILE: version.json
@@ -128,11 +129,100 @@ jobs:
           python tools/versioning.py write-pyinstaller-version-file --repo-version version.json --run-number ${{ github.run_number }} --output helper-app/build/pyinstaller-version-info.txt
           python tools/versioning.py write-app-version --repo-version version.json --output helper-app/joycon_helper/_version.py
 
+      - name: Setup cosign (Sigstore)
+        uses: sigstore/cosign-installer@v3
+
       - name: Build helper app exe
         shell: pwsh
         working-directory: helper-app
         run: |
           python -m PyInstaller --noconfirm --clean --onefile --windowed --name BindBandit joycon_helper/__main__.py --paths . --distpath dist --workpath build --add-data "../.ui-bundle;.ui-bundle" --add-data "../.ui-bundle-dark;.ui-bundle-dark" --add-data "icon.ico;." --icon icon.ico --version-file build/pyinstaller-version-info.txt --hidden-import serial.tools.list_ports_windows
+
+      - name: Sign published EXE (optional)
+        shell: pwsh
+        env:
+          # NOTE: Some editors/linters warn that `secrets.*` contexts are "invalid".
+          # This is expected locally because they cannot see your repo's configured secrets.
+          # In GitHub Actions, these resolve correctly when the secrets exist.
+          CODESIGN_PFX_BASE64: "${{ secrets.CODESIGN_PFX_BASE64 }}"
+          CODESIGN_PFX_PASSWORD: "${{ secrets.CODESIGN_PFX_PASSWORD }}"
+          CODESIGN_TIMESTAMP_URL: "${{ secrets.CODESIGN_TIMESTAMP_URL }}"
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          if ([string]::IsNullOrWhiteSpace($env:CODESIGN_PFX_BASE64) -or [string]::IsNullOrWhiteSpace($env:CODESIGN_PFX_PASSWORD)) {
+            Write-Host 'Code signing skipped (CODESIGN_PFX_BASE64 / CODESIGN_PFX_PASSWORD not set).'
+            exit 0
+          }
+
+          try {
+            $exe = Join-Path $PWD 'helper-app/dist/BindBandit.exe'
+            if (-not (Test-Path -LiteralPath $exe)) {
+              throw "Expected publish output not found: $exe"
+            }
+
+            $pfxPath = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+            [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:CODESIGN_PFX_BASE64))
+
+            $timestamp = $env:CODESIGN_TIMESTAMP_URL
+            if ([string]::IsNullOrWhiteSpace($timestamp)) { $timestamp = 'http://timestamp.digicert.com' }
+
+            function Find-SignTool {
+              $cmd = Get-Command signtool.exe -ErrorAction SilentlyContinue
+              if ($cmd) { return $cmd.Source }
+
+              $roots = @(
+                'C:\Program Files (x86)\Windows Kits\10\bin',
+                'C:\Program Files\Windows Kits\10\bin'
+              )
+
+              foreach ($root in $roots) {
+                if (-not (Test-Path -LiteralPath $root)) { continue }
+                $found = Get-ChildItem -LiteralPath $root -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+                  Sort-Object FullName -Descending |
+                  Select-Object -First 1
+                if ($found) { return $found.FullName }
+              }
+
+              return $null
+            }
+
+            $signtool = Find-SignTool
+            if ([string]::IsNullOrWhiteSpace($signtool)) {
+              Write-Host 'Code signing skipped (signtool.exe not found on runner).'
+              exit 0
+            }
+
+            Write-Host "Using signtool: $signtool"
+
+            & $signtool sign /fd sha256 /a /f $pfxPath /p $env:CODESIGN_PFX_PASSWORD /tr $timestamp /td sha256 $exe
+            & $signtool verify /pa /v $exe
+          }
+          catch {
+            Write-Warning "Code signing failed (continuing without signing): $($_.Exception.Message)"
+            exit 0
+          }
+
+      - name: Cosign EXE (keyless, best-effort)
+        if: github.event_name != 'pull_request'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          $outDir = Join-Path $PWD 'helper-app/dist/cosign'
+          New-Item -ItemType Directory -Force -Path $outDir | Out-Null
+
+          $exe = Join-Path $PWD 'helper-app/dist/BindBandit.exe'
+          if (-not (Test-Path -LiteralPath $exe)) {
+            throw "Expected file not found: $exe"
+          }
+
+          try {
+            cosign sign-blob --yes --output-signature (Join-Path $outDir 'BindBandit.exe.sig') --output-certificate (Join-Path $outDir 'BindBandit.exe.crt') $exe
+          }
+          catch {
+            Write-Warning "cosign signing failed (continuing without signatures): $($_.Exception.Message)"
+          }
 
       - name: Collect helper app outputs
         shell: pwsh
@@ -140,6 +230,10 @@ jobs:
           New-Item -ItemType Directory -Force -Path bundle/helper-app | Out-Null
           Copy-Item helper-app/README.md bundle/helper-app/README.md
           Copy-Item helper-app/dist/BindBandit.exe bundle/helper-app/BindBandit.exe
+          $cosignDir = 'helper-app/dist/cosign'
+          if (Test-Path -LiteralPath $cosignDir) {
+            Copy-Item -LiteralPath $cosignDir -Destination bundle/helper-app/cosign -Recurse -Force
+          }
           Set-Content -Path bundle/helper-app/VERSION.txt -Value "${{ needs.version-metadata.outputs.build_version }}"
 
       - name: Upload helper app artifact

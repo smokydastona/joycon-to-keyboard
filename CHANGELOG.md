@@ -12,6 +12,7 @@ Until then, entries are grouped by date.
 ### Added
 
 - **Mouse tab: IncediusMod custom button map editor** — since the IncediusMod is a physical rewiring mod, each user's button IDs may differ. The "Edit Map…" button (visible when IncediusMod layout is selected) opens a dialog where users can reassign which M913 side button corresponds to each Thumb/Finger position, with duplicate detection. The custom map is saved per-profile.
+- **Code signing + cosign support** — CI workflow now optionally signs the EXE with Authenticode (via `CODESIGN_PFX_BASE64` / `CODESIGN_PFX_PASSWORD` GitHub Secrets) and publishes Sigstore/cosign keyless provenance signatures. Added `scripts/new-self-signed-codesign-cert.ps1`, `scripts/pfx-to-base64.ps1`, and `scripts/sign.ps1` for local signing workflows.
 
 ### Changed
 
