@@ -5,7 +5,9 @@ This folder provides requested UI artifacts for the **helper app** (`helper-app/
 Deliverables in this pack:
 
 - UI mockup: see below
-- UI background: `background.svg`
+- UI background: `background-left.svg` — theme-matched background art for Left Joy-Con connected.
+- UI background: `background-right.svg` — theme-matched background art for Right Joy-Con connected.
+- UI background: `background-both.svg` — theme-matched background art for Both Joy-Cons connected.
 - UI theme: `bundle-example/theme.json`
 - UI generator: `tools/generate_ui_bundle.py`
 - UI bundle example: `bundle-example/`
@@ -78,7 +80,7 @@ This pack does **not** force the app to load the theme automatically (to avoid c
 
 ## Background
 
-`background.svg` is a lightweight vector background designed to:
+`background-left.svg`, `background-right.svg`, and `background-both.svg` are lightweight vector backgrounds designed to:
 
 - be non-distracting (so logs and JSON remain readable)
 - fit a 980x680-ish canvas (current default window size)
@@ -93,7 +95,10 @@ See `tools/generate_ui_bundle.py`.
 It writes a “UI bundle” folder containing:
 
 - `theme.json`
-- `background.svg`
+- `background-left.svg`
+- `background-right.svg`
+- `background-both.svg`
+- `background.svg` (compat copy; currently the same as `background-both.svg`)
 - `layout.json`
 - `README.md`
 

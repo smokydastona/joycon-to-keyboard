@@ -2,7 +2,10 @@
 
 A UI bundle is a folder containing:
 - theme.json
-- background.svg
+- background-left.svg
+- background-right.svg
+- background-both.svg
+- background.svg (compat copy)
 - layout.json
 - icons.svg (optional)
 - components.svg (optional)
@@ -65,7 +68,10 @@ This folder is a generated UI bundle for the JoyCon Bridge helper app.
 Files:
 
 - theme.json: semantic tokens (colors/typography/spacing)
-- background.svg: optional background artwork (no trademarks/logos)
+- background-left.svg: optional background artwork (Left state)
+- background-right.svg: optional background artwork (Right state)
+- background-both.svg: optional background artwork (Both state)
+- background.svg: compatibility copy (currently the same as background-both.svg)
 - layout.json: layout metadata for documentation / future UI refactors
 - icons.svg: optional icon set
 - components.svg: optional component sheet
@@ -83,8 +89,26 @@ def main() -> int:
     ap.add_argument("--out", required=True, help="Output folder for the bundle")
     ap.add_argument(
         "--background",
-        default="docs/ui/background.svg",
-        help="Path to background.svg to include (default: docs/ui/background.svg)",
+        default=None,
+        help=(
+            "Legacy: single background SVG to include for all states. "
+            "If provided, it will be used as background-left/right/both, and also written as background.svg."
+        ),
+    )
+    ap.add_argument(
+        "--background-left",
+        default="docs/ui/background-left.svg",
+        help="Path to background-left.svg to include (default: docs/ui/background-left.svg)",
+    )
+    ap.add_argument(
+        "--background-right",
+        default="docs/ui/background-right.svg",
+        help="Path to background-right.svg to include (default: docs/ui/background-right.svg)",
+    )
+    ap.add_argument(
+        "--background-both",
+        default="docs/ui/background-both.svg",
+        help="Path to background-both.svg to include (default: docs/ui/background-both.svg)",
     )
     ap.add_argument(
         "--icons",
@@ -101,13 +125,32 @@ def main() -> int:
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    bg_path = Path(args.background)
-    if not bg_path.exists():
-        raise SystemExit(f"background not found: {bg_path}")
+    if args.background:
+        bg_left_path = Path(args.background)
+        bg_right_path = Path(args.background)
+        bg_both_path = Path(args.background)
+    else:
+        bg_left_path = Path(args.background_left)
+        bg_right_path = Path(args.background_right)
+        bg_both_path = Path(args.background_both)
+
+    missing = [p for p in (bg_left_path, bg_right_path, bg_both_path) if not p.exists()]
+    if missing:
+        legacy = Path("docs/ui/background.svg")
+        if legacy.exists() and not args.background:
+            bg_left_path = legacy
+            bg_right_path = legacy
+            bg_both_path = legacy
+        else:
+            raise SystemExit("background(s) not found: " + ", ".join(str(p) for p in missing))
 
     (out_dir / "theme.json").write_text(json.dumps(DEFAULT_THEME, indent=2), encoding="utf-8")
     (out_dir / "layout.json").write_text(json.dumps(DEFAULT_LAYOUT, indent=2), encoding="utf-8")
-    (out_dir / "background.svg").write_text(_read_text(bg_path), encoding="utf-8")
+    (out_dir / "background-left.svg").write_text(_read_text(bg_left_path), encoding="utf-8")
+    (out_dir / "background-right.svg").write_text(_read_text(bg_right_path), encoding="utf-8")
+    (out_dir / "background-both.svg").write_text(_read_text(bg_both_path), encoding="utf-8")
+    # Keep a compatibility copy for older docs/tools.
+    (out_dir / "background.svg").write_text(_read_text(bg_both_path), encoding="utf-8")
 
     icons_path = Path(args.icons)
     if icons_path.exists():
