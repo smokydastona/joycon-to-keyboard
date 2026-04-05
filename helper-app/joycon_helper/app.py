@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 import tkinter as tk
 import tkinter.ttk as ttk
 import time
@@ -86,13 +87,14 @@ def _load_theme_json(path: Path) -> dict:
 
 def _ensure_profile_defaults(profile: dict) -> dict:
     if not isinstance(profile, dict):
-        return {"ver": 1, "name": "default", "mappings": {}, "macros": [], "stick": {}}
+        return {"ver": 1, "name": "default", "mappings": {}, "macros": [], "stick": {}, "ui": {"hotspots": {}}}
 
     profile.setdefault("ver", 1)
     profile.setdefault("name", "default")
     profile.setdefault("mappings", {})
     profile.setdefault("macros", [])
     profile.setdefault("stick", {})
+    profile.setdefault("ui", {"hotspots": {}})
 
     if not isinstance(profile["mappings"], dict):
         profile["mappings"] = {}
@@ -101,7 +103,39 @@ def _ensure_profile_defaults(profile: dict) -> dict:
     if not isinstance(profile["stick"], dict):
         profile["stick"] = {}
 
+    if not isinstance(profile.get("ui"), dict):
+        profile["ui"] = {"hotspots": {}}
+    profile["ui"].setdefault("hotspots", {})
+    if not isinstance(profile["ui"].get("hotspots"), dict):
+        profile["ui"]["hotspots"] = {}
+
     return profile
+
+
+JOYCONS_IMAGE_W = 1536
+JOYCONS_IMAGE_H = 1024
+
+# Normalized hotspot positions over joycons.png.
+# These are intentionally approximate: the recommended flow is to use Learn
+# to bind each physical control to its observed input key_id.
+KEYMAP_HOTSPOTS: List[Tuple[str, float, float]] = [
+    ("ZL", 420 / JOYCONS_IMAGE_W, 150 / JOYCONS_IMAGE_H),
+    ("ZR", 1115 / JOYCONS_IMAGE_W, 150 / JOYCONS_IMAGE_H),
+    ("-", 420 / JOYCONS_IMAGE_W, 335 / JOYCONS_IMAGE_H),
+    ("+", 1110 / JOYCONS_IMAGE_W, 335 / JOYCONS_IMAGE_H),
+    ("CAP", 395 / JOYCONS_IMAGE_W, 720 / JOYCONS_IMAGE_H),
+    ("HOME", 1140 / JOYCONS_IMAGE_W, 720 / JOYCONS_IMAGE_H),
+    ("LSTK", 250 / JOYCONS_IMAGE_W, 435 / JOYCONS_IMAGE_H),
+    ("D-UP", 300 / JOYCONS_IMAGE_W, 545 / JOYCONS_IMAGE_H),
+    ("D-DN", 300 / JOYCONS_IMAGE_W, 665 / JOYCONS_IMAGE_H),
+    ("D-L", 225 / JOYCONS_IMAGE_W, 605 / JOYCONS_IMAGE_H),
+    ("D-R", 375 / JOYCONS_IMAGE_W, 605 / JOYCONS_IMAGE_H),
+    ("A", 1330 / JOYCONS_IMAGE_W, 460 / JOYCONS_IMAGE_H),
+    ("B", 1260 / JOYCONS_IMAGE_W, 535 / JOYCONS_IMAGE_H),
+    ("X", 1260 / JOYCONS_IMAGE_W, 385 / JOYCONS_IMAGE_H),
+    ("Y", 1190 / JOYCONS_IMAGE_W, 460 / JOYCONS_IMAGE_H),
+    ("RSTK", 1260 / JOYCONS_IMAGE_W, 605 / JOYCONS_IMAGE_H),
+]
 
 
 def _profile_to_share_code(profile: dict) -> str:
@@ -229,6 +263,16 @@ class App(tk.Tk):
         # Controller tab background banner widgets.
         self._bt_banner: Optional[tk.Frame] = None
         self._bt_banner_label: Optional[tk.Label] = None
+
+        # Keymap editor (Controller tab)
+        self._keymap_status = tk.StringVar(value="Click a control to select it. Use Learn to bind its key_id.")
+        self._keymap_selected_name: Optional[str] = None
+        self._keymap_learn_name: Optional[str] = None
+        self._keymap_canvas: Optional[tk.Canvas] = None
+        self._keymap_img_path: Optional[Path] = None
+        self._keymap_img_base: Optional[tk.PhotoImage] = None
+        self._keymap_img_scaled: Optional[tk.PhotoImage] = None
+        self._keymap_hotspot_px: Dict[str, Tuple[float, float]] = {}
 
         self._build_ui()
         self._apply_widget_theme()
@@ -666,7 +710,295 @@ class App(tk.Tk):
         )
         ttk.Label(self.tab_controller, text=note, wraplength=900, justify="left").pack(anchor="w", padx=12, pady=(4, 0))
 
+        self._build_keymap_editor()
+
         self._update_bt_background()
+
+    def _find_joycons_png(self) -> Optional[Path]:
+        candidates: List[Path] = []
+        try:
+            candidates.append(Path.cwd() / "joycons.png")
+            candidates.append(Path.cwd() / ".ui-bundle" / "joycons.png")
+        except Exception:
+            pass
+
+        here = Path(__file__).resolve()
+        for p in (
+            here.parents[1] / "joycons.png",  # helper-app/joycons.png
+            here.parents[1] / ".ui-bundle" / "joycons.png",  # helper-app/.ui-bundle/joycons.png
+            here.parents[3] / "joycons.png",  # repo root/joycons.png
+            here.parents[3] / ".ui-bundle" / "joycons.png",  # repo root/.ui-bundle/joycons.png
+        ):
+            candidates.append(p)
+
+        for c in candidates:
+            try:
+                if c.exists():
+                    return c
+            except Exception:
+                continue
+        return None
+
+    def _keymap_hotspots(self) -> Dict[str, int]:
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return {}
+
+        ui = prof.get("ui", {})
+        if not isinstance(ui, dict):
+            return {}
+        hs = ui.get("hotspots", {})
+        if not isinstance(hs, dict):
+            return {}
+
+        out: Dict[str, int] = {}
+        for k, v in hs.items():
+            if not isinstance(k, str) or not k:
+                continue
+            try:
+                out[k] = int(v)
+            except Exception:
+                continue
+        return out
+
+    def _keymap_refresh_visuals(self) -> None:
+        if not self._keymap_canvas:
+            return
+        self._keymap_redraw()
+
+    def _mapping_load_from_profile(self, in_id: int) -> None:
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return
+
+        mappings = prof.get("mappings", {})
+        if not isinstance(mappings, dict):
+            mappings = {}
+
+        entry = mappings.get(str(in_id))
+        if not isinstance(entry, dict):
+            self._mapping_type.set("passthrough")
+            self._mapping_remap_to.set(str(in_id if in_id < 128 else (in_id - 128)))
+            self._mapping_macro_id.set("")
+            return
+
+        et = entry.get("type")
+        if et == "disable":
+            self._mapping_type.set("disable")
+        elif et == "remap":
+            self._mapping_type.set("remap")
+            to = entry.get("to")
+            self._mapping_remap_to.set(str(int(to)) if isinstance(to, (int, float)) else "0")
+        elif et == "macro":
+            self._mapping_type.set("macro")
+            mid = entry.get("id")
+            self._mapping_macro_id.set(str(mid) if isinstance(mid, str) else "")
+        else:
+            self._mapping_type.set("passthrough")
+
+    def _build_keymap_editor(self) -> None:
+        box = ttk.LabelFrame(self.tab_controller, text="Keymap editor")
+        box.pack(fill=tk.BOTH, expand=True, padx=8, pady=(8, 8))
+
+        top = ttk.Frame(box)
+        top.pack(fill=tk.X, padx=8, pady=(6, 6))
+        ttk.Label(top, textvariable=self._keymap_status, wraplength=720, justify="left").pack(side=tk.LEFT)
+
+        btns = ttk.Frame(top)
+        btns.pack(side=tk.RIGHT)
+        ttk.Button(btns, text="Learn selected", command=self._keymap_begin_learn).pack(side=tk.LEFT)
+        ttk.Button(btns, text="Clear binding", command=self._keymap_clear_selected).pack(side=tk.LEFT, padx=(6, 0))
+
+        self._keymap_canvas = tk.Canvas(box, height=340, highlightthickness=1)
+        self._keymap_canvas.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
+        try:
+            self._keymap_canvas.configure(bg=self._colors["panel2"], highlightbackground=self._colors["border"])
+        except Exception:
+            pass
+
+        self._keymap_canvas.bind("<Button-1>", self._keymap_on_click)
+        self._keymap_canvas.bind("<Configure>", lambda _e: self._keymap_redraw())
+
+        self._keymap_img_path = self._find_joycons_png()
+        if self._keymap_img_path:
+            try:
+                self._keymap_img_base = tk.PhotoImage(file=str(self._keymap_img_path))
+            except Exception:
+                self._keymap_img_base = None
+
+        self._keymap_redraw()
+
+        # Minimal inline mapping controls for the selected/bound input key_id.
+        map_box = ttk.LabelFrame(box, text="Selected input mapping")
+        map_box.pack(fill=tk.X, padx=8, pady=(0, 8))
+        r = ttk.Frame(map_box)
+        r.pack(fill=tk.X, padx=8, pady=(6, 6))
+
+        ttk.Label(r, text="Input key_id:").pack(side=tk.LEFT)
+        ttk.Entry(r, textvariable=self._mapping_key_id, width=6).pack(side=tk.LEFT, padx=(6, 12))
+
+        ttk.Label(r, text="Type:").pack(side=tk.LEFT)
+        ttk.Combobox(
+            r,
+            textvariable=self._mapping_type,
+            values=["passthrough", "disable", "remap", "macro"],
+            width=14,
+            state="readonly",
+        ).pack(side=tk.LEFT, padx=(6, 12))
+
+        ttk.Label(r, text="Remap to:").pack(side=tk.LEFT)
+        ttk.Entry(r, textvariable=self._mapping_remap_to, width=6).pack(side=tk.LEFT, padx=(6, 12))
+
+        ttk.Label(r, text="Macro id:").pack(side=tk.LEFT)
+        ttk.Entry(r, textvariable=self._mapping_macro_id, width=14).pack(side=tk.LEFT, padx=(6, 12))
+
+        ttk.Button(r, text="Apply", command=self._mapping_apply).pack(side=tk.LEFT)
+
+    def _keymap_redraw(self) -> None:
+        c = self._keymap_canvas
+        if not c:
+            return
+
+        c.delete("all")
+
+        w = max(c.winfo_width(), 1)
+        h = max(c.winfo_height(), 1)
+
+        if not self._keymap_img_base:
+            msg = "joycons.png not found" if not self._keymap_img_path else "Failed to load joycons.png"
+            c.create_text(w // 2, h // 2, text=msg, fill=self._colors.get("muted", "#666"))
+            self._keymap_hotspot_px = {}
+            return
+
+        base_w = self._keymap_img_base.width()
+        base_h = self._keymap_img_base.height()
+        factor = max(1, int(math.ceil(base_w / max(1, w))), int(math.ceil(base_h / max(1, h))))
+
+        try:
+            self._keymap_img_scaled = self._keymap_img_base.subsample(factor, factor)
+        except Exception:
+            self._keymap_img_scaled = self._keymap_img_base
+
+        img_w = self._keymap_img_scaled.width()
+        img_h = self._keymap_img_scaled.height()
+        ox = (w - img_w) / 2.0
+        oy = (h - img_h) / 2.0
+
+        c.create_image(ox, oy, image=self._keymap_img_scaled, anchor="nw")
+
+        hs_bindings = self._keymap_hotspots()
+        self._keymap_hotspot_px = {}
+        radius = max(14, int(min(img_w, img_h) * 0.02))
+
+        for name, nx, ny in KEYMAP_HOTSPOTS:
+            px = ox + nx * img_w
+            py = oy + ny * img_h
+            self._keymap_hotspot_px[name] = (px, py)
+
+            selected = (name == self._keymap_selected_name)
+            bound = hs_bindings.get(name)
+
+            outline = self._colors.get("accent", "#2b63ff") if selected else self._colors.get("border", "#333")
+            fill = self._colors.get("panel", "#fff")
+            text_col = self._colors.get("text", "#111")
+
+            c.create_oval(px - radius, py - radius, px + radius, py + radius, outline=outline, width=2, fill=fill)
+            label = name if bound is None else f"{name} {bound}"
+            c.create_text(
+                px,
+                py,
+                text=label,
+                fill=text_col,
+                font=(self._typo.get("font_family", "Segoe UI"), 9, "bold"),
+            )
+
+    def _keymap_pick_hotspot(self, x: float, y: float) -> Optional[str]:
+        best: Optional[Tuple[str, float]] = None
+        for name, (px, py) in self._keymap_hotspot_px.items():
+            d2 = (px - x) ** 2 + (py - y) ** 2
+            if best is None or d2 < best[1]:
+                best = (name, d2)
+
+        if not best:
+            return None
+        if best[1] > (40.0 * 40.0):
+            return None
+        return best[0]
+
+    def _keymap_on_click(self, e: tk.Event) -> None:
+        name = self._keymap_pick_hotspot(float(getattr(e, "x", 0)), float(getattr(e, "y", 0)))
+        if not name:
+            return
+
+        self._keymap_selected_name = name
+        hs = self._keymap_hotspots()
+        bound = hs.get(name)
+        if bound is None:
+            self._mapping_key_id.set("")
+            self._keymap_status.set(
+                f"Selected: {name}. Not bound yet — click Learn selected, then press the controller button."
+            )
+        else:
+            self._mapping_key_id.set(str(bound))
+            self._mapping_load_from_profile(int(bound))
+            self._keymap_status.set(f"Selected: {name} (key_id={bound}). Adjust mapping below, or Learn to re-bind.")
+
+        self._keymap_redraw()
+
+    def _keymap_begin_learn(self) -> None:
+        if not self._keymap_selected_name:
+            self._keymap_status.set("Select a control first.")
+            return
+        self._keymap_learn_name = self._keymap_selected_name
+        self._keymap_status.set(f"Learning {self._keymap_selected_name}… press that controller button now.")
+
+    def _keymap_bind_selected(self, key_id: int) -> None:
+        if not self._keymap_learn_name:
+            return
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return
+
+        ui = prof.setdefault("ui", {})
+        if not isinstance(ui, dict):
+            ui = {}
+            prof["ui"] = ui
+        hs = ui.setdefault("hotspots", {})
+        if not isinstance(hs, dict):
+            hs = {}
+            ui["hotspots"] = hs
+
+        hs[self._keymap_learn_name] = int(key_id)
+        learned_name = self._keymap_learn_name
+        self._keymap_learn_name = None
+        self._keymap_selected_name = learned_name
+        self._set_profile_obj(prof)
+
+        self._mapping_key_id.set(str(int(key_id)))
+        self._mapping_load_from_profile(int(key_id))
+        self._keymap_status.set(f"Bound {learned_name} → key_id={int(key_id)}")
+
+    def _keymap_clear_selected(self) -> None:
+        if not self._keymap_selected_name:
+            return
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return
+        ui = prof.get("ui", {})
+        if not isinstance(ui, dict):
+            return
+        hs = ui.get("hotspots", {})
+        if not isinstance(hs, dict):
+            return
+
+        hs.pop(self._keymap_selected_name, None)
+        self._set_profile_obj(prof)
+        self._mapping_key_id.set("")
+        self._keymap_status.set(f"Cleared binding for {self._keymap_selected_name}.")
 
     def _update_bt_background(self) -> None:
         if not self._bt_banner or not self._bt_banner_label:
@@ -758,6 +1090,7 @@ class App(tk.Tk):
         self.profile_text.insert("1.0", json.dumps(obj, indent=2, ensure_ascii=False))
         self._refresh_macro_list()
         self._stick_load_from_profile(obj)
+        self._keymap_refresh_visuals()
 
     def _load_profile(self) -> None:
         path = filedialog.askopenfilename(filetypes=[("JSON", "*.json"), ("All files", "*")])
@@ -885,6 +1218,10 @@ class App(tk.Tk):
 
             if self._recording.get():
                 self._record_macro_event(pressed, key_id)
+
+            # Keymap editor learn mode: bind hotspot -> observed input key_id.
+            if pressed and self._keymap_learn_name:
+                self._keymap_bind_selected(key_id)
 
         if evt == "macro":
             macro_id = str(obj.get("id", ""))

@@ -55,6 +55,12 @@ Profile schema (expected by the ESP32-S3 keyboard-side firmware):
 		"shape": "circle",
 		"curve": "linear",
 		"exp": 1.0
+	},
+	"ui": {
+		"hotspots": {
+			"A": 130,
+			"ZL": 7
+		}
 	}
 }
 ```
@@ -63,6 +69,8 @@ Notes:
 
 - `mappings` keys are strings (input `key_id`), for easier JSON interoperability.
 - `stick` is stored for future analog support; it may be ignored by current firmware.
+- `ui.hotspots` is helper-app-only UI state (Controller tab). It maps a visual control name to an observed input `key_id`.
+- Firmware ignores unknown profile fields.
 
 ```json
 {"cmd":"write_profile","slot":0,"profile":{}}
