@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import math
 import sys
 import tkinter as tk
@@ -16,6 +17,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from serial.tools import list_ports
 
 from .serial_client import SerialClient
+
+log = logging.getLogger("joycon_helper.app")
 
 
 DEFAULT_UI_THEME: dict = {
@@ -120,6 +123,7 @@ def _frozen_bundle_root() -> Optional[Path]:
     try:
         return Path(base).resolve()
     except Exception:
+        log.debug("Failed to resolve _MEIPASS", exc_info=True)
         return None
 
 
@@ -129,6 +133,7 @@ def _executable_dir() -> Optional[Path]:
     try:
         return Path(sys.executable).resolve().parent
     except Exception:
+        log.debug("Failed to resolve executable dir", exc_info=True)
         return None
 
 
@@ -411,9 +416,12 @@ class App(tk.Tk):
             for c in dark_candidates:
                 try:
                     if c.exists():
+                        log.info("Loading dark theme from %s", c)
                         return _load_theme_json(c)
                 except Exception:
+                    log.debug("Failed to load dark theme from %s", c, exc_info=True)
                     continue
+            log.info("Using built-in dark theme")
             return DARK_UI_THEME
 
         # Light: load from bundle or fallback.
@@ -422,10 +430,13 @@ class App(tk.Tk):
         for c in candidates:
             try:
                 if c.exists():
+                    log.info("Loading light theme from %s", c)
                     return _load_theme_json(c)
             except Exception:
+                log.debug("Failed to load theme from %s", c, exc_info=True)
                 continue
 
+        log.info("Using built-in light theme")
         return DEFAULT_UI_THEME
 
     @staticmethod
@@ -1259,6 +1270,7 @@ class App(tk.Tk):
 
     def _toggle_connect(self) -> None:
         if self.client.is_connected:
+            log.info("Disconnecting serial")
             self.client.disconnect()
             self.connect_btn.config(text="Connect")
             self._log_line("[host] disconnected")
@@ -1275,9 +1287,11 @@ class App(tk.Tk):
             messagebox.showerror("Bad baud", "Baud must be an integer")
             return
 
+        log.info("Connecting to %s @ %d", port, baud)
         try:
             self.client.connect(port, baud)
         except Exception as e:
+            log.error("Serial connect failed: %s", e, exc_info=True)
             messagebox.showerror("Connect failed", str(e))
             return
 
@@ -1305,10 +1319,12 @@ class App(tk.Tk):
         path = filedialog.askopenfilename(filetypes=[("JSON", "*.json"), ("All files", "*")])
         if not path:
             return
+        log.info("Loading profile from %s", path)
         try:
             with open(path, "r", encoding="utf-8") as f:
                 data = f.read()
         except Exception as e:
+            log.error("Profile load failed: %s", e, exc_info=True)
             messagebox.showerror("Load failed", str(e))
             return
         self.profile_text.delete("1.0", "end")
@@ -1318,7 +1334,7 @@ class App(tk.Tk):
             self._refresh_macro_list()
             self._stick_load_from_profile(prof)
         except Exception:
-            pass
+            log.warning("Loaded profile failed validation", exc_info=True)
 
     def _save_profile(self) -> None:
         try:
@@ -1329,11 +1345,13 @@ class App(tk.Tk):
         path = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("JSON", "*.json")])
         if not path:
             return
+        log.info("Saving profile to %s", path)
         data = self.profile_text.get("1.0", "end").strip() + "\n"
         try:
             with open(path, "w", encoding="utf-8") as f:
                 f.write(data)
         except Exception as e:
+            log.error("Profile save failed: %s", e, exc_info=True)
             messagebox.showerror("Save failed", str(e))
 
     def _cmd_ping(self) -> None:
@@ -1385,17 +1403,21 @@ class App(tk.Tk):
             self._send_text(raw)
 
     def _send_cmd(self, obj: dict) -> None:
+        log.debug("TX cmd: %s", obj)
         try:
             self.client.send_obj(obj)
         except Exception as e:
+            log.error("Send cmd failed: %s", e, exc_info=True)
             messagebox.showerror("Send failed", str(e))
             return
         self._log_line(f"[host->dev] {json.dumps(obj, ensure_ascii=False)}")
 
     def _send_text(self, text: str) -> None:
+        log.debug("TX text: %s", text)
         try:
             self.client.send_text_line(text)
         except Exception as e:
+            log.error("Send text failed: %s", e, exc_info=True)
             messagebox.showerror("Send failed", str(e))
             return
         self._log_line(f"[host->dev] {text}")
@@ -1409,8 +1431,11 @@ class App(tk.Tk):
                     self._handle_dev_obj(line.parsed)
                 else:
                     self._log_line(f"[dev] {line.raw}")
-        except Exception:
-            pass
+        except Exception as exc:
+            # queue.Empty is expected when the queue is drained; only log real errors.
+            import queue as _q
+            if not isinstance(exc, _q.Empty):
+                log.warning("Unexpected error in _drain_rx: %s", exc, exc_info=True)
         self.after(50, self._drain_rx)
 
     def _handle_dev_obj(self, obj: dict) -> None:
@@ -1853,6 +1878,7 @@ class App(tk.Tk):
             c.create_line(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], fill=curve_col)
 
     def _log_line(self, text: str) -> None:
+        log.debug("SERIAL: %s", text)
         self.log.configure(state="normal")
         self.log.insert("end", text + "\n")
         self.log.see("end")
@@ -1860,9 +1886,15 @@ class App(tk.Tk):
 
 
 def main() -> None:
+    log.info("Starting JoyCon Bridge Helper")
     try:
         app = App()
     except Exception as e:
+        log.critical("Startup failed: %s", e, exc_info=True)
         messagebox.showerror("Startup failed", str(e))
         raise
-    app.mainloop()
+    log.info("UI mainloop starting")
+    try:
+        app.mainloop()
+    finally:
+        log.info("Application exiting")

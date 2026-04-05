@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import queue
 import threading
 import time
@@ -8,6 +9,8 @@ from dataclasses import dataclass
 from typing import Any, Optional
 
 import serial
+
+log = logging.getLogger("joycon_helper.serial")
 
 
 @dataclass
@@ -30,17 +33,20 @@ class SerialClient:
     def connect(self, port: str, baud: int = 115200) -> None:
         self.disconnect()
         self._stop.clear()
+        log.info("Opening serial port %s @ %d", port, baud)
         self._ser = serial.Serial(port=port, baudrate=baud, timeout=0.1)
         self._rx_thread = threading.Thread(target=self._rx_loop, name="serial-rx", daemon=True)
         self._rx_thread.start()
+        log.info("Serial RX thread started")
 
     def disconnect(self) -> None:
         self._stop.set()
         if self._ser is not None:
+            log.info("Closing serial port")
             try:
                 self._ser.close()
             except Exception:
-                pass
+                log.debug("Error closing serial port", exc_info=True)
         self._ser = None
 
     def send_obj(self, obj: dict[str, Any]) -> None:
@@ -65,7 +71,9 @@ class SerialClient:
         while not self._stop.is_set():
             try:
                 chunk = self._ser.read(256)
-            except Exception:
+            except Exception as exc:
+                if not self._stop.is_set():
+                    log.error("Serial read error: %s", exc, exc_info=True)
                 break
 
             if chunk:
@@ -84,7 +92,10 @@ class SerialClient:
                         try:
                             parsed = json.loads(raw)
                         except Exception:
+                            log.debug("JSON parse failed for line: %s", raw[:200])
                             parsed = None
                     self.rx.put(SerialLine(raw=raw, parsed=parsed))
             else:
                 time.sleep(0.01)
+
+        log.info("Serial RX thread exiting")

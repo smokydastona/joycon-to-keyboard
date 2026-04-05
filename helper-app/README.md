@@ -68,3 +68,17 @@ On GitHub, `.github/workflows/build-release-bundle.yml` builds that executable a
 
 This app assumes the device understands **newline-delimited JSON** commands and may emit newline-delimited JSON events.
 See `protocol.md`.
+
+## Logging
+
+The helper app writes structured logs to disk for debugging.
+
+| Folder | Contents |
+|---|---|
+| `logs/` | Daily rotating application log (`helper.log`). Records serial traffic, errors, theme loading, connect/disconnect events. |
+| `crash-logs/` | Timestamped crash dumps (`crash_YYYYMMDD_HHMMSS.log`) written on unhandled exceptions. |
+
+Both folders are created next to the installed application (next to the `.exe` when frozen, or next to the `helper-app/` package when running from source).
+
+- **Auto-cleanup**: files older than 15 days are deleted on each startup.
+- **No personal data**: logs contain only application-level events (serial traffic, errors, platform info). No user paths, environment variables, or identifying data are recorded.

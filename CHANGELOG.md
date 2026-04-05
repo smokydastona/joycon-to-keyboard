@@ -11,6 +11,13 @@ Until then, entries are grouped by date.
 
 ### Added
 
+- **Logging & crash-log infrastructure** (`helper-app/joycon_helper/logger.py`):
+  - `logs/` folder with daily rotating `helper.log` (kept 15 days).
+  - `crash-logs/` folder with timestamped crash dumps for unhandled exceptions (main thread + worker threads).
+  - Auto-cleanup: files older than 15 days deleted on each startup.
+  - No personal data collected — only app-level events, serial traffic, and platform info.
+- Logging integrated into `app.py` (serial connect/disconnect, command TX/RX, profile load/save, theme loading, startup/shutdown) and `serial_client.py` (port open/close, read errors, RX thread lifecycle).
+- `_log_line()` now writes to both the UI log widget and the file logger.
 - **Dark controller overlay artwork**: `joycons-dark.png` + `joycons-dark-grey.png` source PNGs for the dark theme.
   - Artifact pipeline now generates 4 dark inspection copies (`joycons-dark-none/left/right/both.png`) alongside the 4 light copies.
   - Dark UI bundle (`.ui-bundle-dark/`) now uses the dark overlay PNGs instead of the light ones.
