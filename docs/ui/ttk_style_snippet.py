@@ -8,16 +8,19 @@ Tkinter/ttk limitations to keep in mind:
 - ttk does not natively support rounded corners; use padding + flat relief.
 - A consistent look is still achievable by styling the key controls.
 
-Sketch / sketchbook-ink visual direction:
+Sketch / sketchbook-ink visual direction (torn parchment):
 - font_family is "Segoe Print" (hand-drawn look, ships with Windows).
   Tkinter resolves to the system fallback font if Segoe Print is unavailable —
   safe to always request it.
-- Background and panel colors are cool off-white (#eceae2, #f4f2eb) to match
-  the near-white paper base of the Joy-Con overlay sketch art.
-- Border/outline color is a blue-grey ink tone (#8a9ab8) that harmonises with
-  the blue ballpoint hatch lines in the background SVG.
-- Use the 'rough' displacement filter in SVG assets for any hand-drawn outlines;
-  keep ttk widgets flat (relief="flat") so they sit naturally on the sketch background.
+- Background is a torn parchment sheet sitting on a dark desk surface.
+  Panel / widget colors are warm aged-paper tones (bg #e8d8b8, panel #f2e8d0
+  panel2 #e2d0a8). The SVG background uses feTurbulence displacement at high
+  scale to create ragged torn-paper edges around the parchment.
+- Border / outline color is a golden brown ink tone (#b09878) matching the
+  sepia ink strokes on the parchment. Text is dark sepia (#2a1f0e).
+- Use the 'rough' displacement filter in SVG assets for hand-drawn outlines;
+  keep ttk widgets flat (relief="flat") so they sit naturally on the parchment.
+- Tea/coffee stain gradients and heavy paper-grain noise add age character.
 """
 
 from __future__ import annotations
