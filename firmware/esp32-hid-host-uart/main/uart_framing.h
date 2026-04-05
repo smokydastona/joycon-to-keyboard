@@ -8,6 +8,12 @@
 // pressed: true=down, false=up
 void bridge_send_key_event(uint8_t key_id, bool pressed);
 
+// Extended key event (for multi-device sources).
+// device_id: 0=left/primary, 1=right/secondary
+// base_key_id: 0..127 (7-bit). The receiver may expand this into a larger
+// input key_id space (e.g. right side = 128..255).
+void bridge_send_key_event_ex(uint8_t device_id, uint8_t base_key_id, bool pressed);
+
 // Sends a debug frame (length > 1) containing raw HID report bytes.
 // This is for offline capture and evidence-based mapper development.
 // The ESP32-S3 receiver ignores frames where length != 1.

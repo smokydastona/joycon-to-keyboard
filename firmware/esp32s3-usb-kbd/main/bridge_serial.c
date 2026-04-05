@@ -282,8 +282,18 @@ static void handle_bt_set_target(cJSON *root) {
     respond_ok_simple("bt_set_target");
 }
 
-static void handle_bt_connect(void) {
-    if (!uart_proto_send_ctrl(CTRL_CMD_START_DISCOVERY, NULL, 0)) {
+static void handle_bt_connect(cJSON *root) {
+    bool both = false;
+    cJSON *both_obj = cJSON_GetObjectItemCaseSensitive(root, "both");
+    if (cJSON_IsBool(both_obj)) {
+        both = cJSON_IsTrue(both_obj);
+    }
+
+    uint8_t flags = both ? 0x01 : 0x00;
+    const uint8_t *payload = both ? &flags : NULL;
+    uint8_t payload_len = both ? 1 : 0;
+
+    if (!uart_proto_send_ctrl(CTRL_CMD_START_DISCOVERY, payload, payload_len)) {
         respond_error("bt_connect", "uart_send_failed");
         return;
     }
@@ -315,7 +325,7 @@ static void handle_line(const char *line) {
     } else if (strcmp(cmd->valuestring, "bt_set_target") == 0) {
         handle_bt_set_target(root);
     } else if (strcmp(cmd->valuestring, "bt_connect") == 0) {
-        handle_bt_connect();
+        handle_bt_connect(root);
     } else {
         respond_error(cmd->valuestring, "unknown_cmd");
     }

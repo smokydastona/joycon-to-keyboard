@@ -22,6 +22,19 @@ static const char* TAG = "bt-hidh";
 static bool s_connecting = false;
 static esp_bd_addr_t s_target_bda = {0};
 
+typedef struct {
+    bool connected;
+    uint8_t device_id;  // 0 = left, 1 = right
+    uint16_t handle;
+    esp_bd_addr_t bda;
+    char name[64];
+} conn_dev_t;
+
+static conn_dev_t s_dev[2] = {0};
+static bool s_dual_connect = false;
+static uint8_t s_pending_device_id = 0;
+static char s_pending_name[64] = {0};
+
 static char s_target_name_override[64] = {0};
 
 static bool name_matches_target(const char* name) {
@@ -33,6 +46,30 @@ static bool name_matches_target(const char* name) {
     return (strstr(name, needle) != NULL);
 }
 
+static bool bda_eq(const esp_bd_addr_t a, const esp_bd_addr_t b) {
+    return memcmp(a, b, sizeof(esp_bd_addr_t)) == 0;
+}
+
+static bool is_bda_connected(const esp_bd_addr_t bda) {
+    for (int i = 0; i < 2; i++) {
+        if (s_dev[i].connected && bda_eq(s_dev[i].bda, bda)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static int detect_device_id_from_name(const char* name) {
+    if (!name) return -1;
+    if (strstr(name, "(L)") != NULL) return 0;
+    if (strstr(name, "(R)") != NULL) return 1;
+    return -1;
+}
+
+static bool dual_needs_more(void) {
+    return s_dual_connect && (!s_dev[0].connected || !s_dev[1].connected);
+}
+
 static const char* bda_to_str(const esp_bd_addr_t bda, char* out, size_t out_len) {
     if (out_len < 18) return "";
     snprintf(out, out_len, "%02x:%02x:%02x:%02x:%02x:%02x",
@@ -40,8 +77,16 @@ static const char* bda_to_str(const esp_bd_addr_t bda, char* out, size_t out_len
     return out;
 }
 
-static void try_connect(const esp_bd_addr_t bda) {
+static void try_connect(const esp_bd_addr_t bda, uint8_t device_id, const char* name) {
     if (s_connecting) return;
+
+    s_pending_device_id = (device_id > 1) ? 0 : device_id;
+    if (name) {
+        strncpy(s_pending_name, name, sizeof(s_pending_name) - 1);
+        s_pending_name[sizeof(s_pending_name) - 1] = 0;
+    } else {
+        s_pending_name[0] = 0;
+    }
 
     memcpy(s_target_bda, bda, sizeof(esp_bd_addr_t));
     s_connecting = true;
@@ -72,6 +117,22 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
                      bda_to_str(param->open.bd_addr, bda_str, sizeof(bda_str)));
 
             bridge_send_bt_status(4, param->open.bd_addr, NULL);
+
+            // Best-effort: stash this connection into the requested slot.
+            uint8_t slot = (s_pending_device_id > 1) ? 0 : s_pending_device_id;
+            s_dev[slot].connected = true;
+            s_dev[slot].device_id = slot;
+            s_dev[slot].handle = param->open.handle;
+            memcpy(s_dev[slot].bda, param->open.bd_addr, sizeof(esp_bd_addr_t));
+            strncpy(s_dev[slot].name, s_pending_name, sizeof(s_dev[slot].name) - 1);
+            s_dev[slot].name[sizeof(s_dev[slot].name) - 1] = 0;
+
+            s_connecting = false;
+
+            // In dual-connect mode, keep scanning until we have both sides.
+            if (dual_needs_more()) {
+                (void)bt_hid_host_start_discovery();
+            }
             break;
         }
         case ESP_HIDH_CLOSE_EVT:
@@ -81,7 +142,20 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
                      param->close.conn_status,
                      param->close.handle);
             s_connecting = false;
-            bridge_send_bt_status(5, s_target_bda, NULL);
+
+            // Clear any slot matching this handle.
+            esp_bd_addr_t closed_bda = {0};
+            bool have_bda = false;
+            for (int i = 0; i < 2; i++) {
+                if (!s_dev[i].connected) continue;
+                if (s_dev[i].handle == param->close.handle) {
+                    memcpy(closed_bda, s_dev[i].bda, sizeof(esp_bd_addr_t));
+                    have_bda = true;
+                    memset(&s_dev[i], 0, sizeof(s_dev[i]));
+                    break;
+                }
+            }
+            bridge_send_bt_status(5, have_bda ? closed_bda : s_target_bda, NULL);
             break;
         case ESP_HIDH_DATA_IND_EVT:
             if (param->data_ind.status == ESP_HIDH_OK && param->data_ind.data && param->data_ind.len) {
@@ -123,7 +197,15 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
                     bridge_send_debug_hid_report(param->data_ind.data, n);
                 }
 
-                joycon_mapper_on_report(param->data_ind.data, param->data_ind.len);
+                uint8_t device_id = 0;
+                for (int i = 0; i < 2; i++) {
+                    if (s_dev[i].connected && s_dev[i].handle == param->data_ind.handle) {
+                        device_id = s_dev[i].device_id;
+                        break;
+                    }
+                }
+
+                joycon_mapper_on_report_ex(device_id, param->data_ind.data, param->data_ind.len);
             }
             break;
         default:
@@ -165,11 +247,30 @@ static void gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t* param) {
                 char bda_str[18];
                 ESP_LOGI(TAG, "Found %s @ %s", found_name, bda_to_str(param->disc_res.bda, bda_str, sizeof(bda_str)));
 
+                if (is_bda_connected(param->disc_res.bda)) {
+                    break;
+                }
+
+                uint8_t device_id = 0;
+                if (s_dual_connect) {
+                    int detected = detect_device_id_from_name(found_name);
+                    if (detected >= 0) {
+                        device_id = (uint8_t)detected;
+                    } else {
+                        // Fallback: fill the first empty slot.
+                        device_id = s_dev[0].connected ? 1 : 0;
+                    }
+
+                    if (device_id < 2 && s_dev[device_id].connected) {
+                        break;
+                    }
+                }
+
                 bridge_send_bt_status(2, param->disc_res.bda, found_name);
 
                 // Stop discovery to reduce noise, then connect.
                 esp_bt_gap_cancel_discovery();
-                try_connect(param->disc_res.bda);
+                try_connect(param->disc_res.bda, device_id, found_name);
             }
             break;
         }
@@ -209,6 +310,11 @@ esp_err_t bt_hid_host_start_discovery(void) {
 
     return esp_bt_gap_start_discovery(ESP_BT_INQ_MODE_GENERAL_INQUIRY,
                                      CONFIG_JOYCON_HOST_DISCOVERY_SECONDS, 0);
+}
+
+esp_err_t bt_hid_host_start_discovery_ex(bool dual_connect) {
+    s_dual_connect = dual_connect;
+    return bt_hid_host_start_discovery();
 }
 
 esp_err_t bt_hid_host_start(void) {

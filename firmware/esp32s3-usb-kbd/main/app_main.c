@@ -15,6 +15,7 @@
 static const char* TAG = "s3-kbd";
 
 #define STATUS_MARKER 0xFD
+#define KEY_EX_MARKER 0xFC
 
 static const char* status_id_to_state(uint8_t id) {
     switch (id) {
@@ -51,6 +52,24 @@ void app_main(void) {
                 uint8_t event = f.payload[0];
                 bool pressed = (event & 0x80u) != 0;
                 uint8_t key_id = event & 0x7Fu;
+                bridge_serial_emit_mapped_key(pressed, key_id);
+                profile_runtime_handle_input(pressed, key_id);
+                continue;
+            }
+
+            if (f.type == UART_FRAME_KEY_EVENT_EX && f.length == 4 && f.payload[0] == KEY_EX_MARKER) {
+                uint8_t device_id = f.payload[1];
+                bool pressed = (f.payload[2] != 0);
+                uint8_t base_key_id = (uint8_t)(f.payload[3] & 0x7Fu);
+
+                // Map into a larger input key_id space.
+                // device_id=0 -> 0..127
+                // device_id=1 -> 128..255
+                uint8_t key_id = base_key_id;
+                if (device_id == 1) {
+                    key_id = (uint8_t)(128u + base_key_id);
+                }
+
                 bridge_serial_emit_mapped_key(pressed, key_id);
                 profile_runtime_handle_input(pressed, key_id);
                 continue;

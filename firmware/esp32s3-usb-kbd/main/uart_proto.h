@@ -9,6 +9,7 @@
 
 typedef enum {
 	UART_FRAME_KEY_EVENT = 1, // len==1, payload[0]=event
+	UART_FRAME_KEY_EVENT_EX = 4, // len==4, payload[0]==0xFC
 	UART_FRAME_DEBUG = 2,     // payload[0]==0xFF
 	UART_FRAME_STATUS = 3,    // payload[0]==0xFD
 	UART_FRAME_UNKNOWN = 255,

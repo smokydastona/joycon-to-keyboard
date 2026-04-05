@@ -12,10 +12,6 @@ All bytes are unsigned.
 AA 55 <len> <payload...> <checksum>
 ```
 
-- `AA 55` — sync
-- `<len>` — payload length (1..255)
-- `<payload...>` — payload bytes
-- `<checksum>` — XOR of `len` and payload bytes
 
 ## Key event byte
 
@@ -26,10 +22,25 @@ bits 6..0: key_id (0-127)
 
 `key_id` is mapped to a USB HID keycode + modifier inside the USB-keyboard-side firmware.
 
-## Optional status frames (BT host → ESP32-S3 → helper app)
 
-The ESP32 Classic-BT HID host can emit status frames (payload length `> 1`) so the helper app can display connection state.
+### Extended key event (`0xFC`)
 
+To support multiple controller devices without breaking legacy receivers, key events can also be sent as a multi-byte payload.
+
+- `len == 4`
+- `payload[0] == 0xFC`
+
+Payload:
+
+- `payload[0]`: `0xFC` (key event ex marker)
+- `payload[1]`: `device_id` (0 = left, 1 = right)
+- `payload[2]`: `pressed` (0/1)
+- `payload[3]`: `base_key_id` (0..127)
+
+Receivers should map `(device_id, base_key_id)` into an input key id space. Recommended mapping:
+
+- `device_id == 0` (left): input `key_id = base_key_id` (0..127)
+- `device_id == 1` (right): input `key_id = 128 + base_key_id` (128..255)
 Status payload format:
 
 - `0xFD` — status marker
@@ -74,7 +85,8 @@ Current control commands:
 - `cmd_id=0x01` — set target name substring
 	- payload: ASCII/UTF-8 bytes of the substring (not null-terminated)
 - `cmd_id=0x02` — start discovery
-	- payload: empty
+	- payload: optional 1-byte flags
+		- bit 0 (`0x01`): dual-connect mode (try connect both Joy-Con (L) and Joy-Con (R))
 
 ## Why this design
 

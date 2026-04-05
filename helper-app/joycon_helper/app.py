@@ -397,7 +397,7 @@ class App(tk.Tk):
         preset = ttk.Combobox(
             row1,
             textvariable=self._bt_target_preset,
-            values=["Either (Joy-Con)", "Left (Joy-Con (L))", "Right (Joy-Con (R))", "Custom"],
+            values=["Either (Joy-Con)", "Left (Joy-Con (L))", "Right (Joy-Con (R))", "Both (Joy-Con (L+R))", "Custom"],
             width=20,
             state="readonly",
         )
@@ -426,6 +426,8 @@ class App(tk.Tk):
             self._bt_target_substr.set("Joy-Con (L)")
         elif p == "Right (Joy-Con (R))":
             self._bt_target_substr.set("Joy-Con (R)")
+        elif p == "Both (Joy-Con (L+R))":
+            self._bt_target_substr.set("Joy-Con (")
         # Custom: leave the text box alone
 
     def _refresh_ports(self) -> None:
@@ -525,7 +527,8 @@ class App(tk.Tk):
     def _cmd_bt_connect(self) -> None:
         target = self._bt_target_substr.get().strip()
         self._send_cmd({"cmd": "bt_set_target", "name_substr": target})
-        self._send_cmd({"cmd": "bt_connect"})
+        both = (self._bt_target_preset.get().strip() == "Both (Joy-Con (L+R))")
+        self._send_cmd({"cmd": "bt_connect", "both": both})
 
     def _cmd_upload_and_set_active(self) -> None:
         try:
@@ -813,7 +816,12 @@ class App(tk.Tk):
         steps = prof["macros"][idx].setdefault("steps", [])
         if dt_ms > 0:
             steps.append({"type": "delay", "ms": min(dt_ms, 5000)})
-        steps.append({"type": "key", "key_id": int(key_id), "pressed": bool(pressed)})
+        # Macro step key_ids are output-space (0..127). When key_id is in the
+        # right-side input namespace (128..255), record the base id.
+        rec_key_id = int(key_id)
+        if rec_key_id >= 128:
+            rec_key_id -= 128
+        steps.append({"type": "key", "key_id": rec_key_id, "pressed": bool(pressed)})
         self._set_profile_obj(prof)
 
     def _mapping_apply(self) -> None:
@@ -822,8 +830,8 @@ class App(tk.Tk):
         except ValueError:
             messagebox.showerror("Bad key_id", "Input key_id must be an integer")
             return
-        if in_id < 0 or in_id > 127:
-            messagebox.showerror("Bad key_id", "Input key_id must be 0..127")
+        if in_id < 0 or in_id > 255:
+            messagebox.showerror("Bad key_id", "Input key_id must be 0..255")
             return
 
         mtype = self._mapping_type.get()
@@ -848,6 +856,9 @@ class App(tk.Tk):
                 to = int(self._mapping_remap_to.get())
             except ValueError:
                 messagebox.showerror("Bad remap", "Remap-to must be an integer")
+                return
+            if to < 0 or to > 127:
+                messagebox.showerror("Bad remap", "Remap-to must be 0..127")
                 return
             mappings[key] = {"type": "remap", "to": to}
         elif mtype == "macro":

@@ -101,6 +101,16 @@ Triggers an inquiry scan on the ESP32 BT host. If a discovered device name match
 {"cmd":"bt_connect"}
 ```
 
+Optional fields:
+
+- `both` (bool): when true, requests the ESP32 BT host to connect to both Joy-Con (L) and Joy-Con (R).
+
+Example:
+
+```json
+{"cmd":"bt_connect","both":true}
+```
+
 ## Events (device -> PC)
 
 The device may emit events for:
@@ -114,6 +124,14 @@ Example:
 ```json
 {"evt":"mapped_key","pressed":true,"key_id":1}
 ```
+
+Notes:
+
+- `key_id` is an *input key id*.
+- Single-controller mode uses `key_id` 0..127.
+- Dual Joy-Con mode uses:
+	- left Joy-Con: `key_id` 0..127
+	- right Joy-Con: `key_id` 128..255 (base + 128)
 
 Macro execution events (optional):
 

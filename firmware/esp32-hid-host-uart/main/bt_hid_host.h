@@ -1,5 +1,8 @@
 #pragma once
 
+#include <stdbool.h>
+#include <stdint.h>
+
 #include "esp_err.h"
 
 // Initializes Classic Bluetooth + HID Host, scans for Joy-Con, connects,
@@ -15,3 +18,9 @@ void bt_hid_host_set_target_substr(const char* name_substr, uint8_t len);
 // Triggers a new inquiry scan using the current target substring.
 // Safe to call multiple times; cancels an in-progress discovery first.
 esp_err_t bt_hid_host_start_discovery(void);
+
+// Like bt_hid_host_start_discovery(), but allows requesting dual-connect mode.
+// When dual_connect is true, the host will try to connect to both Joy-Con (L)
+// and Joy-Con (R) (or first two matches) by re-running discovery after the
+// first connect completes.
+esp_err_t bt_hid_host_start_discovery_ex(bool dual_connect);

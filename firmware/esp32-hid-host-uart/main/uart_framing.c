@@ -34,6 +34,20 @@ void bridge_send_key_event(uint8_t key_id, bool pressed) {
     bridge_send_frame(&event, 1);
 }
 
+void bridge_send_key_event_ex(uint8_t device_id, uint8_t base_key_id, bool pressed) {
+    // Extended payload format (length > 1):
+    //   [0] = 0xFC (key event ex marker)
+    //   [1] = device_id
+    //   [2] = pressed (0/1)
+    //   [3] = base_key_id (0..127)
+    uint8_t payload[4];
+    payload[0] = 0xFC;
+    payload[1] = device_id;
+    payload[2] = pressed ? 1 : 0;
+    payload[3] = (uint8_t)(base_key_id & 0x7F);
+    bridge_send_frame(payload, (uint8_t)sizeof(payload));
+}
+
 void bridge_send_debug_hid_report(const uint8_t* report, uint16_t report_len) {
     if (!report || report_len == 0) {
         return;

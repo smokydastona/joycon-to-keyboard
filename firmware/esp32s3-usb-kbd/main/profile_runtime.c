@@ -29,6 +29,8 @@ static const char *TAG = "profile";
 #define PROFILE_MAX_STEPS 128
 #define PROFILE_MAX_MACRO_ID 24
 
+#define INPUT_KEY_ID_MAX 256
+
 typedef enum {
     STEP_KEY = 1,
     STEP_DELAY = 2,
@@ -66,7 +68,7 @@ typedef struct {
     int8_t macro_index;  // -1 when none
 } map_entry_t;
 
-static map_entry_t s_map[128];
+static map_entry_t s_map[INPUT_KEY_ID_MAX];
 static macro_t s_macros[PROFILE_MAX_MACROS];
 static size_t s_macro_count = 0;
 
@@ -85,9 +87,12 @@ static void free_profile(void) {
     }
     s_macro_count = 0;
 
-    for (int i = 0; i < 128; i++) {
+    for (int i = 0; i < INPUT_KEY_ID_MAX; i++) {
         s_map[i].mode = MAP_PASSTHROUGH;
-        s_map[i].remap_to = (uint8_t)i;
+        // Default behavior:
+        // - left input ids (0..127) passthrough to same output id
+        // - right input ids (128..255) passthrough mirrors to base id (0..127)
+        s_map[i].remap_to = (uint8_t)((i < 128) ? i : (i - 128));
         s_map[i].macro_index = -1;
     }
 }
@@ -246,7 +251,7 @@ static void parse_mappings(cJSON *root) {
         if (!entry || !entry->string) continue;
 
         int key_id = atoi(entry->string);
-        if (key_id < 0 || key_id > 127) continue;
+        if (key_id < 0 || key_id >= INPUT_KEY_ID_MAX) continue;
 
         if (!cJSON_IsObject(entry)) continue;
 
@@ -299,7 +304,7 @@ static void load_profile_json(const char *json) {
 
     cJSON_Delete(root);
 
-    ESP_LOGI(TAG, "Loaded profile: %u mappings, %u macros", 128u, (unsigned)s_macro_count);
+    ESP_LOGI(TAG, "Loaded profile: %u mappings, %u macros", (unsigned)INPUT_KEY_ID_MAX, (unsigned)s_macro_count);
 }
 
 static void macro_task(void *arg) {
@@ -414,6 +419,8 @@ void profile_runtime_reload(void) {
 }
 
 static void send_key_id(bool pressed, uint8_t key_id) {
+    if (key_id >= 128) return;
+
     uint8_t mod = 0;
     uint8_t keycode = 0;
     if (!keymap_lookup(key_id, &mod, &keycode)) {
@@ -424,8 +431,6 @@ static void send_key_id(bool pressed, uint8_t key_id) {
 }
 
 void profile_runtime_handle_input(bool pressed, uint8_t key_id) {
-    if (key_id >= 128) return;
-
     map_entry_t *m = &s_map[key_id];
 
     switch (m->mode) {
@@ -445,7 +450,7 @@ void profile_runtime_handle_input(bool pressed, uint8_t key_id) {
 
         case MAP_PASSTHROUGH:
         default:
-            send_key_id(pressed, key_id);
+            send_key_id(pressed, m->remap_to);
             return;
     }
 }

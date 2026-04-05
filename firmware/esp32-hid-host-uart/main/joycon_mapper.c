@@ -34,7 +34,18 @@ static void emit_if_changed(uint8_t key_id, bool now_pressed, bool* prev_pressed
     }
 }
 
-void joycon_mapper_on_report(const uint8_t* report, uint16_t len) {
+static void emit_if_changed_ex(uint8_t device_id, uint8_t key_id, bool now_pressed, bool* prev_pressed) {
+    if (now_pressed == *prev_pressed) return;
+
+    if (device_id == 0) {
+        bridge_send_key_event(key_id, now_pressed);
+    } else {
+        bridge_send_key_event_ex(device_id, key_id, now_pressed);
+    }
+    *prev_pressed = now_pressed;
+}
+
+void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16_t len) {
     (void)s_threshold;
 
     // Placeholder: treat certain byte patterns as demo-only.
@@ -81,10 +92,10 @@ void joycon_mapper_on_report(const uint8_t* report, uint16_t len) {
         const bool now_up = dy < -deadzone;
         const bool now_down = dy > deadzone;
 
-        emit_if_changed(KEY_ID_FORWARD, now_up, &prev_forward);
-        emit_if_changed(KEY_ID_BACK, now_down, &prev_back);
-        emit_if_changed(KEY_ID_LEFT, now_left, &prev_left);
-        emit_if_changed(KEY_ID_RIGHT, now_right, &prev_right);
+        emit_if_changed_ex(device_id, KEY_ID_FORWARD, now_up, &prev_forward);
+        emit_if_changed_ex(device_id, KEY_ID_BACK, now_down, &prev_back);
+        emit_if_changed_ex(device_id, KEY_ID_LEFT, now_left, &prev_left);
+        emit_if_changed_ex(device_id, KEY_ID_RIGHT, now_right, &prev_right);
 
         return;
 #endif
@@ -103,8 +114,12 @@ void joycon_mapper_on_report(const uint8_t* report, uint16_t len) {
     // 3) Identify which bytes/bits toggle.
     // 4) Map those toggles to KEY_ID_* and call emit_if_changed(...).
 
-    emit_if_changed(KEY_ID_FORWARD, false, &prev_forward);
-    emit_if_changed(KEY_ID_BACK, false, &prev_back);
-    emit_if_changed(KEY_ID_LEFT, false, &prev_left);
-    emit_if_changed(KEY_ID_RIGHT, false, &prev_right);
+    emit_if_changed_ex(device_id, KEY_ID_FORWARD, false, &prev_forward);
+    emit_if_changed_ex(device_id, KEY_ID_BACK, false, &prev_back);
+    emit_if_changed_ex(device_id, KEY_ID_LEFT, false, &prev_left);
+    emit_if_changed_ex(device_id, KEY_ID_RIGHT, false, &prev_right);
+}
+
+void joycon_mapper_on_report(const uint8_t* report, uint16_t len) {
+    joycon_mapper_on_report_ex(0, report, len);
 }
