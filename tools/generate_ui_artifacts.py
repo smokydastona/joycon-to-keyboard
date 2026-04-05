@@ -70,6 +70,8 @@ UI_BUNDLE_INPUTS = [
     REPO_ROOT / "docs" / "ui" / "background-right.svg",
     REPO_ROOT / "docs" / "ui" / "background-both.svg",
     REPO_ROOT / "docs" / "ui" / "background-dark.svg",
+    REPO_ROOT / "docs" / "ui" / "background.png",
+    REPO_ROOT / "docs" / "ui" / "background-dark.png",
     REPO_ROOT / "docs" / "ui" / "assets" / "components.svg",
     REPO_ROOT / "docs" / "ui" / "assets" / "icons.svg",
     REPO_ROOT / "docs" / "ui" / "assets" / "components-dark.svg",
@@ -166,6 +168,7 @@ def _run_ui_bundle_generator() -> bool:
         UI_BUNDLE_DIR / "joycons-both.png",
         UI_BUNDLE_DIR / "m913.png",
         UI_BUNDLE_DIR / "m913-none.png",
+        UI_BUNDLE_DIR / "background.png",
     ]
     if all(p.exists() for p in expected) and not any(_needs_update(UI_BUNDLE_INPUTS, p) for p in expected):
         return False
@@ -222,6 +225,17 @@ def main() -> int:
     except Exception as e:
         print(f"[ui-artifacts] bundle generation failed: {e}")
         return 2
+
+    # Copy background PNGs into the bundle so the helper app can find them.
+    BG_PNGS = {
+        "background.png": REPO_ROOT / "docs" / "ui" / "background.png",
+        "background-dark.png": REPO_ROOT / "docs" / "ui" / "background-dark.png",
+    }
+    for dst_name, src in BG_PNGS.items():
+        if src.exists():
+            dst = UI_BUNDLE_DIR / dst_name
+            if _copy_if_needed(src, dst):
+                changed.append(str(dst.relative_to(REPO_ROOT)))
 
     if changed:
         print("[ui-artifacts] updated:")

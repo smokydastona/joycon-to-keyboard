@@ -11,6 +11,7 @@ Until then, entries are grouped by date.
 
 ### Added
 
+- **App background image**: the helper app now displays a full-window background image (light and dark variants) behind the UI. Images scale to cover the window on resize using Pillow. Background PNGs are discovered from `docs/ui/`, `.ui-bundle/`, or the frozen bundle and are selected automatically based on the active theme (light/dark).
 - **Full Joy-Con button support (Nintendo 0x30 reports)**: expanded from 7 key_ids (WASD + jump/sprint/crouch) to 25 key_ids covering all Joy-Con buttons — face buttons (A/B/X/Y), shoulders (L/R), triggers (ZL/ZR), system (Plus/Minus/Home/Capture), stick clicks, and right stick virtual directions. All button bitmask definitions added to `nintendo_candidate.h`.
 - **Stick auto-calibration**: replaced the fixed center value (2048) with per-axis auto-calibration that tracks min/center/max at runtime. The first 8 samples establish the center via running average, then min/max expand as the stick reaches its limits. Raw values are normalized to a ±4096 scale for deadzone comparison. Inspired by GamepadPhoenix's `StickCal` approach.
 - **Right stick → key events**: right stick now emits directional key_ids (22–25), mapped to arrow keys by default. Useful for camera/look controls or as remappable UI navigation.

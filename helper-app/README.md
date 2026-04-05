@@ -58,6 +58,8 @@ Current UI tabs:
 
 The Controller tab keymap artwork switches between four Joy-Con states based on BT status: disconnected (`joycons-none.png`), left only, right only, and both connected. The Mouse tab displays an M913 overlay that switches between connected (`m913.png`) and disconnected (`m913-none.png`) states based on device scan results.
 
+The app displays a **full-window background image** (`background.png` / `background-dark.png`) behind all content, automatically selected based on the active theme (light/dark). The image scales to cover the window on resize using Pillow.
+
 ## UI pack
 
 Design artifacts (mockup/background/theme/generator/bundle example/layout snippet/architecture diagram):

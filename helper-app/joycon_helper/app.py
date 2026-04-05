@@ -22,6 +22,12 @@ try:
 except ImportError:
     _HAS_WINSOUND = False
 
+try:
+    from PIL import Image as PILImage, ImageTk  # type: ignore
+    _HAS_PIL = True
+except ImportError:
+    _HAS_PIL = False
+
 from serial.tools import list_ports
 
 from .serial_client import SerialClient
@@ -530,6 +536,7 @@ class App(tk.Tk):
         self._perf_input_times: List[Tuple[float, float]] = []  # (recv_time, process_time)
 
         self._build_ui()
+        self._load_background_image()
         self._apply_widget_theme()
         self._refresh_ports()
         self.after(50, self._drain_rx)
@@ -562,6 +569,89 @@ class App(tk.Tk):
             if p.is_file():
                 return p
         return None
+
+    def _find_background_png(self) -> Optional[Path]:
+        """Locate the appropriate background PNG (light or dark) for the app."""
+        prefer_dark = self._detect_dark_preference()
+        name = "background-dark.png" if prefer_dark else "background.png"
+
+        search_roots = list(_joycons_search_roots())
+        # Also check docs/ui/ directly (where the PNGs live in the repo).
+        here = Path(__file__).resolve()
+        search_roots.append(here.parents[3] / "docs" / "ui")
+        try:
+            search_roots.append(Path.cwd() / "docs" / "ui")
+        except Exception:
+            pass
+
+        for root in _dedupe_paths(search_roots):
+            candidate = root / name
+            try:
+                if candidate.is_file():
+                    return candidate
+            except Exception:
+                continue
+        return None
+
+    def _load_background_image(self) -> None:
+        """Load the background PNG and place it behind all other widgets."""
+        if not _HAS_PIL:
+            return
+
+        bg_path = self._find_background_png()
+        if not bg_path:
+            return
+
+        try:
+            self._bg_pil_original = PILImage.open(bg_path).convert("RGBA")
+        except Exception:
+            log.debug("Failed to load background image %s", bg_path, exc_info=True)
+            return
+
+        self._bg_label = tk.Label(self, bd=0, highlightthickness=0)
+        self._bg_label.place(x=0, y=0, relwidth=1, relheight=1)
+        self._bg_label.lower()  # Ensure it stays behind all other widgets.
+
+        self.bind("<Configure>", self._on_resize_bg)
+        # Trigger initial draw after the window has been mapped.
+        self.after(50, self._refresh_bg)
+
+    def _refresh_bg(self) -> None:
+        """Scale the background image to fit the current window size."""
+        if not hasattr(self, "_bg_pil_original") or self._bg_pil_original is None:
+            return
+
+        w = self.winfo_width()
+        h = self.winfo_height()
+        if w < 2 or h < 2:
+            return
+
+        # Avoid redundant resizes.
+        if hasattr(self, "_bg_last_size") and self._bg_last_size == (w, h):
+            return
+        self._bg_last_size = (w, h)
+
+        # Scale to cover the window (crop edges if aspect ratio differs).
+        orig_w, orig_h = self._bg_pil_original.size
+        scale = max(w / orig_w, h / orig_h)
+        new_w = int(orig_w * scale)
+        new_h = int(orig_h * scale)
+
+        resized = self._bg_pil_original.resize((new_w, new_h), PILImage.LANCZOS)
+
+        # Center-crop to window size.
+        left = (new_w - w) // 2
+        top = (new_h - h) // 2
+        cropped = resized.crop((left, top, left + w, top + h))
+
+        self._bg_photo = ImageTk.PhotoImage(cropped)
+        self._bg_label.configure(image=self._bg_photo)
+
+    def _on_resize_bg(self, event: tk.Event) -> None:
+        """Handle window resize to update background image."""
+        if event.widget is not self:
+            return
+        self._refresh_bg()
 
     def _load_ui_theme(self) -> dict:
         # Decide light vs dark: check --dark flag, env var, or Windows dark-mode setting.
