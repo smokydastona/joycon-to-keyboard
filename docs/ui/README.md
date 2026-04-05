@@ -20,6 +20,37 @@ UI kit (theme-matched controls):
 
 ---
 
+## Mandatory artifacts (commit/push workflow)
+
+This repo relies on `joycons.png` as an overlay reference:
+
+- `docs/ui/background.svg` links to it.
+- the helper app’s Controller-tab keymap editor uses it.
+
+To keep reviewable inspection copies up-to-date, we also keep these files in git:
+
+- `docs/ui/assets/joycons-left.png`
+- `docs/ui/assets/joycons-right.png`
+- `docs/ui/assets/joycons-both.png`
+
+Generate/update them (and refresh the local `.ui-bundle/` folder when needed) with:
+
+```powershell
+python tools/generate_ui_artifacts.py
+```
+
+### Enforcing generation on commit/push
+
+Repo-local git hooks live in `.githooks/`. To enable them for your clone:
+
+```powershell
+pwsh tools/enable_git_hooks.ps1
+```
+
+Once enabled, commits/pushes will fail if Python isn’t available (this is intentional: the artifacts are mandatory).
+
+---
+
 ## UI mockup (single window)
 
 Goal: keep the current helper app UX, but make it easy to understand where things live.
