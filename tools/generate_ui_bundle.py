@@ -14,7 +14,7 @@ A UI bundle is a folder containing:
 This script is intentionally dependency-free (stdlib only) so it can run anywhere.
 
 Usage:
-  python tools/generate_ui_bundle.py --out docs/ui/bundle-example
+    python tools/generate_ui_bundle.py --out ./.ui-bundle
 """
 
 from __future__ import annotations

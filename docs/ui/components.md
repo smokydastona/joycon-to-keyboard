@@ -2,7 +2,7 @@
 
 This file describes how buttons/toggles/dials/icons should match the `midnight-grid` theme tokens.
 
-- Theme tokens: `docs/ui/bundle-example/theme.json`
+- Theme tokens: generate a bundle with `python tools/generate_ui_bundle.py --out ./.ui-bundle` then use `./.ui-bundle/theme.json`
 - Icon set (SVG): `docs/ui/assets/icons.svg`
 - Component sheet (SVG): `docs/ui/assets/components.svg`
 

@@ -448,7 +448,7 @@ class App(tk.Tk):
         if not self._bt_banner or not self._bt_banner_label:
             return
 
-        # Theme-matched colors (see docs/ui/bundle-example/theme.json)
+        # Theme-matched colors (see tools/generate_ui_bundle.py for the theme.json tokens)
         neutral_bg = "#111f37"
         neutral_fg = "#e5e7eb"
         left_bg = "#2b63ff"   # accent

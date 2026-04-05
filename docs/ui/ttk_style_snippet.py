@@ -83,7 +83,7 @@ def apply_theme(root: tk.Tk, theme: dict) -> None:
 
 
 def demo() -> None:
-    theme = load_theme("docs/ui/bundle-example/theme.json")
+    theme = load_theme("./.ui-bundle/theme.json")
 
     root = tk.Tk()
     root.title("Theme demo")
