@@ -79,3 +79,34 @@ Use for small status surfaces (BT state, active slot, connected port):
 - OK: `accent2` background (low opacity) + `accent2` border
 - Warning: `warning` background (low opacity) + `warning` border
 - Error: `danger` background (low opacity) + `danger` border
+
+## Pulse animation (hotspots)
+
+Active controller hotspots use a pulse animation to draw attention. The pulse cycles between `accent2` and `pulse_bright` using linear interpolation on an 80 ms timer. The effect is a subtle breathing glow.
+
+- Phase range: 0.3 → 1.0 → 0.3
+- Hotspot fill blends between `accent2` (base) and `pulse_bright` (peak)
+- A dashed oval ring is drawn around the pulsing hotspot
+
+## Event timeline (Input Test tab)
+
+A horizontal canvas showing the last 5 seconds of input events as colored markers:
+
+- Press events: `timeline_press` color
+- Release events: `timeline_release` color
+- Time axis rendered with tick marks every second
+- Redraws every 200 ms
+
+## Slot quick-select (Profile tab)
+
+A row of 4 buttons representing profile slots 0–3. Each button shows the slot name (or a default label). Clicking a slot sends `read_profile` for that slot and loads it into the editor.
+
+## Context menu (Controller tab)
+
+Right-click any hotspot to get a context menu with:
+
+- Learn — enter learn mode for the hotspot
+- Bind key — enter bind mode (press any keyboard key)
+- Reset to passthrough — clear custom mapping
+- Clear binding — remove the hotspot entirely
+- Disable — set mapping to `disable` type

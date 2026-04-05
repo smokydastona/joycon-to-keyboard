@@ -16,19 +16,22 @@ Minimum goals:
 
 Current UI tabs:
 
-- **Profile**: JSON editor, load/save/validate; profile rename/duplicate/reset-to-defaults buttons
+- **Profile**: JSON editor, load/save/validate; profile rename/duplicate/reset-to-defaults buttons; **slot quick-select** (4 slot buttons with names for fast switching) and **safe mode** recovery button
 - **Macros**: macro list + step editor, optional record mode from incoming `mapped_key` events, and a small mapping helper
 - **Stick**: stores deadzone/curve settings into the profile JSON (not applied by firmware yet unless analog data exists)
 - **Share**: offline-only export/import of a compressed "profile code" string
 - **Overlay**: a safe always-on-top status window (no hooking/injection)
 - **Controller**: set target name substring and trigger BT scan/connect via the device (requires return UART wiring); includes a keymap editor with:
-  - **Press-to-bind**: click a controller hotspot, click "Bind key", press any keyboard key — instantly mapped via `remap_hid`
-  - **Live input visualization**: hotspots light up green when the corresponding controller button is physically pressed
-  - **Conflict detection**: hotspots that produce the same output key are highlighted red with a warning
+  - **Unified click-to-bind**: click a controller hotspot to instantly enter learn mode (if unbound) or bind mode (if bound) — press a key and you're done
+  - **Right-click context menu**: Learn, Bind, Reset to passthrough, Clear binding, or Disable on any hotspot
+  - **Live input visualization**: hotspots light up green and pulse when the corresponding controller button is physically pressed
+  - **Conflict detection + auto-fix**: hotspots that produce the same output key are highlighted red; a one-click auto-fix button resolves duplicates
   - **Color-coded hotspots**: green = active, red = conflict, blue = selected, yellow = has custom mapping
   - **Layer system**: select Base or Layer 1–4 to edit overlay mappings; layers are activated by holding/toggling a controller button
+  - **Tap-hold mapping**: a single button can produce different actions for quick tap vs long hold
+  - **Chording**: define multi-button combos that trigger a single action when pressed simultaneously
   - Learn mode, clear binding, and reset-to-passthrough
-- **Input Test**: live event log showing controller button presses/releases with timestamps, and a summary of currently active keys
+- **Input Test**: live event log showing controller button presses/releases with timestamps, a summary of currently active keys, and a **visual event timeline** showing the last 5 seconds of input events as colored marks
 
 The Controller tab keymap artwork switches between four Joy-Con states based on BT status: disconnected (`joycons-none.png`), left only, right only, and both connected.
 

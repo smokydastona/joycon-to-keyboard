@@ -64,10 +64,41 @@ Full table: USB HID Usage Tables, section 10 (Keyboard/Keypad Page).
 
 ### Press-to-bind (helper app)
 
-The helper app's Controller tab has a **Bind key** button. Click a hotspot on the controller diagram, click Bind key, then press any keyboard key. The app captures the HID keycode and writes a `remap_hid` mapping to the profile automatically.
+The helper app's Controller tab supports **unified click-to-bind**: click a hotspot on the controller diagram and the app immediately enters the appropriate mode:
+
+- If the hotspot has no learned `key_id`, it enters **learn mode** — press the controller button to associate it.
+- If the hotspot has a `key_id`, it enters **bind mode** — press any keyboard key to remap it via `remap_hid`.
+
+Right-click a hotspot for additional options: Learn, Bind, Reset to passthrough, Clear binding, or Disable.
+
+Active hotspots use a **pulse animation** to indicate the currently pressed controller button in real time.
+
+### Tap-hold mapping
+
+A single button can produce different actions depending on press duration:
+
+```json
+{"type": "tap_hold", "tap": {"type": "passthrough"}, "hold": {"type": "remap_hid", "mod": 2, "keycode": 0}, "hold_ms": 300}
+```
+
+The `hold_ms` threshold (default 300 ms) separates a quick tap from a long hold.
+
+### Chording
+
+Multiple buttons pressed simultaneously can trigger a combined action:
+
+```json
+{"chords": [{"keys": [1, 2], "action": {"type": "remap_hid", "mod": 0, "keycode": 40}}]}
+```
+
+Chords are evaluated before individual key mappings. See `helper-app/protocol.md` for the full schema.
 
 ## Layers
 
 Profiles can define up to 4 overlay layers. Each layer is activated by holding (or toggling) a controller button, and overrides specific key mappings while active. See `helper-app/protocol.md` for the full layer schema.
+
+## Conflict detection
+
+The helper app detects when multiple hotspots produce the same output key and highlights them in red. An **auto-fix** button is available to resolve conflicts by keeping the first binding and clearing duplicates.
 
 If you tell me your exact preferred layout (including extra buttons like reload, use, etc.) I’ll update the mapping tables accordingly.

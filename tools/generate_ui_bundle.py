@@ -27,7 +27,7 @@ from typing import Tuple
 
 DEFAULT_THEME = {
     "name": "sketchbook-ink",
-    "version": 1,
+    "version": 2,
     "colors": {
         "bg": "#e8d8b8",
         "panel": "#f2e8d0",
@@ -39,6 +39,13 @@ DEFAULT_THEME = {
         "accent2": "#2b6a4b",
         "danger": "#b42318",
         "warning": "#a16207",
+        "active": "#2b6a4b",
+        "conflict": "#b42318",
+        "modified": "#a16207",
+        "selected": "#2f4a9e",
+        "pulse_bright": "#60c090",
+        "timeline_press": "#2b6a4b",
+        "timeline_release": "#6b5d48",
     },
     "typography": {
         # Sketch/handwritten font — Segoe Print ships with Windows; Tkinter falls back to system font gracefully.
@@ -54,7 +61,7 @@ DEFAULT_THEME = {
 
 DARK_THEME = {
     "name": "sketchbook-ink-dark",
-    "version": 1,
+    "version": 2,
     "colors": {
         "bg": "#10141c",
         "panel": "#181e2c",
@@ -66,6 +73,13 @@ DARK_THEME = {
         "accent2": "#3a8a5c",
         "danger": "#c84848",
         "warning": "#b89030",
+        "active": "#3a8a5c",
+        "conflict": "#c84848",
+        "modified": "#b89030",
+        "selected": "#4a7cc8",
+        "pulse_bright": "#60c898",
+        "timeline_press": "#3a8a5c",
+        "timeline_release": "#6888aa",
     },
     "typography": {
         "font_family": "Segoe Print",
@@ -79,13 +93,26 @@ DARK_THEME = {
 
 
 DEFAULT_LAYOUT = {
-    "window": {"width": 980, "height": 680},
+    "window": {"width": 980, "height": 720},
     "regions": [
         {"id": "topbar", "type": "row", "items": ["port", "baud", "connect", "bt_status"]},
         {"id": "main", "type": "split", "left": "tabs", "right": "actions"},
         {"id": "log", "type": "panel", "title": "Device log / events"},
     ],
-    "tabs": ["Profile", "Macros", "Stick", "Share", "Overlay", "Controller"],
+    "tabs": ["Profile", "Macros", "Stick", "Share", "Overlay", "Controller", "Input Test"],
+    "features": {
+        "press_to_bind": True,
+        "right_click_context": True,
+        "pulse_animation": True,
+        "slot_quick_select": 4,
+        "safe_mode": True,
+        "conflict_detection": True,
+        "conflict_auto_fix": True,
+        "chording": True,
+        "tap_hold": True,
+        "event_timeline": True,
+        "layers": 4,
+    },
 }
 
 

@@ -27,7 +27,7 @@ log = logging.getLogger("joycon_helper.app")
 
 DEFAULT_UI_THEME: dict = {
     "name": "sketchbook-ink",
-    "version": 1,
+    "version": 2,
     "colors": {
         "bg": "#e8d8b8",
         "panel": "#f2e8d0",
@@ -39,6 +39,13 @@ DEFAULT_UI_THEME: dict = {
         "accent2": "#2b6a4b",
         "danger": "#b42318",
         "warning": "#a16207",
+        "active": "#2b6a4b",
+        "conflict": "#b42318",
+        "modified": "#a16207",
+        "selected": "#2f4a9e",
+        "pulse_bright": "#60c090",
+        "timeline_press": "#2b6a4b",
+        "timeline_release": "#6b5d48",
     },
     "typography": {
         # Sketch font matching Joy-Con overlay style. Tkinter falls back to system font if unavailable.
@@ -54,7 +61,7 @@ DEFAULT_UI_THEME: dict = {
 
 DARK_UI_THEME: dict = {
     "name": "sketchbook-ink-dark",
-    "version": 1,
+    "version": 2,
     "colors": {
         "bg": "#10141c",
         "panel": "#181e2c",
@@ -66,6 +73,13 @@ DARK_UI_THEME: dict = {
         "accent2": "#3a8a5c",
         "danger": "#c84848",
         "warning": "#b89030",
+        "active": "#3a8a5c",
+        "conflict": "#c84848",
+        "modified": "#b89030",
+        "selected": "#4a7cc8",
+        "pulse_bright": "#60c898",
+        "timeline_press": "#3a8a5c",
+        "timeline_release": "#6888aa",
     },
     "typography": {
         "font_family": "Segoe Print",
@@ -214,12 +228,14 @@ def _joycons_search_roots() -> List[Path]:
 
 def _ensure_profile_defaults(profile: dict) -> dict:
     if not isinstance(profile, dict):
-        return {"ver": 1, "name": "default", "mappings": {}, "macros": [], "stick": {}, "ui": {"hotspots": {}}}
+        return {"ver": 1, "name": "default", "mappings": {}, "macros": [], "layers": [], "chords": [], "stick": {}, "ui": {"hotspots": {}}}
 
     profile.setdefault("ver", 1)
     profile.setdefault("name", "default")
     profile.setdefault("mappings", {})
     profile.setdefault("macros", [])
+    profile.setdefault("layers", [])
+    profile.setdefault("chords", [])
     profile.setdefault("stick", {})
     profile.setdefault("ui", {"hotspots": {}})
 
@@ -227,6 +243,10 @@ def _ensure_profile_defaults(profile: dict) -> dict:
         profile["mappings"] = {}
     if not isinstance(profile["macros"], list):
         profile["macros"] = []
+    if not isinstance(profile.get("layers"), list):
+        profile["layers"] = []
+    if not isinstance(profile.get("chords"), list):
+        profile["chords"] = []
     if not isinstance(profile["stick"], dict):
         profile["stick"] = {}
 
@@ -348,7 +368,7 @@ class App(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("JoyCon Bridge Helper")
-        self.geometry("980x680")
+        self.geometry("980x720")
 
         self._ui_theme = self._load_ui_theme()
         self._colors = self._ui_theme.get("colors", DEFAULT_UI_THEME["colors"])
@@ -414,10 +434,22 @@ class App(tk.Tk):
         # Layer editor state
         self._layer_edit_index = tk.IntVar(value=-1)  # -1 = base layer
 
+        # Pulse animation state for active hotspot highlighting
+        self._pulse_phase: float = 0.0
+        self._pulse_growing: bool = True
+
+        # Chord definitions (profile-level, list of {"keys": [int,...], "action": {...}})
+        self._chord_entries: List[Dict[str, Any]] = []
+
+        # Event timeline entries for Input Test tab: list of (timestamp, text, color)
+        self._event_timeline: List[Tuple[float, str, str]] = []
+        self._timeline_canvas: Optional[tk.Canvas] = None
+
         self._build_ui()
         self._apply_widget_theme()
         self._refresh_ports()
         self.after(50, self._drain_rx)
+        self.after(80, self._pulse_tick)
 
         # Check for updates in the background after the UI is visible.
         self._pending_update: Optional[Dict[str, str]] = None
@@ -660,6 +692,7 @@ class App(tk.Tk):
         ttk.Button(right, text="Upload + Activate", command=self._cmd_upload_and_set_active, width=22).pack(pady=(6, 0))
         ttk.Button(right, text="Read profile from slot", command=self._cmd_read_profile, width=22).pack(pady=(6, 0))
         ttk.Button(right, text="Set active slot", command=self._cmd_set_active, width=22).pack(pady=(6, 0))
+        ttk.Button(right, text="Safe mode (reset slot)", command=self._cmd_safe_mode, width=22).pack(pady=(6, 0))
 
         ttk.Label(right, text="Raw command (JSON line)").pack(anchor="w", pady=(14, 0))
         self.raw_entry = ttk.Entry(right, width=30)
@@ -694,6 +727,26 @@ class App(tk.Tk):
         self._pending_fw_update: Optional[Dict[str, Any]] = None
 
     def _build_profile_tab(self) -> None:
+        # ── Slot quick-select row ──
+        slot_frame = ttk.LabelFrame(self.tab_profile, text="Profile slots")
+        slot_frame.pack(fill=tk.X, pady=(0, 4))
+        slot_row = ttk.Frame(slot_frame)
+        slot_row.pack(fill=tk.X, padx=8, pady=(4, 4))
+        self._slot_buttons: List[ttk.Button] = []
+        self._slot_name_vars: List[tk.StringVar] = []
+        for i in range(4):
+            sv = tk.StringVar(value=f"Slot {i}")
+            self._slot_name_vars.append(sv)
+            btn = ttk.Button(
+                slot_row,
+                textvariable=sv,
+                command=lambda idx=i: self._slot_select(idx),
+                width=16,
+            )
+            btn.pack(side=tk.LEFT, padx=(0, 6))
+            self._slot_buttons.append(btn)
+        ttk.Button(slot_row, text="Read all names", command=self._slot_read_all).pack(side=tk.LEFT, padx=(12, 0))
+
         # Profile management row
         mgmt = ttk.Frame(self.tab_profile)
         mgmt.pack(fill=tk.X, pady=(0, 4))
@@ -1015,6 +1068,30 @@ class App(tk.Tk):
             except Exception:
                 self._keymap_img_base = None
 
+    # ------------------------------------------------------------------
+    # Pulse animation for active hotspot highlighting
+    # ------------------------------------------------------------------
+
+    def _pulse_tick(self) -> None:
+        """Advance the pulse animation phase and redraw if active keys exist."""
+        if self._active_key_ids:
+            step = 0.07
+            if self._pulse_growing:
+                self._pulse_phase += step
+                if self._pulse_phase >= 1.0:
+                    self._pulse_phase = 1.0
+                    self._pulse_growing = False
+            else:
+                self._pulse_phase -= step
+                if self._pulse_phase <= 0.3:
+                    self._pulse_phase = 0.3
+                    self._pulse_growing = True
+            self._keymap_redraw()
+        else:
+            self._pulse_phase = 0.0
+            self._pulse_growing = True
+        self.after(80, self._pulse_tick)
+
     def _keymap_hotspots(self) -> Dict[str, int]:
         try:
             prof = self._current_profile()
@@ -1076,6 +1153,12 @@ class App(tk.Tk):
             self._mapping_type.set("macro")
             mid = entry.get("id")
             self._mapping_macro_id.set(str(mid) if isinstance(mid, str) else "")
+        elif et == "tap_hold":
+            self._mapping_type.set("tap_hold")
+            hold = entry.get("hold", {})
+            if isinstance(hold, dict):
+                kc = hold.get("keycode", 0)
+                self._mapping_remap_to.set(f"0x{kc:02X}" if isinstance(kc, int) else "0")
         else:
             self._mapping_type.set("passthrough")
 
@@ -1103,6 +1186,7 @@ class App(tk.Tk):
             pass
 
         self._keymap_canvas.bind("<Button-1>", self._keymap_on_click)
+        self._keymap_canvas.bind("<Button-3>", self._keymap_on_right_click)
         self._keymap_canvas.bind("<Configure>", lambda _e: self._keymap_redraw())
 
         # Bind keyboard events for press-to-bind.
@@ -1154,7 +1238,7 @@ class App(tk.Tk):
         ttk.Combobox(
             r,
             textvariable=self._mapping_type,
-            values=["passthrough", "disable", "remap", "remap_hid", "macro"],
+            values=["passthrough", "disable", "remap", "remap_hid", "macro", "tap_hold"],
             width=14,
             state="readonly",
         ).pack(side=tk.LEFT, padx=(6, 12))
@@ -1171,6 +1255,37 @@ class App(tk.Tk):
         self._conflict_var = tk.StringVar(value="")
         self._conflict_label = ttk.Label(box, textvariable=self._conflict_var, foreground=self._colors.get("danger", "red"))
         self._conflict_label.pack(fill=tk.X, padx=8, pady=(0, 4))
+
+        # Fix-conflicts button (hidden when no conflicts)
+        self._conflict_fix_btn = ttk.Button(box, text="Auto-fix conflicts", command=self._conflict_auto_fix)
+        self._conflict_fix_btn.pack(padx=8, anchor="w", pady=(0, 4))
+        self._conflict_fix_btn.pack_forget()  # hidden by default
+
+        # ── Chording section ──
+        chord_box = ttk.LabelFrame(box, text="Chords (multi-button combos)")
+        chord_box.pack(fill=tk.X, padx=8, pady=(0, 8))
+        chord_info = ttk.Label(
+            chord_box,
+            text="Define combos: press multiple controller buttons simultaneously for a different action.",
+            wraplength=700,
+            justify="left",
+        )
+        chord_info.pack(anchor="w", padx=8, pady=(4, 2))
+        chord_row = ttk.Frame(chord_box)
+        chord_row.pack(fill=tk.X, padx=8, pady=(0, 4))
+        ttk.Label(chord_row, text="Keys (comma-sep key_ids):").pack(side=tk.LEFT)
+        self._chord_keys_var = tk.StringVar(value="")
+        ttk.Entry(chord_row, textvariable=self._chord_keys_var, width=16).pack(side=tk.LEFT, padx=(4, 8))
+        ttk.Label(chord_row, text="Output keycode:").pack(side=tk.LEFT)
+        self._chord_output_var = tk.StringVar(value="")
+        ttk.Entry(chord_row, textvariable=self._chord_output_var, width=8).pack(side=tk.LEFT, padx=(4, 8))
+        ttk.Button(chord_row, text="Add chord", command=self._chord_add).pack(side=tk.LEFT, padx=(4, 0))
+        ttk.Button(chord_row, text="Clear chords", command=self._chord_clear).pack(side=tk.LEFT, padx=(4, 0))
+
+        self._chord_list_var = tk.StringVar(value="(none)")
+        ttk.Label(chord_box, textvariable=self._chord_list_var, wraplength=700, justify="left").pack(
+            anchor="w", padx=8, pady=(0, 4)
+        )
 
     def _get_mapping_output(self, key_id: int) -> Optional[Tuple[int, int]]:
         """Return the (mod, keycode) output for a key_id, or None if passthrough/default."""
@@ -1254,12 +1369,20 @@ class App(tk.Tk):
         for names in conflicts.values():
             conflict_hotspots.update(names)
 
-        # Update conflict label
+        # Update conflict label and fix button
         if conflicts:
             parts = [f"{key}: {', '.join(names)}" for key, names in conflicts.items()]
             self._conflict_var.set("Conflicts: " + "; ".join(parts))
+            try:
+                self._conflict_fix_btn.pack(padx=8, anchor="w", pady=(0, 4))
+            except Exception:
+                pass
         else:
             self._conflict_var.set("")
+            try:
+                self._conflict_fix_btn.pack_forget()
+            except Exception:
+                pass
 
         # Reverse lookup: key_id → hotspot name
         key_id_to_hotspot: Dict[int, str] = {v: k for k, v in hs_bindings.items()}
@@ -1298,6 +1421,11 @@ class App(tk.Tk):
                             mapping_label = "OFF"
                         elif et == "macro":
                             mapping_label = f"M:{entry.get('id', '?')}"
+                        elif et == "tap_hold":
+                            hold = entry.get("hold", {})
+                            hkc = hold.get("keycode", 0) if isinstance(hold, dict) else 0
+                            hmod = hold.get("mod", 0) if isinstance(hold, dict) else 0
+                            mapping_label = f"T/H:{hid_keycodes.hid_to_name(hmod, hkc)}"
                     else:
                         # Passthrough
                         dk = hid_keycodes.DEFAULT_KEYMAP.get(bound_key_id)
@@ -1308,8 +1436,11 @@ class App(tk.Tk):
 
             # Color coding
             if is_active:
-                fill = self._colors.get("accent2", "#3a8a5c")  # green
-                outline = self._colors.get("accent2", "#3a8a5c")
+                # Pulse effect: blend between accent2 and a brighter version
+                base_active = self._colors.get("accent2", "#3a8a5c")
+                bright = _blend_hex(base_active, "#ffffff", 0.4)
+                fill = _blend_hex(base_active, bright, self._pulse_phase)
+                outline = fill
             elif is_conflict:
                 fill = self._colors.get("danger", "#c84848")  # red
                 outline = self._colors.get("danger", "#c84848")
@@ -1326,6 +1457,16 @@ class App(tk.Tk):
             text_col = _contrast_on(fill)
 
             c.create_oval(px - radius, py - radius, px + radius, py + radius, outline=outline, width=2, fill=fill)
+
+            # Pulse ring for active hotspots
+            if is_active:
+                pulse_r = radius + int(6 * self._pulse_phase)
+                pulse_alpha_col = _blend_hex(fill, self._colors.get("bg", "#e8d8b8"), 0.5)
+                c.create_oval(
+                    px - pulse_r, py - pulse_r, px + pulse_r, py + pulse_r,
+                    outline=pulse_alpha_col, width=2, dash=(4, 4),
+                )
+
             label = name
             if mapping_label:
                 label = f"{name}\n{mapping_label}"
@@ -1359,14 +1500,21 @@ class App(tk.Tk):
         hs = self._keymap_hotspots()
         bound = hs.get(name)
         if bound is None:
+            # No key_id → auto-enter learn mode (press controller button)
+            self._keymap_learn_name = name
             self._mapping_key_id.set("")
             self._keymap_status.set(
-                f"Selected: {name}. Not bound yet — click Learn selected, then press the controller button."
+                f"[{name}] Press the controller button now to learn its key_id… (or right-click for options)"
             )
         else:
+            # Has key_id → auto-enter press-to-bind mode (press keyboard key)
+            self._bind_mode = True
+            self._bind_hotspot = name
             self._mapping_key_id.set(str(bound))
             self._mapping_load_from_profile(int(bound))
-            self._keymap_status.set(f"Selected: {name} (key_id={bound}). Adjust mapping below, or Learn to re-bind.")
+            self._keymap_status.set(
+                f"[{name}] Press a keyboard key to bind → key_id={bound}  (Escape to cancel, right-click for more)"
+            )
 
         self._keymap_redraw()
 
@@ -1376,6 +1524,205 @@ class App(tk.Tk):
             return
         self._keymap_learn_name = self._keymap_selected_name
         self._keymap_status.set(f"Learning {self._keymap_selected_name}… press that controller button now.")
+
+    def _keymap_on_right_click(self, e: tk.Event) -> None:
+        """Show a context menu for the clicked hotspot."""
+        name = self._keymap_pick_hotspot(float(getattr(e, "x", 0)), float(getattr(e, "y", 0)))
+        if not name:
+            return
+
+        self._keymap_selected_name = name
+        self._keymap_redraw()
+
+        hs = self._keymap_hotspots()
+        bound = hs.get(name)
+
+        menu = tk.Menu(self, tearoff=0)
+        menu.add_command(
+            label=f"Learn key_id for {name}",
+            command=lambda: self._keymap_context_learn(name),
+        )
+        if bound is not None:
+            menu.add_command(
+                label=f"Bind keyboard key → {name}",
+                command=lambda: self._keymap_context_bind(name),
+            )
+            menu.add_separator()
+            menu.add_command(
+                label=f"Reset {name} to passthrough",
+                command=lambda: self._keymap_context_reset(name),
+            )
+            menu.add_command(
+                label=f"Clear {name} binding",
+                command=lambda: self._keymap_context_clear(name),
+            )
+            menu.add_command(
+                label=f"Disable {name}",
+                command=lambda: self._keymap_context_disable(name),
+            )
+
+        try:
+            menu.tk_popup(e.x_root, e.y_root)
+        finally:
+            menu.grab_release()
+
+    def _keymap_context_learn(self, name: str) -> None:
+        self._keymap_selected_name = name
+        self._keymap_learn_name = name
+        self._keymap_status.set(f"[{name}] Press the controller button now…")
+
+    def _keymap_context_bind(self, name: str) -> None:
+        hs = self._keymap_hotspots()
+        key_id = hs.get(name)
+        if key_id is None:
+            return
+        self._keymap_selected_name = name
+        self._bind_mode = True
+        self._bind_hotspot = name
+        self._mapping_key_id.set(str(key_id))
+        self._keymap_status.set(f"[{name}] Press a keyboard key to bind… (Escape to cancel)")
+
+    def _keymap_context_reset(self, name: str) -> None:
+        self._keymap_selected_name = name
+        self._keymap_reset_selected()
+
+    def _keymap_context_clear(self, name: str) -> None:
+        self._keymap_selected_name = name
+        self._keymap_clear_selected()
+
+    def _keymap_context_disable(self, name: str) -> None:
+        """Disable the selected hotspot's output."""
+        hs = self._keymap_hotspots()
+        key_id = hs.get(name)
+        if key_id is None:
+            return
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return
+        mappings = prof.setdefault("mappings", {})
+        if not isinstance(mappings, dict):
+            mappings = {}
+            prof["mappings"] = mappings
+        mappings[str(key_id)] = {"type": "disable"}
+        self._set_profile_obj(prof)
+        self._keymap_status.set(f"{name} disabled.")
+        self._keymap_redraw()
+
+    # ------------------------------------------------------------------
+    # Chording
+    # ------------------------------------------------------------------
+
+    def _chord_add(self) -> None:
+        """Add a chord definition to the profile."""
+        keys_str = self._chord_keys_var.get().strip()
+        output_str = self._chord_output_var.get().strip()
+        if not keys_str or not output_str:
+            messagebox.showerror("Missing fields", "Enter both key_ids and output keycode.")
+            return
+
+        try:
+            keys = [int(k.strip()) for k in keys_str.split(",") if k.strip()]
+        except ValueError:
+            messagebox.showerror("Bad key_ids", "Key IDs must be comma-separated integers.")
+            return
+
+        if len(keys) < 2:
+            messagebox.showerror("Too few keys", "A chord requires at least 2 keys.")
+            return
+
+        try:
+            kc = int(output_str, 0)
+        except ValueError:
+            messagebox.showerror("Bad keycode", "Output must be a HID keycode (integer or 0xHH).")
+            return
+
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return
+
+        chords = prof.setdefault("chords", [])
+        if not isinstance(chords, list):
+            chords = []
+            prof["chords"] = chords
+
+        chords.append({
+            "keys": sorted(keys),
+            "action": {"type": "remap_hid", "mod": 0, "keycode": kc},
+        })
+        self._set_profile_obj(prof)
+        self._chord_refresh_display()
+        self._log_line(f"[host] Added chord: {keys} → 0x{kc:02X}")
+
+    def _chord_clear(self) -> None:
+        """Remove all chord definitions."""
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return
+        prof["chords"] = []
+        self._set_profile_obj(prof)
+        self._chord_refresh_display()
+        self._log_line("[host] Cleared all chords")
+
+    def _chord_refresh_display(self) -> None:
+        """Update the chord list display."""
+        try:
+            prof = self._current_profile()
+        except Exception:
+            self._chord_list_var.set("(none)")
+            return
+
+        chords = prof.get("chords", [])
+        if not isinstance(chords, list) or not chords:
+            self._chord_list_var.set("(none)")
+            return
+
+        parts = []
+        for ch in chords:
+            keys = ch.get("keys", [])
+            action = ch.get("action", {})
+            kc = action.get("keycode", 0)
+            mod = action.get("mod", 0)
+            key_names = [str(k) for k in keys]
+            out_name = hid_keycodes.hid_to_name(mod, kc)
+            parts.append(f"[{'+'.join(key_names)}] → {out_name}")
+
+        self._chord_list_var.set("  |  ".join(parts))
+
+    # ------------------------------------------------------------------
+    # Conflict auto-fix
+    # ------------------------------------------------------------------
+
+    def _conflict_auto_fix(self) -> None:
+        """Resolve duplicate output bindings by keeping only the first mapping for each output."""
+        conflicts = self._detect_conflicts()
+        if not conflicts:
+            return
+
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return
+
+        mappings = prof.get("mappings", {})
+        if not isinstance(mappings, dict):
+            return
+
+        hs_bindings = self._keymap_hotspots()
+        removed = []
+        for _output_key, hotspot_names in conflicts.items():
+            # Keep the first, remove the rest
+            for name in hotspot_names[1:]:
+                key_id = hs_bindings.get(name)
+                if key_id is not None and str(key_id) in mappings:
+                    del mappings[str(key_id)]
+                    removed.append(name)
+
+        self._set_profile_obj(prof)
+        self._keymap_redraw()
+        self._log_line(f"[host] Auto-fix: cleared duplicate mappings for {', '.join(removed)}")
 
     def _keymap_begin_bind(self) -> None:
         """Start press-to-bind: wait for a keyboard key press to map to the selected hotspot."""
@@ -1504,6 +1851,59 @@ class App(tk.Tk):
         self._keymap_redraw()
         self._log_line(f"[host] Profile '{name}' reset to defaults.")
 
+    # ------------------------------------------------------------------
+    # Profile slot quick-select
+    # ------------------------------------------------------------------
+
+    def _slot_select(self, idx: int) -> None:
+        """Select a slot, read its profile from the device, and load it."""
+        self.slot_var.set(str(idx))
+        # Highlight the active slot button
+        for i, btn in enumerate(self._slot_buttons):
+            try:
+                if i == idx:
+                    btn.configure(style="Primary.TButton")
+                else:
+                    btn.configure(style="TButton")
+            except Exception:
+                pass
+        self._cmd_read_profile()
+        self._log_line(f"[host] Selected slot {idx}")
+
+    def _slot_read_all(self) -> None:
+        """Read profile names from all 4 slots (sends 4 read commands)."""
+        for i in range(4):
+            self._send_cmd({"cmd": "read_profile", "slot": i})
+
+    def _slot_update_name(self, slot: int, name: str) -> None:
+        """Update the slot button label with the profile name."""
+        if 0 <= slot < len(self._slot_name_vars):
+            display = name[:14] if name else f"Slot {slot}"
+            self._slot_name_vars[slot].set(f"{slot}: {display}")
+
+    # ------------------------------------------------------------------
+    # Safe mode (reset active slot to defaults on device)
+    # ------------------------------------------------------------------
+
+    def _cmd_safe_mode(self) -> None:
+        """Reset the active slot to a clean default profile and activate it."""
+        confirm = messagebox.askyesno(
+            "Safe mode",
+            "This will overwrite the current slot with a clean default profile "
+            "and set it as active on the device.\n\n"
+            "Use this if your controls become unusable.\n\n"
+            "Continue?",
+        )
+        if not confirm:
+            return
+
+        slot = int(self.slot_var.get())
+        fresh = _ensure_profile_defaults({"name": f"safe-default-{slot}"})
+        self._set_profile_obj(fresh)
+        self._send_cmd({"cmd": "write_profile", "slot": slot, "profile": fresh})
+        self._send_cmd({"cmd": "set_active_profile", "slot": slot})
+        self._log_line(f"[host] Safe mode: slot {slot} reset to defaults and activated")
+
     def _layer_add(self) -> None:
         """Add a new layer to the profile."""
         try:
@@ -1574,7 +1974,7 @@ class App(tk.Tk):
         self._log_line(f"[host] Layer {idx + 1} config updated")
 
     def _build_input_test_tab(self) -> None:
-        """Build the Input Test tab: live event log + active key summary."""
+        """Build the Input Test tab: live event log + visual timeline + active key summary."""
         top = ttk.Frame(self.tab_input_test)
         top.pack(fill=tk.X, padx=8, pady=(8, 4))
         ttk.Label(top, text="Active keys:").pack(side=tk.LEFT)
@@ -1584,10 +1984,26 @@ class App(tk.Tk):
         )
         ttk.Button(top, text="Clear log", command=self._input_test_clear).pack(side=tk.RIGHT)
 
+        # ── Visual event timeline ──
+        tl_frame = ttk.LabelFrame(self.tab_input_test, text="Event timeline (last 5 seconds)")
+        tl_frame.pack(fill=tk.X, padx=8, pady=(0, 4))
+        self._timeline_canvas = tk.Canvas(tl_frame, height=60, highlightthickness=1)
+        self._timeline_canvas.pack(fill=tk.X, padx=4, pady=4)
+        try:
+            self._timeline_canvas.configure(
+                bg=self._colors["panel2"],
+                highlightbackground=self._colors["border"],
+            )
+        except Exception:
+            pass
+
         ttk.Label(self.tab_input_test, text="Event log (newest first)").pack(anchor="w", padx=8)
-        self._input_test_log = ScrolledText(self.tab_input_test, height=20, state="disabled")
+        self._input_test_log = ScrolledText(self.tab_input_test, height=16, state="disabled")
         self._input_test_log.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
         self._theme_scrolled_text(self._input_test_log)
+
+        # Refresh timeline periodically
+        self.after(200, self._timeline_redraw_tick)
 
     def _input_test_clear(self) -> None:
         self._input_test_log.configure(state="normal")
@@ -1603,6 +2019,54 @@ class App(tk.Tk):
         if total > 500:
             log_w.delete(f"{501}.0", "end")
         log_w.configure(state="disabled")
+
+    def _timeline_add_event(self, label: str, color: str) -> None:
+        """Record an event for the visual timeline."""
+        self._event_timeline.append((time.time(), label, color))
+        # Trim old events (>10 seconds)
+        cutoff = time.time() - 10.0
+        self._event_timeline = [(t, l, c) for t, l, c in self._event_timeline if t > cutoff]
+
+    def _timeline_redraw_tick(self) -> None:
+        """Periodically redraw the event timeline canvas."""
+        self._timeline_redraw()
+        self.after(200, self._timeline_redraw_tick)
+
+    def _timeline_redraw(self) -> None:
+        """Draw the event timeline canvas showing recent events."""
+        c = self._timeline_canvas
+        if not c:
+            return
+        c.delete("all")
+
+        w = max(c.winfo_width(), 200)
+        h = max(c.winfo_height(), 50)
+        now = time.time()
+        window_sec = 5.0  # show last 5 seconds
+        pad = 4
+
+        # Draw time axis
+        axis_col = self._colors.get("border", "#666")
+        c.create_line(pad, h - 12, w - pad, h - 12, fill=axis_col)
+        for sec in range(int(window_sec) + 1):
+            x = pad + (1.0 - sec / window_sec) * (w - 2 * pad)
+            c.create_line(x, h - 15, x, h - 9, fill=axis_col)
+            c.create_text(x, h - 4, text=f"-{sec}s", fill=self._colors.get("muted", "#999"),
+                         font=("Consolas", 7))
+
+        # Trim expired
+        cutoff = now - window_sec
+        self._event_timeline = [(t, l, cl) for t, l, cl in self._event_timeline if t > cutoff]
+
+        # Draw events as colored marks
+        for t, label, color in self._event_timeline:
+            age = now - t
+            x = pad + (1.0 - age / window_sec) * (w - 2 * pad)
+            if x < pad or x > w - pad:
+                continue
+            c.create_line(x, pad, x, h - 18, fill=color, width=2)
+            c.create_text(x, pad + 6, text=label, fill=color,
+                         font=(self._typo.get("font_family", "Segoe UI"), 7), anchor="n")
 
     def _keymap_bind_selected(self, key_id: int) -> None:
         if not self._keymap_learn_name:
@@ -1872,6 +2336,25 @@ class App(tk.Tk):
 
     def _handle_dev_obj(self, obj: dict) -> None:
         evt = obj.get("evt")
+
+        # Handle command responses (rsp)
+        rsp = obj.get("rsp")
+        if rsp == "read_profile":
+            slot = obj.get("slot")
+            profile = obj.get("profile")
+            if isinstance(slot, int) and isinstance(profile, dict):
+                name = profile.get("name", f"(slot {slot})")
+                self._slot_update_name(slot, str(name))
+                # If this is the actively selected slot, load the profile into the editor
+                try:
+                    if int(self.slot_var.get()) == slot:
+                        self._set_profile_obj(_ensure_profile_defaults(profile))
+                        self._profile_name_var.set(str(name))
+                except Exception:
+                    pass
+            elif isinstance(slot, int):
+                self._slot_update_name(slot, "(empty)")
+
         if evt == "mapped_key":
             try:
                 pressed = bool(obj.get("pressed"))
@@ -1905,6 +2388,10 @@ class App(tk.Tk):
                 hs_rev = {v: k for k, v in hs.items()}
                 name = hs_rev.get(key_id, f"key_id={key_id}")
                 self._input_test_append(f"[{ts}] {name} {action}")
+
+                # Add to visual timeline
+                tl_color = self._colors.get("accent2", "#3a8a5c") if pressed else self._colors.get("muted", "#888")
+                self._timeline_add_event(name, tl_color)
 
                 if self._active_key_ids:
                     names = []
@@ -2235,6 +2722,24 @@ class App(tk.Tk):
                 messagebox.showerror("Bad keycode", "HID keycode must be 0..255")
                 return
             mappings[key] = {"type": "remap_hid", "mod": 0, "keycode": kc}
+        elif mtype == "tap_hold":
+            # Tap → passthrough (quick press), Hold → remap_hid (long press)
+            rto = self._mapping_remap_to.get().strip()
+            try:
+                kc = int(rto, 0)
+            except ValueError:
+                messagebox.showerror("Bad keycode", "Remap-to (hold action) must be a HID keycode")
+                return
+            if kc < 0 or kc > 255:
+                messagebox.showerror("Bad keycode", "HID keycode must be 0..255")
+                return
+            hold_ms = 300  # default threshold
+            mappings[key] = {
+                "type": "tap_hold",
+                "tap": {"type": "passthrough"},
+                "hold": {"type": "remap_hid", "mod": 0, "keycode": kc},
+                "hold_ms": hold_ms,
+            }
 
         self._set_profile_obj(prof)
         self._keymap_redraw()

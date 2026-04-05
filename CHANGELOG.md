@@ -11,6 +11,18 @@ Until then, entries are grouped by date.
 
 ### Added
 
+- **Unified click-to-bind** (helper app):
+  - Single-click a hotspot: auto-enters learn mode (unbound) or bind mode (bound) — no separate Learn/Bind steps.
+  - Right-click context menu on any hotspot: Learn, Bind, Reset to passthrough, Clear binding, Disable.
+- **Pulse animation**: active controller hotspots pulse with a breathing glow effect (80 ms timer, phase 0.3–1.0).
+- **Profile slot quick-select**: 4 slot buttons at top of Profile tab with names; "Read all names" to refresh.
+- **Safe mode recovery**: one-click button resets the active device slot to defaults (with confirmation dialog).
+- **Tap-hold mapping type**: single button produces different actions for quick tap vs long hold (`hold_ms` threshold, default 300 ms).
+- **Chording**: define multi-button combos that trigger a single action when pressed simultaneously. New `chords` profile field.
+- **Conflict auto-fix**: when duplicate output bindings are detected, a "Fix" button resolves by keeping the first and clearing the rest.
+- **Visual event timeline** (Input Test tab): horizontal canvas showing the last 5 seconds of input events as colored marks with a time axis.
+- Theme version 2 with new state color tokens: `active`, `conflict`, `modified`, `selected`, `pulse_bright`, `timeline_press`, `timeline_release`.
+
 - **Press-to-bind remapping** (helper app + firmware):
   - New `remap_hid` mapping type: bypasses compiled `keymap.c` entirely, sends arbitrary USB HID modifier + keycode directly.
   - Controller tab "Bind key" button: click a hotspot, press any keyboard key, instantly mapped.

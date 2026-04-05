@@ -61,6 +61,12 @@ Profile schema (expected by the ESP32-S3 keyboard-side firmware):
 			}
 		}
 	],
+	"chords": [
+		{
+			"keys": [1, 2],
+			"action": {"type": "remap_hid", "mod": 0, "keycode": 40}
+		}
+	],
 	"stick": {
 		"deadzone": 0.15,
 		"shape": "circle",
@@ -92,6 +98,48 @@ Notes:
 | `remap` | Input key_id is remapped to a different output key_id, then looked up in `keymap.c`. |
 | `macro` | A macro is triggered on press. |
 | `remap_hid` | **Bypasses keymap.c entirely.** Sends an arbitrary HID modifier+keycode. `mod` is a bitmask (0x01=LCtrl, 0x02=LShift, 0x04=LAlt, 0x08=LGUI). `keycode` is a USB HID usage code (e.g. 0x04=A, 0x1A=W, 0x2C=Space). |
+| `tap_hold` | Differentiates tap (quick press) from hold (long press). Contains `tap` and `hold` sub-mappings plus a `hold_ms` threshold. See below. |
+
+### Tap-hold mapping
+
+The `tap_hold` type lets a single button produce different actions for a quick tap versus a long hold:
+
+```json
+{
+	"type": "tap_hold",
+	"tap": {"type": "passthrough"},
+	"hold": {"type": "remap_hid", "mod": 0, "keycode": 40},
+	"hold_ms": 300
+}
+```
+
+| field | type | description |
+|-------|------|-------------|
+| `tap` | object | Mapping applied on quick press (< hold_ms). Any mapping type except `tap_hold`. |
+| `hold` | object | Mapping applied on long press (>= hold_ms). Any mapping type except `tap_hold`. |
+| `hold_ms` | int | Threshold in milliseconds. Default 300. |
+
+### Chords (optional)
+
+The `chords` array defines multi-button combos that produce a single action when pressed simultaneously.
+
+```json
+{
+	"chords": [
+		{
+			"keys": [1, 2],
+			"action": {"type": "remap_hid", "mod": 0, "keycode": 40}
+		}
+	]
+}
+```
+
+| field | type | description |
+|-------|------|-------------|
+| `keys` | int[] | List of input key_ids that must be pressed together (order doesn't matter). |
+| `action` | object | Mapping to execute when the chord is detected. Any mapping type. |
+
+Chords are evaluated before individual key mappings. When a chord fires, its constituent keys are suppressed from individual processing.
 
 ### Layers (optional)
 
