@@ -14,8 +14,8 @@ Until then, entries are grouped by date.
 - **CI: Node.js 24 migration**: upgraded all GitHub Actions to Node 24-compatible versions to resolve deprecation warnings:
   - `actions/checkout` v4 → v5
   - `actions/setup-python` v5 → v6
-  - `actions/upload-artifact` v4 → v5
-  - `actions/download-artifact` v4 → v5
+  - `actions/upload-artifact` v4 → v6
+  - `actions/download-artifact` v4 → v7
 
 ### Added
 
