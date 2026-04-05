@@ -1,135 +1,173 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="980" height="620" viewBox="0 0 980 620" role="img" aria-label="Themed UI components">
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="620" viewBox="0 0 980 620" role="img" aria-label="Sketchbook-style UI components">
   <defs>
     <style>
-      .bg { fill: #fffaf0; }
-      .panel { fill: #fff6e1; stroke: #c6ad7d; stroke-opacity: 0.9; stroke-width: 1; }
-      .text { fill: #1b1b1b; fill-opacity: 0.92; font-family: Segoe UI, Arial, sans-serif; font-size: 14px; }
-      .muted { fill: #5b554a; fill-opacity: 0.9; font-family: Segoe UI, Arial, sans-serif; font-size: 12px; }
-      .stroke { stroke: #1b1b1b; stroke-opacity: 0.12; }
-
-      .btn { fill: #fff2d0; stroke: #c6ad7d; stroke-opacity: 0.95; stroke-width: 1; }
-      .btnText { fill: #1b1b1b; font-family: Segoe UI, Arial, sans-serif; font-size: 13px; }
-      .btnAccent { fill: #2f4a9e; fill-opacity: 0.22; stroke: #2f4a9e; stroke-opacity: 0.6; stroke-width: 1; }
-      .btnDanger { fill: #b42318; fill-opacity: 0.18; stroke: #b42318; stroke-opacity: 0.55; stroke-width: 1; }
-
-      .pill { fill: #fff2d0; stroke: #c6ad7d; stroke-opacity: 0.95; stroke-width: 1; }
-      .pillOk { fill: #2b6a4b; fill-opacity: 0.10; stroke: #2b6a4b; stroke-opacity: 0.65; }
-      .pillWarn { fill: #a16207; fill-opacity: 0.10; stroke: #a16207; stroke-opacity: 0.65; }
-      .pillBad { fill: #b42318; fill-opacity: 0.08; stroke: #b42318; stroke-opacity: 0.65; }
-
-      .toggleTrack { fill: #fff2d0; stroke: #c6ad7d; stroke-opacity: 0.95; stroke-width: 1; }
-      .toggleOn { fill: #2f4a9e; fill-opacity: 0.25; }
-      .knob { fill: #fffaf0; fill-opacity: 0.92; stroke: #1b1b1b; stroke-opacity: 0.25; stroke-width: 1; }
-
-      .dialRing { fill: none; stroke: #c6ad7d; stroke-opacity: 0.95; stroke-width: 10; }
-      .dialArc { fill: none; stroke: #2f4a9e; stroke-opacity: 0.95; stroke-width: 10; stroke-linecap: round; }
-      .dialTick { stroke: #5b554a; stroke-opacity: 0.25; stroke-width: 2; }
-      .dialNeedle { stroke: #1b1b1b; stroke-opacity: 0.72; stroke-width: 2.5; stroke-linecap: round; }
+      .bg { fill: #fff8ec; }
+      .ink { stroke: #1b1b1b; stroke-opacity: 0.82; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+      .ghost { stroke: #5b554a; stroke-opacity: 0.34; stroke-width: 1.3; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+      .accent { stroke: #2f4a9e; stroke-opacity: 0.9; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+      .accentFill { fill: #2f4a9e; fill-opacity: 0.12; }
+      .success { stroke: #2b6a4b; stroke-opacity: 0.9; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+      .successFill { fill: #2b6a4b; fill-opacity: 0.12; }
+      .warn { stroke: #a16207; stroke-opacity: 0.9; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+      .warnFill { fill: #a16207; fill-opacity: 0.10; }
+      .danger { stroke: #b42318; stroke-opacity: 0.9; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+      .dangerFill { fill: #b42318; fill-opacity: 0.1; }
+      .panelFill { fill: #fff6e1; }
+      .buttonFill { fill: #fff1cf; }
+      .paperNote { fill: #f3e3b8; fill-opacity: 0.55; }
+      .title { fill: #1b1b1b; fill-opacity: 0.93; font-family: Segoe Print, Bradley Hand, Comic Sans MS, Segoe UI, sans-serif; font-size: 22px; }
+      .text { fill: #1b1b1b; fill-opacity: 0.9; font-family: Segoe Print, Bradley Hand, Comic Sans MS, Segoe UI, sans-serif; font-size: 14px; }
+      .muted { fill: #5b554a; fill-opacity: 0.88; font-family: Segoe Print, Bradley Hand, Comic Sans MS, Segoe UI, sans-serif; font-size: 12px; }
+      .btnText { fill: #1b1b1b; fill-opacity: 0.92; font-family: Segoe Print, Bradley Hand, Comic Sans MS, Segoe UI, sans-serif; font-size: 13px; }
     </style>
     <filter id="paperNoise" x="-10%" y="-10%" width="120%" height="120%">
-      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="23" result="n"/>
-      <feColorMatrix type="matrix" values="
-        1 0 0 0 0
-        0 1 0 0 0
-        0 0 1 0 0
-        0 0 0 0.16 0" result="n2"/>
-      <feBlend in="SourceGraphic" in2="n2" mode="multiply"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.82" numOctaves="2" seed="17" result="noise"/>
+      <feColorMatrix type="matrix" values="1 0 0 0 0 0 1 0 0 0 0 0 1 0 0 0 0 0 0.16 0" result="grain"/>
+      <feBlend in="SourceGraphic" in2="grain" mode="multiply"/>
     </filter>
-    <pattern id="hatch" patternUnits="userSpaceOnUse" width="12" height="12" patternTransform="rotate(-18)">
-      <line x1="0" y1="0" x2="0" y2="12" stroke="#5b554a" stroke-opacity="0.12" stroke-width="2"/>
+    <pattern id="crosshatch" patternUnits="userSpaceOnUse" width="18" height="18" patternTransform="rotate(-14)">
+      <line x1="0" y1="0" x2="0" y2="18" stroke="#5b554a" stroke-opacity="0.12" stroke-width="1.5"/>
+      <line x1="9" y1="0" x2="9" y2="18" stroke="#c6ad7d" stroke-opacity="0.12" stroke-width="1"/>
     </pattern>
   </defs>
 
   <rect class="bg" x="0" y="0" width="980" height="620"/>
+  <rect x="0" y="0" width="980" height="620" fill="url(#crosshatch)" opacity="0.45"/>
 
-  <rect x="0" y="0" width="980" height="620" fill="url(#hatch)" opacity="0.35"/>
-
-  <rect class="panel" x="20" y="20" width="940" height="580" rx="14" filter="url(#paperNoise)"/>
-  <text class="text" x="44" y="54">UI components (theme-matched)</text>
-  <text class="muted" x="44" y="76">Buttons • Toggles • Dials • Status pills • Icon buttons</text>
-
-  <!-- Buttons row -->
-  <text class="muted" x="44" y="120">Buttons</text>
-  <g transform="translate(44,136)">
-    <rect class="btn" x="0" y="0" width="160" height="40" rx="10" filter="url(#paperNoise)"/>
-    <text class="btnText" x="80" y="25" text-anchor="middle">Secondary</text>
-
-    <rect class="btnAccent" x="180" y="0" width="160" height="40" rx="10" filter="url(#paperNoise)"/>
-    <text class="btnText" x="260" y="25" text-anchor="middle">Primary</text>
-
-    <rect class="btnDanger" x="360" y="0" width="160" height="40" rx="10" filter="url(#paperNoise)"/>
-    <text class="btnText" x="440" y="25" text-anchor="middle">Danger</text>
-
-    <rect class="btn" x="540" y="0" width="160" height="40" rx="10" fill-opacity="0.55" filter="url(#paperNoise)"/>
-    <text class="btnText" x="620" y="25" text-anchor="middle" fill-opacity="0.55">Disabled</text>
+  <g filter="url(#paperNoise)">
+    <path class="panelFill" d="M28 28 C 90 20, 220 18, 354 26 S 694 18, 944 30 L 952 34 C 958 140, 958 256, 950 376 S 956 532, 944 592 C 808 602, 662 600, 514 594 S 194 602, 34 592 L 28 586 C 18 454, 18 286, 24 154 S 18 58, 28 28 Z"/>
+    <path class="ink" d="M30 30 C 96 18, 230 18, 360 26 S 694 18, 944 34 C 952 138, 954 258, 948 378 S 952 532, 942 590 C 808 602, 662 602, 514 596 S 192 604, 36 590 C 20 456, 18 286, 24 154 S 18 62, 30 30 Z"/>
+    <path class="ghost" d="M34 34 C 102 26, 236 24, 366 30 S 696 24, 940 38 C 946 142, 948 260, 944 376 S 948 528, 936 586 C 804 594, 660 594, 512 590 S 196 596, 42 584 C 26 454, 26 286, 30 158 S 24 68, 34 34 Z"/>
   </g>
 
-  <!-- Icon buttons row -->
-  <text class="muted" x="44" y="236">Icon buttons</text>
-  <g transform="translate(44,252)">
-    <rect class="btn" x="0" y="0" width="44" height="44" rx="12" filter="url(#paperNoise)"/>
-    <path d="M22 12a12 12 0 1 0 4 9" fill="none" stroke="#2f4a9e" stroke-width="2.6" stroke-linecap="round"/>
-    <path d="M28 8v16H12" fill="none" stroke="#2f4a9e" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path class="warn" d="M52 86c32-10 70-12 114-4"/>
+  <text class="title" x="44" y="58">UI components (sketchbook ink)</text>
+  <text class="muted" x="44" y="82">Buttons, toggles, pills, dials, and icon buttons should feel penciled-in, not machine-perfect.</text>
 
-    <rect class="btn" x="60" y="0" width="44" height="44" rx="12" filter="url(#paperNoise)"/>
-    <path d="M82 10v24l10-10-10-10 10-10-10-10z" fill="none" stroke="#1b1b1b" stroke-opacity="0.82" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text class="muted" x="48" y="126">Buttons</text>
+  <g transform="translate(44,140)" filter="url(#paperNoise)">
+    <path class="buttonFill" d="M8 8 C 42 0, 104 2, 150 8 C 160 18, 162 30, 154 40 C 110 48, 50 48, 10 42 C 0 32, 0 18, 8 8 Z"/>
+    <path class="ink" d="M8 8 C 42 0, 104 2, 150 8 C 160 18, 162 30, 154 40 C 110 48, 50 48, 10 42 C 0 32, 0 18, 8 8 Z"/>
+    <path class="ghost" d="M12 10 C 48 4, 106 4, 146 10 C 154 18, 156 30, 148 38 C 106 44, 54 44, 14 38 C 6 30, 6 18, 12 10 Z"/>
+    <text class="btnText" x="80" y="29" text-anchor="middle">Secondary</text>
 
-    <rect class="btn" x="120" y="0" width="44" height="44" rx="12" filter="url(#paperNoise)"/>
-    <path d="M142 14v20" fill="none" stroke="#2b6a4b" stroke-width="2.6" stroke-linecap="round"/>
-    <path d="M134 22l8-8 8 8" fill="none" stroke="#2b6a4b" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
-  </g>
-
-  <!-- Toggles + pills -->
-  <text class="muted" x="44" y="352">Toggles + status pills</text>
-  <g transform="translate(44,368)">
-    <!-- Toggle off -->
-    <rect class="toggleTrack" x="0" y="6" width="68" height="28" rx="14" filter="url(#paperNoise)"/>
-    <circle class="knob" cx="18" cy="20" r="10" fill-opacity="0.65"/>
-    <text class="muted" x="84" y="24">Toggle off</text>
-
-    <!-- Toggle on -->
-    <rect class="toggleTrack" x="220" y="6" width="68" height="28" rx="14" filter="url(#paperNoise)"/>
-    <rect class="toggleOn" x="220" y="6" width="68" height="28" rx="14" fill-opacity="0.45"/>
-    <circle class="knob" cx="270" cy="20" r="10"/>
-    <text class="muted" x="304" y="24">Toggle on</text>
-
-    <!-- Pills -->
-    <rect class="pillOk" x="0" y="52" width="130" height="28" rx="14" filter="url(#paperNoise)"/>
-    <text class="muted" x="65" y="71" text-anchor="middle" fill="#1b1b1b" fill-opacity="0.88">Connected</text>
-
-    <rect class="pillWarn" x="150" y="52" width="150" height="28" rx="14" filter="url(#paperNoise)"/>
-    <text class="muted" x="225" y="71" text-anchor="middle" fill="#1b1b1b" fill-opacity="0.88">Discovering…</text>
-
-    <rect class="pillBad" x="320" y="52" width="160" height="28" rx="14" filter="url(#paperNoise)"/>
-    <text class="muted" x="400" y="71" text-anchor="middle" fill="#1b1b1b" fill-opacity="0.88">Disconnected</text>
-  </g>
-
-  <!-- Dial -->
-  <text class="muted" x="600" y="120">Dial (for deadzone / curve exponent)</text>
-  <g transform="translate(600,160)">
-    <circle cx="120" cy="120" r="78" class="dialRing"/>
-    <path class="dialArc" d="M120 42 A78 78 0 0 1 188 154"/>
-
-    <!-- ticks -->
-    <g class="dialTick">
-      <path d="M120 32v14"/>
-      <path d="M174 50l-8 12"/>
-      <path d="M206 96l-14 4"/>
-      <path d="M200 152l-12-8"/>
-      <path d="M160 198l-6-12"/>
-      <path d="M120 208v-14"/>
-      <path d="M80 198l6-12"/>
-      <path d="M40 152l12-8"/>
-      <path d="M34 96l14 4"/>
-      <path d="M66 50l8 12"/>
+    <g transform="translate(182,0)">
+      <path class="accentFill" d="M10 6 C 42 0, 106 2, 154 8 C 164 18, 164 30, 156 40 C 112 48, 50 48, 12 42 C 2 34, 2 18, 10 6 Z"/>
+      <path class="accent" d="M10 6 C 42 0, 106 2, 154 8 C 164 18, 164 30, 156 40 C 112 48, 50 48, 12 42 C 2 34, 2 18, 10 6 Z"/>
+      <path class="ghost" d="M14 10 C 50 4, 108 4, 148 10 C 156 18, 158 30, 150 38 C 110 44, 54 44, 16 38 C 8 30, 8 20, 14 10 Z"/>
+      <text class="btnText" x="82" y="29" text-anchor="middle">Primary</text>
     </g>
 
-    <!-- needle -->
-    <path class="dialNeedle" d="M120 120 L 178 150"/>
-    <circle cx="120" cy="120" r="6" fill="#1b1b1b" fill-opacity="0.18"/>
+    <g transform="translate(366,0)">
+      <path class="dangerFill" d="M10 8 C 44 0, 108 4, 154 10 C 162 18, 164 30, 156 40 C 112 48, 52 48, 12 42 C 4 34, 2 18, 10 8 Z"/>
+      <path class="danger" d="M10 8 C 44 0, 108 4, 154 10 C 162 18, 164 30, 156 40 C 112 48, 52 48, 12 42 C 4 34, 2 18, 10 8 Z"/>
+      <text class="btnText" x="82" y="29" text-anchor="middle">Danger</text>
+    </g>
 
-    <text class="text" x="120" y="250" text-anchor="middle">Deadzone</text>
-    <text class="muted" x="120" y="272" text-anchor="middle">0.15</text>
+    <g transform="translate(550,0)" opacity="0.56">
+      <path class="buttonFill" d="M10 8 C 44 2, 104 2, 150 10 C 158 18, 160 30, 152 40 C 110 46, 52 46, 14 40 C 4 32, 2 18, 10 8 Z"/>
+      <path class="ink" d="M10 8 C 44 2, 104 2, 150 10 C 158 18, 160 30, 152 40 C 110 46, 52 46, 14 40 C 4 32, 2 18, 10 8 Z"/>
+      <text class="btnText" x="80" y="29" text-anchor="middle">Disabled</text>
+      <path class="ghost" d="M30 12c18 14 34 20 108 26"/>
+    </g>
+  </g>
+
+  <text class="muted" x="48" y="240">Icon buttons</text>
+  <g transform="translate(44,252)" filter="url(#paperNoise)">
+    <g>
+      <path class="buttonFill" d="M8 10 C 18 2, 34 2, 38 8 C 44 14, 44 30, 38 36 C 30 42, 16 42, 8 34 C 2 28, 2 16, 8 10 Z"/>
+      <path class="ink" d="M8 10 C 18 2, 34 2, 38 8 C 44 14, 44 30, 38 36 C 30 42, 16 42, 8 34 C 2 28, 2 16, 8 10 Z"/>
+      <path class="accent" d="M14 24c4-8 12-10 18-6"/>
+      <path class="accent" d="M30 18c6 2 10 8 10 14 0 8-6 14-14 14-6 0-12-4-14-10" transform="translate(-4,-6) scale(0.85)"/>
+      <path class="accent" d="M28 10l4 8-8 1"/>
+    </g>
+
+    <g transform="translate(60,0)">
+      <path class="buttonFill" d="M8 10 C 18 2, 34 2, 38 8 C 44 14, 44 30, 38 36 C 30 42, 16 42, 8 34 C 2 28, 2 16, 8 10 Z"/>
+      <path class="ink" d="M8 10 C 18 2, 34 2, 38 8 C 44 14, 44 30, 38 36 C 30 42, 16 42, 8 34 C 2 28, 2 16, 8 10 Z"/>
+      <path class="ink" d="M22 34V13"/>
+      <path class="ink" d="M22 13l-5 5"/>
+      <path class="ink" d="M22 13l5 5"/>
+      <path class="ghost" d="M22 22h8"/>
+      <path class="ghost" d="M22 28h-8"/>
+      <circle cx="30" cy="22" r="2.8" fill="none" stroke="#5b554a" stroke-opacity="0.65" stroke-width="2"/>
+      <rect x="12" y="26" width="6" height="6" rx="1.5" fill="none" stroke="#5b554a" stroke-opacity="0.65" stroke-width="2"/>
+    </g>
+
+    <g transform="translate(120,0)">
+      <path class="buttonFill" d="M8 10 C 18 2, 34 2, 38 8 C 44 14, 44 30, 38 36 C 30 42, 16 42, 8 34 C 2 28, 2 16, 8 10 Z"/>
+      <path class="ink" d="M8 10 C 18 2, 34 2, 38 8 C 44 14, 44 30, 38 36 C 30 42, 16 42, 8 34 C 2 28, 2 16, 8 10 Z"/>
+      <path class="success" d="M22 30V14"/>
+      <path class="success" d="M15 21l7-8 7 8"/>
+      <path class="ghost" d="M13 32c8 2 18 2 24 0"/>
+    </g>
+  </g>
+
+  <text class="muted" x="48" y="352">Toggles + status pills</text>
+  <g transform="translate(44,366)" filter="url(#paperNoise)">
+    <g>
+      <path class="buttonFill" d="M8 12 C 22 2, 48 4, 62 12 C 70 18, 70 28, 62 34 C 48 40, 22 42, 8 34 C 0 28, 0 18, 8 12 Z"/>
+      <path class="ink" d="M8 12 C 22 2, 48 4, 62 12 C 70 18, 70 28, 62 34 C 48 40, 22 42, 8 34 C 0 28, 0 18, 8 12 Z"/>
+      <ellipse cx="20" cy="23" rx="9" ry="9.8" fill="#fffaf0" fill-opacity="0.96" stroke="#1b1b1b" stroke-opacity="0.28" stroke-width="1.5"/>
+      <text class="muted" x="84" y="28">Toggle off</text>
+    </g>
+
+    <g transform="translate(220,0)">
+      <path class="accentFill" d="M8 12 C 22 2, 48 4, 62 12 C 70 18, 70 28, 62 34 C 48 40, 22 42, 8 34 C 0 28, 0 18, 8 12 Z"/>
+      <path class="accent" d="M8 12 C 22 2, 48 4, 62 12 C 70 18, 70 28, 62 34 C 48 40, 22 42, 8 34 C 0 28, 0 18, 8 12 Z"/>
+      <ellipse cx="52" cy="23" rx="9.5" ry="9.8" fill="#fffaf0" fill-opacity="0.96" stroke="#1b1b1b" stroke-opacity="0.3" stroke-width="1.5"/>
+      <path class="ghost" d="M14 24c14-6 26-6 38 0"/>
+      <text class="muted" x="84" y="28">Toggle on</text>
+    </g>
+
+    <g transform="translate(0,54)">
+      <path class="successFill" d="M10 8 C 36 0, 90 2, 118 10 C 126 16, 126 24, 118 28 C 90 34, 36 36, 10 28 C 2 22, 2 14, 10 8 Z"/>
+      <path class="success" d="M10 8 C 36 0, 90 2, 118 10 C 126 16, 126 24, 118 28 C 90 34, 36 36, 10 28 C 2 22, 2 14, 10 8 Z"/>
+      <text class="muted" x="64" y="22" text-anchor="middle" fill="#1b1b1b" fill-opacity="0.9">Connected</text>
+    </g>
+
+    <g transform="translate(148,54)">
+      <path class="warnFill" d="M10 8 C 38 0, 108 2, 138 10 C 146 16, 146 24, 138 28 C 108 34, 38 36, 10 28 C 2 22, 2 14, 10 8 Z"/>
+      <path class="warn" d="M10 8 C 38 0, 108 2, 138 10 C 146 16, 146 24, 138 28 C 108 34, 38 36, 10 28 C 2 22, 2 14, 10 8 Z"/>
+      <text class="muted" x="74" y="22" text-anchor="middle" fill="#1b1b1b" fill-opacity="0.9">Discovering...</text>
+    </g>
+
+    <g transform="translate(318,54)">
+      <path class="dangerFill" d="M10 8 C 38 0, 118 2, 150 10 C 158 16, 158 24, 150 28 C 118 34, 38 36, 10 28 C 2 22, 2 14, 10 8 Z"/>
+      <path class="danger" d="M10 8 C 38 0, 118 2, 150 10 C 158 16, 158 24, 150 28 C 118 34, 38 36, 10 28 C 2 22, 2 14, 10 8 Z"/>
+      <text class="muted" x="80" y="22" text-anchor="middle" fill="#1b1b1b" fill-opacity="0.9">Disconnected</text>
+    </g>
+  </g>
+
+  <g transform="translate(582,126)">
+    <path class="paperNote" d="M10 10 C 46 2, 190 2, 244 12 C 252 22, 252 38, 242 46 C 192 54, 48 56, 12 46 C 2 38, 2 22, 10 10 Z" filter="url(#paperNoise)"/>
+    <path class="ghost" d="M24 20c60-8 156-8 204 0"/>
+    <text class="muted" x="24" y="32">Dial (deadzone / curve exponent)</text>
+  </g>
+
+  <g transform="translate(602,170)" filter="url(#paperNoise)">
+    <ellipse cx="120" cy="120" rx="82" ry="79" fill="#fff6e1" fill-opacity="0.45"/>
+    <ellipse cx="120" cy="120" rx="80" ry="77" class="ink"/>
+    <ellipse cx="120" cy="120" rx="75" ry="72" class="ghost"/>
+    <path class="accent" d="M120 42 C 152 48, 182 68, 194 98 C 202 118, 202 138, 188 158"/>
+    <g class="ghost">
+      <path d="M120 34v14"/>
+      <path d="M172 50l-8 12"/>
+      <path d="M204 96l-14 4"/>
+      <path d="M198 152l-12-8"/>
+      <path d="M160 194l-6-12"/>
+      <path d="M120 206v-14"/>
+      <path d="M82 194l6-12"/>
+      <path d="M42 152l12-8"/>
+      <path d="M36 96l14 4"/>
+      <path d="M68 50l8 12"/>
+    </g>
+    <path class="ink" d="M120 120 L 180 148"/>
+    <path class="ghost" d="M120 122 L 174 144"/>
+    <ellipse cx="120" cy="120" rx="8" ry="7" fill="#1b1b1b" fill-opacity="0.14"/>
+    <path class="warn" d="M66 236c34 6 74 6 108 0"/>
+    <text class="text" x="120" y="252" text-anchor="middle">Deadzone</text>
+    <text class="muted" x="120" y="274" text-anchor="middle">0.15</text>
   </g>
 </svg>

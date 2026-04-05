@@ -17,8 +17,8 @@ Use the icon set for:
 
 Guidelines:
 
-- Stroke-based icons (no fills) for readability on paper panels.
-- Keep stroke width consistent (~2.5px in SVG, scale as needed).
+- Stroke-based icons should feel hand-drawn: slightly irregular outlines, doubled construction strokes, and a little asymmetry are preferred over perfect geometry.
+- Keep stroke width broadly consistent (~2.5px in SVG), but allow small wobble and ghost lines so the set reads like sketchbook marks instead of vector icons.
 - Use semantic token colors:
   - `accent` for primary actions
   - `accent2` for success
@@ -34,6 +34,12 @@ Button variants (semantic):
 - Primary: accent-filled button for main actions (e.g. Connect/Scan, Upload+Activate).
 - Danger: danger-filled for destructive actions.
 - Disabled: reduced opacity.
+
+Visual direction:
+
+- Prefer uneven pill/button outlines over mathematically perfect rounded rectangles.
+- Use faint second-pass strokes, hatch fills, or paper-noise overlays where helpful.
+- Components should look like marker-and-pen UI sketches pinned on a workbench, not polished design-system tokens.
 
 In Tkinter:
 
