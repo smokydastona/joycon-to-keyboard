@@ -98,10 +98,11 @@ def _write_pyinstaller_version_file(args: argparse.Namespace) -> int:
     StringFileInfo([
       StringTable(
         '040904B0',
-        [StringStruct('CompanyName', 'Joy-Con Bridge'),
+        [StringStruct('CompanyName', 'SmokyDaStona'),
         StringStruct('FileDescription', 'JoyCon Bridge Helper'),
         StringStruct('FileVersion', '{build["file_version"]}'),
         StringStruct('InternalName', 'JoyConBridgeHelper'),
+        StringStruct('LegalCopyright', 'Copyright (c) SmokyDaStona'),
         StringStruct('OriginalFilename', 'JoyConBridgeHelper.exe'),
         StringStruct('ProductName', 'Joy-Con Bridge Helper'),
         StringStruct('ProductVersion', '{build["build_version"]}')])
