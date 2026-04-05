@@ -1,0 +1,160 @@
+from __future__ import annotations
+
+import argparse
+import json
+import subprocess
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Dict
+
+
+BASE_MAJOR = 0
+BASE_MINOR = 1
+
+
+def _git(args: list[str]) -> str:
+    proc = subprocess.run(["git", *args], check=True, capture_output=True, text=True)
+    return proc.stdout.strip()
+
+
+def _commit_count() -> int:
+    return int(_git(["rev-list", "--count", "HEAD"]))
+
+
+def _short_sha() -> str:
+    return _git(["rev-parse", "--short", "HEAD"])
+
+
+def _source_record(*, next_commit: bool) -> Dict[str, Any]:
+    commit_count = _commit_count() + (1 if next_commit else 0)
+    version = f"{BASE_MAJOR}.{BASE_MINOR}.{commit_count}"
+    return {
+        "schema": 1,
+        "version": version,
+        "file_version": f"{BASE_MAJOR}.{BASE_MINOR}.{commit_count}.0",
+        "major": BASE_MAJOR,
+        "minor": BASE_MINOR,
+        "patch": commit_count,
+        "commit_count": commit_count,
+        "git_sha": _short_sha(),
+        "updated_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+    }
+
+
+def _load_repo_version(path: Path) -> Dict[str, Any]:
+    obj = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(obj, dict):
+        raise ValueError(f"repo version file is not a JSON object: {path}")
+    for key in ("version", "major", "minor", "patch"):
+        if key not in obj:
+            raise ValueError(f"repo version file missing key '{key}': {path}")
+    return obj
+
+
+def _build_values(repo_version: Dict[str, Any], run_number: int) -> Dict[str, str]:
+    major = int(repo_version["major"])
+    minor = int(repo_version["minor"])
+    patch = int(repo_version["patch"])
+    source_version = str(repo_version["version"])
+    build_version = f"{source_version}+push.{run_number}"
+    file_version = f"{major}.{minor}.{patch}.{run_number}"
+    artifact_version = f"v{major}.{minor}.{patch}-push.{run_number}"
+    return {
+        "source_version": source_version,
+        "build_version": build_version,
+        "file_version": file_version,
+        "artifact_version": artifact_version,
+    }
+
+
+def _write_repo_version(args: argparse.Namespace) -> int:
+    output = Path(args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(json.dumps(_source_record(next_commit=bool(args.next_commit)), indent=2) + "\n", encoding="utf-8")
+    print(output)
+    return 0
+
+
+def _write_pyinstaller_version_file(args: argparse.Namespace) -> int:
+    repo_version = _load_repo_version(Path(args.repo_version))
+    run_number = int(args.run_number or 0)
+    build = _build_values(repo_version, run_number)
+    output = Path(args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+
+    major, minor, patch, build_num = [int(part) for part in build["file_version"].split(".")]
+    rc = f"""VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=({major}, {minor}, {patch}, {build_num}),
+    prodvers=({major}, {minor}, {patch}, {build_num}),
+    mask=0x3F,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+    ),
+  kids=[
+    StringFileInfo([
+      StringTable(
+        '040904B0',
+        [StringStruct('CompanyName', 'Joy-Con Bridge'),
+        StringStruct('FileDescription', 'JoyCon Bridge Helper'),
+        StringStruct('FileVersion', '{build["file_version"]}'),
+        StringStruct('InternalName', 'JoyConBridgeHelper'),
+        StringStruct('OriginalFilename', 'JoyConBridgeHelper.exe'),
+        StringStruct('ProductName', 'Joy-Con Bridge Helper'),
+        StringStruct('ProductVersion', '{build["build_version"]}')])
+      ]),
+    VarFileInfo([VarStruct('Translation', [1033, 1200])])
+  ]
+)
+"""
+    output.write_text(rc, encoding="utf-8")
+    print(output)
+    return 0
+
+
+def _github_output(args: argparse.Namespace) -> int:
+    repo_version = _load_repo_version(Path(args.repo_version))
+    values = _build_values(repo_version, int(args.run_number))
+    output = Path(args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with output.open("a", encoding="utf-8") as fh:
+        for key, value in values.items():
+            fh.write(f"{key}={value}\n")
+    return 0
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Joy-Con Bridge version helpers")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    write_repo = sub.add_parser("write-repo-version", help="Write the tracked repo version JSON file")
+    write_repo.add_argument("--output", required=True)
+    write_repo.add_argument("--next-commit", action="store_true")
+    write_repo.set_defaults(func=_write_repo_version)
+
+    write_pyinstaller = sub.add_parser("write-pyinstaller-version-file", help="Write a PyInstaller version resource file")
+    write_pyinstaller.add_argument("--repo-version", required=True)
+    write_pyinstaller.add_argument("--run-number", default="0")
+    write_pyinstaller.add_argument("--output", required=True)
+    write_pyinstaller.set_defaults(func=_write_pyinstaller_version_file)
+
+    github_output = sub.add_parser("github-output", help="Write build version outputs for GitHub Actions")
+    github_output.add_argument("--repo-version", required=True)
+    github_output.add_argument("--run-number", required=True)
+    github_output.add_argument("--output", required=True)
+    github_output.set_defaults(func=_github_output)
+
+    return parser
+
+
+def main() -> int:
+    parser = build_parser()
+    args = parser.parse_args()
+    return int(args.func(args))
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

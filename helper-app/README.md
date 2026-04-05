@@ -54,10 +54,13 @@ Install the build-time dependency set and generate the UI bundle first:
 ```powershell
 pip install -r requirements-build.txt
 python ..\tools\generate_ui_artifacts.py
-python -m PyInstaller --noconfirm --clean --onefile --windowed --name JoyConBridgeHelper joycon_helper\__main__.py --paths . --distpath dist --workpath build --add-data "..\.ui-bundle;.ui-bundle" --hidden-import serial.tools.list_ports_windows
+python ..\tools\versioning.py write-pyinstaller-version-file --repo-version ..\version.json --output build\pyinstaller-version-info.txt
+python -m PyInstaller --noconfirm --clean --onefile --windowed --name JoyConBridgeHelper joycon_helper\__main__.py --paths . --distpath dist --workpath build --add-data "..\.ui-bundle;.ui-bundle" --version-file build\pyinstaller-version-info.txt --hidden-import serial.tools.list_ports_windows
 ```
 
 The executable is written to `helper-app\dist\JoyConBridgeHelper.exe`.
+
+The repo version in `..\version.json` increments on each commit. CI adds the push/run number on top of that when it builds the downloadable `.exe` artifact.
 
 On GitHub, `.github/workflows/build-release-bundle.yml` builds that executable and bundles it together with both firmware outputs into one downloadable artifact.
 

@@ -42,6 +42,11 @@ Pushes to `main` can produce a single downloadable GitHub Actions artifact conta
 
 The workflow definition lives in `.github/workflows/build-release-bundle.yml`.
 
+Versioning is automatic:
+
+- `version.json` is bumped by the local pre-commit hook, so each new commit advances the repo version.
+- CI appends the GitHub Actions run number for push/build outputs, so artifact and packaged `.exe` versions also advance on each push.
+
 ## Next
 
 0) Wiring (one USB dongle): see `docs/wiring.md`
