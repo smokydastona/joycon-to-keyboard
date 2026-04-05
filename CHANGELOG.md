@@ -26,6 +26,8 @@ Until then, entries are grouped by date.
 
 ### Added
 
+- **Auto-update date guard**: both the helper-app updater and the firmware updater now compare the GitHub release `published_at` timestamp against a build date (`__build_date__`) embedded at CI time. If the running build is newer than the latest release, the update is skipped even if version numbers would suggest otherwise. Local dev builds (empty `__build_date__`) fall back to version-only comparison.
+
 - **Unified click-to-bind** (helper app):
   - Single-click a hotspot: auto-enters learn mode (unbound) or bind mode (bound) — no separate Learn/Bind steps.
   - Right-click context menu on any hotspot: Learn, Bind, Reset to passthrough, Clear binding, Disable.

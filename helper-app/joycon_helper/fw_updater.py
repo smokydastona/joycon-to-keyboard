@@ -16,10 +16,17 @@ import logging
 import ssl
 import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from urllib.error import URLError
 from urllib.request import Request, urlopen
+
+# Import build date — may be empty for local dev runs.
+try:
+    from ._version import __build_date__
+except ImportError:
+    __build_date__ = ""
 
 log = logging.getLogger("joycon_helper.fw_updater")
 
@@ -99,6 +106,22 @@ def check_firmware_updates(
     remote_ver = _parse_version(tag)
     if not remote_ver:
         return None
+
+    # Date guard: skip update if this build is newer than the release.
+    if __build_date__:
+        published = release.get("published_at", "")
+        if published:
+            try:
+                release_dt = datetime.fromisoformat(published.replace("Z", "+00:00"))
+                build_dt = datetime.fromisoformat(__build_date__.replace("Z", "+00:00"))
+                if build_dt >= release_dt:
+                    log.info(
+                        "Skipping FW update %s: release date %s is not newer than build date %s",
+                        tag, published, __build_date__,
+                    )
+                    return None
+            except (ValueError, TypeError):
+                log.debug("Could not compare dates, falling back to version only")
 
     result: Dict[str, Any] = {
         "tag": tag,
