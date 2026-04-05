@@ -45,6 +45,32 @@ DEFAULT_UI_THEME: dict = {
 }
 
 
+DARK_UI_THEME: dict = {
+    "name": "sketchbook-ink-dark",
+    "version": 1,
+    "colors": {
+        "bg": "#1e1a14",
+        "panel": "#2a2418",
+        "panel2": "#342a1e",
+        "text": "#d4c8aa",
+        "muted": "#8a7d68",
+        "border": "#5a4a38",
+        "accent": "#5c8ae6",
+        "accent2": "#4aad72",
+        "danger": "#e04838",
+        "warning": "#d4a020",
+    },
+    "typography": {
+        "font_family": "Segoe Print",
+        "font_size": 10,
+        "mono_family": "Consolas",
+        "mono_size": 10,
+    },
+    "spacing": {"xs": 4, "sm": 8, "md": 12, "lg": 16},
+    "radii": {"sm": 6, "md": 10, "lg": 14},
+}
+
+
 def _hex_to_rgb(h: str) -> Tuple[int, int, int]:
     h = h.strip().lstrip("#")
     if len(h) != 6:
@@ -375,7 +401,22 @@ class App(tk.Tk):
         self.after(50, self._drain_rx)
 
     def _load_ui_theme(self) -> dict:
-        # Load a local UI bundle theme if present; otherwise use defaults.
+        # Decide light vs dark: check --dark flag, env var, or Windows dark-mode setting.
+        prefer_dark = self._detect_dark_preference()
+
+        if prefer_dark:
+            # Try dark bundle first.
+            dark_candidates = [root.parent / (root.name + "-dark") / "theme.json"
+                               for root in _ui_bundle_search_roots()]
+            for c in dark_candidates:
+                try:
+                    if c.exists():
+                        return _load_theme_json(c)
+                except Exception:
+                    continue
+            return DARK_UI_THEME
+
+        # Light: load from bundle or fallback.
         candidates = [root / "theme.json" for root in _ui_bundle_search_roots()]
 
         for c in candidates:
@@ -386,6 +427,33 @@ class App(tk.Tk):
                 continue
 
         return DEFAULT_UI_THEME
+
+    @staticmethod
+    def _detect_dark_preference() -> bool:
+        """Return True if the user/system prefers dark mode."""
+        import os
+        # Explicit env var override: JOYCON_THEME=dark
+        env = os.environ.get("JOYCON_THEME", "").strip().lower()
+        if env == "dark":
+            return True
+        if env == "light":
+            return False
+        # CLI flag passed via sys.argv
+        if "--dark" in sys.argv:
+            return True
+        # Windows 10+ dark-mode registry check
+        try:
+            import winreg
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+            )
+            val, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+            winreg.CloseKey(key)
+            return val == 0
+        except Exception:
+            pass
+        return False
 
     def _apply_ttk_theme(self) -> None:
         colors = self._colors

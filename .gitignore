@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 .DS_Store
 .ui-bundle/
+.ui-bundle-dark/
 /build/
 /dist/
 /JoyConBridgeHelper.spec

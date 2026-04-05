@@ -21,6 +21,17 @@ Sketch / sketchbook-ink visual direction (torn parchment):
 - Use the 'rough' displacement filter in SVG assets for hand-drawn outlines;
   keep ttk widgets flat (relief="flat") so they sit naturally on the parchment.
 - Tea/coffee stain gradients and heavy paper-grain noise add age character.
+
+Dark mode (sketchbook-ink-dark):
+- Same torn-parchment aesthetic but inverted for dark surfaces.
+- Background is very dark warm brown (#1e1a14), panels are deep charred
+  parchment (#2a2418, #342a1e). Text is light parchment (#d4c8aa).
+- Accent/success/warning/danger colors are brightened slightly for contrast
+  on dark backgrounds (accent #5c8ae6, danger #e04838, etc.).
+- The dark bundle is generated alongside the light bundle: .ui-bundle-dark/.
+- The helper app auto-detects Windows dark mode via the registry
+  (AppsUseLightTheme = 0), or accepts JOYCON_THEME=dark env var / --dark flag.
+- Both themes share identical typography, spacing, and radii.
 """
 
 from __future__ import annotations

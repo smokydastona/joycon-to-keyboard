@@ -117,7 +117,7 @@ jobs:
         shell: pwsh
         working-directory: helper-app
         run: |
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --name JoyConBridgeHelper joycon_helper/__main__.py --paths . --distpath dist --workpath build --add-data "../.ui-bundle;.ui-bundle" --version-file build/pyinstaller-version-info.txt --hidden-import serial.tools.list_ports_windows
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name JoyConBridgeHelper joycon_helper/__main__.py --paths . --distpath dist --workpath build --add-data "../.ui-bundle;.ui-bundle" --add-data "../.ui-bundle-dark;.ui-bundle-dark" --version-file build/pyinstaller-version-info.txt --hidden-import serial.tools.list_ports_windows
 
       - name: Collect helper app outputs
         shell: pwsh
