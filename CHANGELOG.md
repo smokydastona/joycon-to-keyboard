@@ -23,6 +23,7 @@ Until then, entries are grouped by date.
 - **ESP32-S3 build: missing TinyUSB component**: `tinyusb` was removed from ESP-IDF v5.2 built-in components. Added `idf_component.yml` to pull `espressif/esp_tinyusb` from the component registry, and updated `PRIV_REQUIRES` from `tinyusb` to `esp_tinyusb`.
 - **ESP32-S3 build: `tud_task` implicit declaration**: removed the manual `tud_task()` call from `app_main.c` — `esp_tinyusb` v1.x runs it in its own internal FreeRTOS task after `tinyusb_driver_install()`. Replaced with `vTaskDelay(1)` to yield the main loop.
 - **ESP32-S3 link: undefined TinyUSB HID callbacks**: the TinyUSB HID device class requires application-defined callbacks (`tud_hid_descriptor_report_cb`, `tud_hid_get_report_cb`, `tud_hid_set_report_cb`) which are implemented in `tusb_desc.c`. The linker couldn't resolve them due to archive link ordering. Added `WHOLE_ARCHIVE` flag to `main` component's `CMakeLists.txt` so all callback implementations are always linked.
+- **ESP32 build: missing `driver` component + Bluetooth not enabled**: `driver/uart.h` required adding `driver` to `PRIV_REQUIRES` in `CMakeLists.txt`. Additionally, `sdkconfig.defaults` had no Bluetooth config, so the `bt` component didn't export its headers in CI (clean builds). Added `CONFIG_BT_ENABLED`, `CONFIG_BTDM_CTRL_MODE_BR_EDR_ONLY`, `CONFIG_BT_BLUEDROID_ENABLED`, `CONFIG_BT_CLASSIC_ENABLED`, and `CONFIG_BT_HID_HOST_ENABLED`.
 
 ### Added
 

@@ -8,7 +8,7 @@ idf_component_register(
         "joycon_mapper.c"
         "nintendo_candidate.c"
     INCLUDE_DIRS "."
-    PRIV_REQUIRES bt nvs_flash app_update
+    PRIV_REQUIRES bt driver nvs_flash app_update
 )
 
 # Pass firmware version to code as FW_VERSION macro.
