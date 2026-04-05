@@ -1,4 +1,4 @@
-"""Generate a small UI bundle for the JoyCon helper app.
+"""Generate a small UI bundle for the Bind Bandit app.
 
 A UI bundle is a folder containing:
 - theme.json
@@ -137,7 +137,7 @@ DEFAULT_LAYOUT = {
 
 BUNDLE_README = """# UI bundle
 
-This folder is a generated UI bundle for the JoyCon Bridge helper app.
+This folder is a generated UI bundle for the Bind Bandit app.
 
 Files:
 

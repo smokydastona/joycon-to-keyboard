@@ -49,7 +49,7 @@ Until then, entries are grouped by date.
   - Polling rate: 125 / 250 / 500 / 1000 Hz.
   - **Multi-device support**: auto-detects all connected M913 mice (via wireless receiver VID `0x25a7` / PID `0xfa07`); each device configurable independently.
   - **Sister profiles**: link an M913 profile to a Joy-Con slot (1–4) so mouse config can travel with controller mappings.
-  - M913 profiles saved as JSON to `%APPDATA%/JoyConBridge/m913/` with per-device registry.
+  - M913 profiles saved as JSON to `%APPDATA%/BindBandit/m913/` with per-device registry.
   - New "Mouse" tab (lazy-loaded) with device scanner, button mapping grid, DPI editor, LED picker, polling rate selector, and profile save/load/delete.
   - Graceful fallback when `hidapi` is not installed (tab shows install hint, rest of app unaffected).
   - Added `hidapi>=0.14` to `requirements.txt` and `hid` to PyInstaller hidden imports.
@@ -120,7 +120,7 @@ Until then, entries are grouped by date.
   - Pre-commit hook and CI both keep it in sync with `version.json`.
 - **Release workflow**: `build-release-bundle.yml` now supports `create_release: true` dispatch input.
   - Validates that the new version strictly increments over the latest GitHub Release tag.
-  - Creates a GitHub Release tagged `v{version}` with `JoyConBridgeHelper.exe` as a downloadable asset.
+  - Creates a GitHub Release tagged `v{version}` with `BindBandit.exe` as a downloadable asset.
 - **Dark controller overlay artwork**: `joycons-dark.png` + `joycons-dark-grey.png` source PNGs for the dark theme.
   - Artifact pipeline now generates 4 dark inspection copies (`joycons-dark-none/left/right/both.png`) alongside the 4 light copies.
   - Dark UI bundle (`.ui-bundle-dark/`) now uses the dark overlay PNGs instead of the light ones.

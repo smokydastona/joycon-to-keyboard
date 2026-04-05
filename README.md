@@ -46,7 +46,7 @@ Versioning is automatic:
 
 - `version.json` is bumped by the local pre-commit hook, so each new commit advances the repo version.
 - CI appends the GitHub Actions run number for push/build outputs, so artifact and packaged `.exe` versions also advance on each push.
-- To **create a GitHub Release**, trigger the workflow manually with `create_release: true`.  The workflow validates that the version strictly increments over the last release, creates a tag, and uploads `JoyConBridgeHelper.exe` as a downloadable release asset.
+- To **create a GitHub Release**, trigger the workflow manually with `create_release: true`.  The workflow validates that the version strictly increments over the last release, creates a tag, and uploads `BindBandit.exe` as a downloadable release asset.
 - The helper app **auto-updates**: on startup it checks the latest GitHub Release and prompts the user to install newer versions.
 - **Firmware OTA updates**: the helper app can also flash new firmware to both boards (ESP32-S3 and ESP32) over USB serial, downloading binaries from GitHub Releases. Both boards use an A/B OTA partition layout for safe rollback.
 

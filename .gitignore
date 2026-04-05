@@ -6,7 +6,7 @@ __pycache__/
 .ui-bundle-dark/
 /build/
 /dist/
-/JoyConBridgeHelper.spec
+/BindBandit.spec
 firmware/**/build/
 firmware/**/managed_components/
 helper-app/build/

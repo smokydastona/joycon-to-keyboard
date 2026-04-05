@@ -1,4 +1,4 @@
-# Helper app (Windows, Python + Tkinter)
+# Bind Bandit (Windows, Python + Tkinter)
 
 This helper app talks to the bridge over a **serial (COM) port**.
 
@@ -79,10 +79,10 @@ Install the build-time dependency set and generate the UI bundle first:
 pip install -r requirements-build.txt
 python ..\tools\generate_ui_artifacts.py
 python ..\tools\versioning.py write-pyinstaller-version-file --repo-version ..\version.json --output build\pyinstaller-version-info.txt
-python -m PyInstaller --noconfirm --clean --onefile --windowed --name JoyConBridgeHelper joycon_helper\__main__.py --paths . --distpath dist --workpath build --add-data "..\.ui-bundle;.ui-bundle" --add-data "..\.ui-bundle-dark;.ui-bundle-dark" --version-file build\pyinstaller-version-info.txt --hidden-import serial.tools.list_ports_windows
+python -m PyInstaller --noconfirm --clean --onefile --windowed --name BindBandit joycon_helper\__main__.py --paths . --distpath dist --workpath build --add-data "..\.\.ui-bundle;.ui-bundle" --add-data "..\.\.ui-bundle-dark;.ui-bundle-dark" --version-file build\pyinstaller-version-info.txt --hidden-import serial.tools.list_ports_windows
 ```
 
-The executable is written to `helper-app\dist\JoyConBridgeHelper.exe`.
+The executable is written to `helper-app\dist\BindBandit.exe`.
 
 The repo version in `..\version.json` increments on each commit. CI adds the push/run number on top of that when it builds the downloadable `.exe` artifact.
 

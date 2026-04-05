@@ -945,7 +945,7 @@ def get_profiles_dir() -> Path:
         base = Path(os.environ.get("APPDATA", ""))
     else:
         base = Path.home() / ".config"
-    d = base / "JoyConBridge" / "m913"
+    d = base / "BindBandit" / "m913"
     d.mkdir(parents=True, exist_ok=True)
     return d
 

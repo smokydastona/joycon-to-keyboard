@@ -1,6 +1,6 @@
 # Helper App UI Pack (Tkinter)
 
-This folder provides requested UI artifacts for the **helper app** (`helper-app/joycon_helper/app.py`).
+This folder provides requested UI artifacts for the **Bind Bandit** app (`helper-app/joycon_helper/app.py`).
 
 Deliverables in this pack:
 
@@ -74,7 +74,7 @@ Goal: keep the current helper app UX, but make it easy to understand where thing
 
 ```
 +-----------------------------------------------------------------------------------+
-| JoyCon Bridge Helper                                              [Connect/Disc] |
+| Bind Bandit                                                       [Connect/Disc] |
 | Port [ COMx v ]  Baud [115200]  [Refresh]  [Connect/Disconnect]     BT: connected |
 +---------------------------------------------+-------------------------------------+
 | Tabs                                        | Actions                             |

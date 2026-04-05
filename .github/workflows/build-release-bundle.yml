@@ -132,14 +132,14 @@ jobs:
         shell: pwsh
         working-directory: helper-app
         run: |
-          python -m PyInstaller --noconfirm --clean --onefile --windowed --name JoyConBridgeHelper joycon_helper/__main__.py --paths . --distpath dist --workpath build --add-data "../.ui-bundle;.ui-bundle" --add-data "../.ui-bundle-dark;.ui-bundle-dark" --version-file build/pyinstaller-version-info.txt --hidden-import serial.tools.list_ports_windows
+          python -m PyInstaller --noconfirm --clean --onefile --windowed --name BindBandit joycon_helper/__main__.py --paths . --distpath dist --workpath build --add-data "../.ui-bundle;.ui-bundle" --add-data "../.ui-bundle-dark;.ui-bundle-dark" --version-file build/pyinstaller-version-info.txt --hidden-import serial.tools.list_ports_windows
 
       - name: Collect helper app outputs
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path bundle/helper-app | Out-Null
           Copy-Item helper-app/README.md bundle/helper-app/README.md
-          Copy-Item helper-app/dist/JoyConBridgeHelper.exe bundle/helper-app/JoyConBridgeHelper.exe
+          Copy-Item helper-app/dist/BindBandit.exe bundle/helper-app/BindBandit.exe
           Set-Content -Path bundle/helper-app/VERSION.txt -Value "${{ needs.version-metadata.outputs.build_version }}"
 
       - name: Upload helper app artifact
@@ -187,7 +187,7 @@ jobs:
           Contents:
           - firmware/esp32-hid-host-uart: ESP32 Classic-BT host build outputs
           - firmware/esp32s3-usb-kbd: ESP32-S3 USB keyboard build outputs
-          - helper-app/JoyConBridgeHelper.exe: packaged Windows helper app
+          - helper-app/BindBandit.exe: packaged Windows helper app
 
           The firmware folders include flasher_args.json and the generated binaries needed for ESP-IDF flashing.
           EOF
@@ -262,7 +262,7 @@ jobs:
           ESP32_BIN=$(find release-bundle/firmware/esp32-hid-host-uart -maxdepth 1 -name '*.bin' ! -name 'bootloader.bin' ! -name 'partition-table.bin' | head -n1)
 
           ASSETS=()
-          ASSETS+=("release-bundle/helper-app/JoyConBridgeHelper.exe")
+          ASSETS+=("release-bundle/helper-app/BindBandit.exe")
           if [ -n "$S3_BIN" ]; then
             cp "$S3_BIN" release-bundle/esp32s3-usb-kbd.bin
             ASSETS+=("release-bundle/esp32s3-usb-kbd.bin")

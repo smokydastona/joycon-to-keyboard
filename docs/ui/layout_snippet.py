@@ -15,7 +15,7 @@ from tkinter.scrolledtext import ScrolledText
 
 
 def build_ui(root: tk.Tk) -> None:
-    root.title("JoyCon Bridge Helper")
+    root.title("Bind Bandit")
     root.geometry("980x680")
 
     top = tk.Frame(root)

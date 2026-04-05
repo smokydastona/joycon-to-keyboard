@@ -320,7 +320,7 @@ def _share_code_to_profile(code: str) -> dict:
 class OverlayWindow(tk.Toplevel):
     def __init__(self, parent: tk.Tk, theme: Optional[dict] = None) -> None:
         super().__init__(parent)
-        self.title("JoyCon Overlay")
+        self.title("Bind Bandit Overlay")
         self.geometry("280x120")
         self.attributes("-topmost", True)
         try:
@@ -345,7 +345,7 @@ class OverlayWindow(tk.Toplevel):
 
         tk.Label(
             frm,
-            text="JoyCon Bridge Overlay",
+            text="Bind Bandit Overlay",
             font=(typo.get("font_family", "Segoe UI"), 11, "bold"),
             bg=colors["bg"],
             fg=colors["text"],
@@ -378,7 +378,7 @@ class OverlayWindow(tk.Toplevel):
 class App(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
-        self.title("JoyCon Bridge Helper")
+        self.title("Bind Bandit")
         self.geometry("980x720")
 
         # Window icon — look next to the exe (frozen), otherwise next to this file.
@@ -4968,7 +4968,7 @@ class App(tk.Tk):
 
 
 def main() -> None:
-    log.info("Starting JoyCon Bridge Helper")
+    log.info("Starting Bind Bandit")
     try:
         app = App()
     except Exception as e:
