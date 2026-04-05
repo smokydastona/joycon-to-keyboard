@@ -23,6 +23,21 @@ Until then, entries are grouped by date.
 - **Visual event timeline** (Input Test tab): horizontal canvas showing the last 5 seconds of input events as colored marks with a time axis.
 - Theme version 2 with new state color tokens: `active`, `conflict`, `modified`, `selected`, `pulse_bright`, `timeline_press`, `timeline_release`.
 
+- **Undo / Redo** (Ctrl+Z / Ctrl+Y): stack-based profile change history (up to 50 levels); buttons in the status bar.
+- **Guided Setup wizard**: step-by-step Toplevel dialog learns 7 controller buttons and auto-binds WASD/Space/Shift/Ctrl.
+- **Intent-based mapping**: right-click "What should X do?" menu with 14 common game actions (Jump/Space, Sprint/Shift, etc.).
+- **Smart Defaults**: auto-applies WASD/Space/Shift/Ctrl/E/R/V to D-pad + face buttons when a controller connects and profile is mostly empty.
+- **Smart Search**: search bar in keymap editor filters hotspots by name, output, or mapping type; matching hotspots get a dashed highlight ring.
+- **Sandbox mode**: checkbox to enter temporary playground mode; on exit, user chooses to keep or discard changes.
+- **Ghost labels on hover**: faint italic tooltip follows cursor over the controller diagram showing hotspot name + current output.
+- **Visual layer stack**: row of badges below layer radio buttons displaying each layer's name, mode, and mapping count.
+- **Explain mapping dialog**: right-click → shows full input→output chain, conflicts, and layer overrides in a scrollable Toplevel.
+- **Lock critical inputs**: right-click Lock/Unlock prevents accidental unbinding; locked hotspots require yes/no confirmation.
+- **Feedback sounds**: optional Windows beep on bind (800 Hz), unbind (400 Hz), error (300 Hz), undo (600 Hz); background thread, graceful fallback.
+- **Adaptive UI (Simple/Advanced)**: toggle hides layers, chords, Macros/Stick/Share tabs in simple mode for cleaner first-time experience.
+- **Mode indicator**: always-visible status bar showing active slot, layer, bind/learn mode, sandbox, UI mode, undo depth; refreshes every 300 ms.
+- **Community presets** (Share tab): three built-in mapping presets (FPS/Shooter, Platformer, RPG/Action) with one-click apply.
+
 - **Press-to-bind remapping** (helper app + firmware):
   - New `remap_hid` mapping type: bypasses compiled `keymap.c` entirely, sends arbitrary USB HID modifier + keycode directly.
   - Controller tab "Bind key" button: click a hotspot, press any keyboard key, instantly mapped.

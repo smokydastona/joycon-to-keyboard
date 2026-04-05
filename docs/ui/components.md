@@ -110,3 +110,62 @@ Right-click any hotspot to get a context menu with:
 - Reset to passthrough — clear custom mapping
 - Clear binding — remove the hotspot entirely
 - Disable — set mapping to `disable` type
+- What should X do? — intent-based mapping menu (common game actions)
+- Explain mapping — show full input→output chain in a dialog
+- Lock/Unlock — prevent accidental unbinding of critical inputs
+
+## Undo / Redo (Ctrl+Z / Ctrl+Y)
+
+A stack-based undo/redo system tracks profile changes. Up to 50 states are stored as JSON snapshots. The status bar shows undo depth. Undo/redo buttons are in the bottom status bar.
+
+## Mode indicator (status bar)
+
+An always-visible bottom bar showing: active slot, current layer, bind/learn mode, sandbox status, UI mode (simple/advanced), and undo depth. Refreshes every 300 ms.
+
+## Adaptive UI (Simple / Advanced)
+
+A toggle in the status bar switches between simple and advanced modes. Simple mode hides: layer configuration, chord section, Macros/Stick/Share tabs, and other power-user widgets. This reduces overwhelm for first-time users.
+
+## Guided setup wizard
+
+A Toplevel dialog that walks through 7 common game actions (Forward, Back, Left, Right, Jump, Sprint, Crouch). Each step prompts the user to press a controller button, then auto-binds a default WASD/Space/Shift/Ctrl mapping. Can be opened from the "Guided Setup" button in the keymap editor.
+
+## Intent-based mapping
+
+Right-click a hotspot → "What should X do?" shows a menu of 14 common game actions (Move Forward/W, Jump/Space, Sprint/Shift, etc.). Selecting one auto-applies a `remap_hid` mapping.
+
+## Smart defaults
+
+Automatically applies WASD+Space+Shift+Ctrl+E+R+V default mappings to common hotspots (D-pad, face buttons) when a controller connects and the profile is mostly empty.
+
+## Smart search (keymap editor)
+
+A search bar above the controller diagram filters hotspots by name, output key name, or mapping type. Matching hotspots get a dashed accent-colored ring on the canvas.
+
+## Sandbox mode
+
+A checkbox that enters a "playground" mode — all changes are temporary. When disabled, the user is asked whether to keep or discard changes. Snapshot/restore pattern.
+
+## Ghost labels (hover)
+
+Moving the mouse over the controller diagram shows a faint italic tooltip near the hovered hotspot, displaying its name and current mapping output.
+
+## Visual layer stack
+
+A row of labeled badges below the layer radio buttons showing each layer's name, mode, and mapping count. Updates when layers are added/removed or mappings changed.
+
+## Explain mapping dialog
+
+A Toplevel dialog showing the full mapping chain for a hotspot: input name → key_id → mapping type → output → conflicts → layer overrides. Opened from the right-click context menu.
+
+## Lock critical inputs
+
+A confirmation dialog prevents accidental unbinding of locked hotspots. Lock/unlock via the right-click context menu. Locked hotspots require a yes/no confirmation before reset/clear/disable.
+
+## Feedback sounds
+
+Optional Windows beep sounds on bind (800 Hz), unbind (400 Hz), error (300 Hz), and undo (600 Hz). Uses `winsound.Beep` in a background thread. Gracefully degrades on non-Windows platforms.
+
+## Community presets (Share tab)
+
+Three built-in preset profiles: FPS/Shooter, Platformer, and RPG/Action. Each applies a ready-made set of `remap_hid` mappings to known hotspots. Requires confirmation before applying.

@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import base64
+import copy
 import json
 import logging
 import math
 import sys
+import threading
 import tkinter as tk
 import tkinter.ttk as ttk
 import time
@@ -13,6 +15,12 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog
 from tkinter.scrolledtext import ScrolledText
 from typing import Any, Dict, List, Optional, Tuple
+
+try:
+    import winsound  # Windows only
+    _HAS_WINSOUND = True
+except ImportError:
+    _HAS_WINSOUND = False
 
 from serial.tools import list_ports
 
@@ -445,11 +453,45 @@ class App(tk.Tk):
         self._event_timeline: List[Tuple[float, str, str]] = []
         self._timeline_canvas: Optional[tk.Canvas] = None
 
+        # ── Undo / Redo history ──
+        self._undo_stack: List[Tuple[str, str]] = []  # (description, json_snapshot)
+        self._redo_stack: List[Tuple[str, str]] = []
+        self._undo_max = 50
+        self._suppress_undo = False  # True during undo/redo to prevent re-push
+
+        # ── Adaptive UI mode (simple / advanced) ──
+        self._ui_mode = tk.StringVar(value="advanced")
+        self._advanced_widgets: List[tk.Widget] = []  # widgets hidden in simple mode
+
+        # ── Sandbox mode ──
+        self._sandbox_active = tk.BooleanVar(value=False)
+        self._sandbox_snapshot: Optional[str] = None
+
+        # ── Smart search ──
+        self._search_var = tk.StringVar(value="")
+        self._search_matches: List[str] = []  # hotspot names matching current search
+
+        # ── Guided wizard state ──
+        self._guided_window: Optional[tk.Toplevel] = None
+
+        # ── Lock critical inputs ──
+        self._locked_hotspots: set[str] = set()  # hotspot names that require confirmation to unbind
+
+        # ── Drag-and-drop state ──
+        self._drag_source: Optional[str] = None  # keysym being dragged
+        self._drag_item: Optional[int] = None  # canvas item id for drag ghost
+
         self._build_ui()
         self._apply_widget_theme()
         self._refresh_ports()
         self.after(50, self._drain_rx)
         self.after(80, self._pulse_tick)
+
+        # Bind undo/redo keyboard shortcuts
+        self.bind("<Control-z>", lambda _e: self._undo())
+        self.bind("<Control-y>", lambda _e: self._redo())
+        self.bind("<Control-Z>", lambda _e: self._undo())
+        self.bind("<Control-Y>", lambda _e: self._redo())
 
         # Check for updates in the background after the UI is visible.
         self._pending_update: Optional[Dict[str, str]] = None
@@ -726,6 +768,39 @@ class App(tk.Tk):
         self._fw_update_btn.pack(pady=(0, 4))
         self._pending_fw_update: Optional[Dict[str, Any]] = None
 
+        # ── Bottom status bar (mode indicator — always visible) ──
+        status_bar = tk.Frame(self, bg=self._colors.get("panel2", "#e2d0a8"), relief="sunken", bd=1)
+        status_bar.pack(side=tk.BOTTOM, fill=tk.X)
+        self._mode_indicator_var = tk.StringVar(value="")
+        tk.Label(
+            status_bar,
+            textvariable=self._mode_indicator_var,
+            bg=self._colors.get("panel2", "#e2d0a8"),
+            fg=self._colors.get("text", "#2a1f0e"),
+            font=(self._typo.get("font_family", "Segoe UI"), 8),
+            anchor="w",
+            padx=8,
+            pady=2,
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # Undo/redo buttons in status bar
+        self._redo_btn = ttk.Button(status_bar, text="Redo", command=self._redo, width=5, state="disabled")
+        self._redo_btn.pack(side=tk.RIGHT, padx=(0, 4), pady=1)
+        self._undo_btn = ttk.Button(status_bar, text="Undo", command=self._undo, width=5, state="disabled")
+        self._undo_btn.pack(side=tk.RIGHT, padx=(4, 0), pady=1)
+
+        # UI mode toggle in status bar
+        self._ui_mode_btn = ttk.Button(
+            status_bar, text="Simple mode",
+            command=self._toggle_ui_mode, width=12,
+        )
+        self._ui_mode_btn.pack(side=tk.RIGHT, padx=(4, 8), pady=1)
+
+        self._undo_history_var = tk.StringVar(value="History: (empty)")
+
+        # Start periodic mode indicator refresh
+        self.after(300, self._mode_indicator_tick)
+
     def _build_profile_tab(self) -> None:
         # ── Slot quick-select row ──
         slot_frame = ttk.LabelFrame(self.tab_profile, text="Profile slots")
@@ -922,6 +997,93 @@ class App(tk.Tk):
             wraplength=900,
             justify="left",
         ).pack(anchor="w", pady=(10, 0))
+
+        # ── Built-in community presets ──
+        preset_box = ttk.LabelFrame(self.tab_share, text="Quick-start presets")
+        preset_box.pack(fill=tk.X, padx=0, pady=(12, 0))
+        ttk.Label(
+            preset_box,
+            text="Load a ready-made mapping preset. This replaces the current profile mappings.",
+            wraplength=700,
+            justify="left",
+        ).pack(anchor="w", padx=8, pady=(4, 2))
+        preset_row = ttk.Frame(preset_box)
+        preset_row.pack(fill=tk.X, padx=8, pady=(0, 6))
+        for pname, pdesc in [
+            ("FPS / Shooter", "WASD + Space jump, Shift sprint, R reload, E interact, mouse-like aiming"),
+            ("Platformer", "Left/Right on D-pad, A jump, B attack, triggers for special"),
+            ("RPG / Action", "WASD move, 1-4 hotbar, E interact, I inventory, Space roll"),
+        ]:
+            ttk.Button(preset_row, text=pname, command=lambda n=pname: self._apply_community_preset(n)).pack(
+                side=tk.LEFT, padx=(0, 6)
+            )
+
+    def _apply_community_preset(self, name: str) -> None:
+        """Apply a built-in community preset mapping set."""
+        # Each preset defines (hotspot_name → hid_keycode) mappings.
+        presets: Dict[str, Dict[str, Tuple[int, int]]] = {
+            "FPS / Shooter": {
+                "DUp": (0, 0x1A),     # W
+                "DDown": (0, 0x16),   # S
+                "DLeft": (0, 0x04),   # A
+                "DRight": (0, 0x07),  # D
+                "A": (0, 0x2C),       # Space (jump)
+                "B": (0, 0x06),       # C (crouch)
+                "X": (0, 0x15),       # R (reload)
+                "Y": (0, 0x08),       # E (interact)
+                "L": (0, 0xE1),       # Shift (sprint)
+                "R": (0, 0xE0),       # Ctrl (aim)
+                "ZL": (0, 0x1D),      # Z
+                "ZR": (0, 0x09),      # F
+            },
+            "Platformer": {
+                "DLeft": (0, 0x50),   # Left arrow
+                "DRight": (0, 0x4F),  # Right arrow
+                "DUp": (0, 0x52),     # Up arrow
+                "DDown": (0, 0x51),   # Down arrow
+                "A": (0, 0x2C),       # Space (jump)
+                "B": (0, 0x1B),       # X (attack)
+                "X": (0, 0x1D),       # Z (special)
+                "Y": (0, 0x06),       # C (grab)
+                "L": (0, 0xE1),       # Shift (run)
+                "R": (0, 0xE0),       # Ctrl
+            },
+            "RPG / Action": {
+                "DUp": (0, 0x1A),     # W
+                "DDown": (0, 0x16),   # S
+                "DLeft": (0, 0x04),   # A
+                "DRight": (0, 0x07),  # D
+                "A": (0, 0x2C),       # Space (roll/dodge)
+                "B": (0, 0x08),       # E (interact)
+                "X": (0, 0x0C),       # I (inventory)
+                "Y": (0, 0x1E),       # 1 (hotbar)
+                "L": (0, 0xE1),       # Shift (sprint)
+                "R": (0, 0xE0),       # Ctrl (block)
+                "ZL": (0, 0x1F),      # 2 (hotbar)
+                "ZR": (0, 0x20),      # 3 (hotbar)
+            },
+        }
+        preset = presets.get(name)
+        if not preset:
+            return
+        if not messagebox.askyesno("Apply preset", f"Replace current mappings with '{name}' preset?"):
+            return
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return
+        hs = prof.setdefault("ui", {}).setdefault("hotspots", {})
+        mappings = prof.setdefault("mappings", {})
+        for hotspot, (mod, kc) in preset.items():
+            kid = hs.get(hotspot)
+            if kid is None:
+                continue
+            mappings[str(kid)] = {"type": "remap_hid", "mod": mod, "keycode": kc}
+        self._set_profile_obj(prof, undo_label=f"preset:{name}")
+        self._keymap_redraw()
+        self._rebuild_layer_stack()
+        self._play_sound("bind")
+        self._log_line(f"[host] Applied community preset: {name}")
 
     def _build_overlay_tab(self) -> None:
         ttk.Label(
@@ -1168,15 +1330,32 @@ class App(tk.Tk):
 
         top = ttk.Frame(box)
         top.pack(fill=tk.X, padx=8, pady=(6, 6))
-        ttk.Label(top, textvariable=self._keymap_status, wraplength=720, justify="left").pack(side=tk.LEFT)
+        ttk.Label(top, textvariable=self._keymap_status, wraplength=480, justify="left").pack(side=tk.LEFT)
 
         btns = ttk.Frame(top)
         btns.pack(side=tk.RIGHT)
-        ttk.Button(btns, text="Learn selected", command=self._keymap_begin_learn).pack(side=tk.LEFT)
+        ttk.Button(btns, text="Guided Setup", command=self._open_guided_wizard).pack(side=tk.LEFT)
+        ttk.Button(btns, text="Smart Defaults", command=self._apply_smart_defaults).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Button(btns, text="Learn selected", command=self._keymap_begin_learn).pack(side=tk.LEFT, padx=(6, 0))
         self._bind_btn = ttk.Button(btns, text="Bind key", command=self._keymap_begin_bind)
         self._bind_btn.pack(side=tk.LEFT, padx=(6, 0))
         ttk.Button(btns, text="Clear binding", command=self._keymap_clear_selected).pack(side=tk.LEFT, padx=(6, 0))
         ttk.Button(btns, text="Reset button", command=self._keymap_reset_selected).pack(side=tk.LEFT, padx=(6, 0))
+
+        # ── Search bar ──
+        search_row = ttk.Frame(box)
+        search_row.pack(fill=tk.X, padx=8, pady=(0, 4))
+        ttk.Label(search_row, text="Search:").pack(side=tk.LEFT)
+        search_entry = ttk.Entry(search_row, textvariable=self._search_var, width=20)
+        search_entry.pack(side=tk.LEFT, padx=(4, 8))
+        self._search_var.trace_add("write", self._on_search_changed)
+        ttk.Button(search_row, text="Clear", command=lambda: self._search_var.set("")).pack(side=tk.LEFT)
+
+        # Sandbox toggle
+        ttk.Checkbutton(
+            search_row, text="Sandbox mode", variable=self._sandbox_active,
+            command=self._toggle_sandbox,
+        ).pack(side=tk.RIGHT, padx=(12, 0))
 
         self._keymap_canvas = tk.Canvas(box, height=340, highlightthickness=1)
         self._keymap_canvas.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
@@ -1188,6 +1367,7 @@ class App(tk.Tk):
         self._keymap_canvas.bind("<Button-1>", self._keymap_on_click)
         self._keymap_canvas.bind("<Button-3>", self._keymap_on_right_click)
         self._keymap_canvas.bind("<Configure>", lambda _e: self._keymap_redraw())
+        self._keymap_canvas.bind("<Motion>", self._keymap_on_motion)
 
         # Bind keyboard events for press-to-bind.
         self.bind("<KeyPress>", self._on_keypress_bind)
@@ -1213,6 +1393,7 @@ class App(tk.Tk):
         # Layer activation config (only visible when a layer is selected)
         self._layer_cfg_frame = ttk.Frame(layer_box)
         self._layer_cfg_frame.pack(fill=tk.X, padx=8, pady=(0, 4))
+        self._advanced_widgets.append(self._layer_cfg_frame)
         ttk.Label(self._layer_cfg_frame, text="Activation key_id:").pack(side=tk.LEFT)
         self._layer_key_id_var = tk.StringVar(value="")
         ttk.Entry(self._layer_cfg_frame, textvariable=self._layer_key_id_var, width=6).pack(side=tk.LEFT, padx=(4, 8))
@@ -1224,6 +1405,13 @@ class App(tk.Tk):
         self._layer_name_var = tk.StringVar(value="")
         ttk.Entry(self._layer_cfg_frame, textvariable=self._layer_name_var, width=14).pack(side=tk.LEFT, padx=(4, 8))
         ttk.Button(self._layer_cfg_frame, text="Apply layer config", command=self._layer_apply_config).pack(side=tk.LEFT)
+
+        # Visual layer stack summary
+        self._layer_stack_frame = ttk.Frame(layer_box)
+        self._layer_stack_frame.pack(fill=tk.X, padx=8, pady=(0, 4))
+        self._layer_stack_labels: list[ttk.Label] = []
+        self._advanced_widgets.append(self._layer_stack_frame)
+        self._rebuild_layer_stack()
 
         # Minimal inline mapping controls for the selected/bound input key_id.
         map_box = ttk.LabelFrame(box, text="Selected input mapping")
@@ -1264,6 +1452,7 @@ class App(tk.Tk):
         # ── Chording section ──
         chord_box = ttk.LabelFrame(box, text="Chords (multi-button combos)")
         chord_box.pack(fill=tk.X, padx=8, pady=(0, 8))
+        self._advanced_widgets.append(chord_box)
         chord_info = ttk.Label(
             chord_box,
             text="Define combos: press multiple controller buttons simultaneously for a different action.",
@@ -1456,6 +1645,15 @@ class App(tk.Tk):
 
             text_col = _contrast_on(fill)
 
+            # Search highlight ring
+            is_search_match = name in self._search_matches
+            if is_search_match:
+                sr = radius + 5
+                c.create_oval(
+                    px - sr, py - sr, px + sr, py + sr,
+                    outline=self._colors.get("accent", "#4a7cc8"), width=3, dash=(6, 2),
+                )
+
             c.create_oval(px - radius, py - radius, px + radius, py + radius, outline=outline, width=2, fill=fill)
 
             # Pulse ring for active hotspots
@@ -1490,6 +1688,53 @@ class App(tk.Tk):
         if best[1] > (40.0 * 40.0):
             return None
         return best[0]
+
+    # ── Ghost labels on hover ──
+    _hover_ghost_name: Optional[str] = None
+
+    def _keymap_on_motion(self, e: tk.Event) -> None:
+        """Show a ghost tooltip near the hovered hotspot."""
+        name = self._keymap_pick_hotspot(float(getattr(e, "x", 0)), float(getattr(e, "y", 0)))
+        if name == self._hover_ghost_name:
+            return
+        self._hover_ghost_name = name
+        c = self._keymap_canvas
+        c.delete("ghost_tip")
+        if name is None:
+            return
+        pos = self._keymap_hotspot_px.get(name)
+        if pos is None:
+            return
+        px, py = pos
+        hs = self._keymap_hotspots()
+        kid = hs.get(name)
+        tip_parts = [name]
+        if kid is not None:
+            try:
+                prof = self._current_profile()
+                entry = prof.get("mappings", {}).get(str(kid))
+                if isinstance(entry, dict):
+                    et = entry.get("type", "")
+                    if et == "remap_hid":
+                        tip_parts.append(hid_keycodes.hid_to_name(entry.get("mod", 0), entry.get("keycode", 0)))
+                    elif et == "disable":
+                        tip_parts.append("Disabled")
+                    elif et == "macro":
+                        tip_parts.append(f"Macro {entry.get('id', '?')}")
+                    elif et == "tap_hold":
+                        tip_parts.append("Tap/Hold")
+                else:
+                    dk = hid_keycodes.DEFAULT_KEYMAP.get(kid)
+                    if dk:
+                        tip_parts.append(hid_keycodes.hid_to_name(dk[0], dk[1]))
+            except Exception:
+                pass
+        tip_text = " → ".join(tip_parts)
+        c.create_text(
+            px, py - 26, text=tip_text, tags="ghost_tip",
+            fill=self._colors.get("muted", "#888"),
+            font=(self._typo.get("font_family", "Segoe UI"), 7, "italic"),
+        )
 
     def _keymap_on_click(self, e: tk.Event) -> None:
         name = self._keymap_pick_hotspot(float(getattr(e, "x", 0)), float(getattr(e, "y", 0)))
@@ -1547,6 +1792,15 @@ class App(tk.Tk):
                 label=f"Bind keyboard key → {name}",
                 command=lambda: self._keymap_context_bind(name),
             )
+            menu.add_command(
+                label=f"What should {name} do?",
+                command=lambda: self._show_intent_menu(name, bound),
+            )
+            menu.add_separator()
+            menu.add_command(
+                label=f"Explain {name} mapping",
+                command=lambda: self._show_explain_dialog(name),
+            )
             menu.add_separator()
             menu.add_command(
                 label=f"Reset {name} to passthrough",
@@ -1560,6 +1814,17 @@ class App(tk.Tk):
                 label=f"Disable {name}",
                 command=lambda: self._keymap_context_disable(name),
             )
+            menu.add_separator()
+            if name in self._locked_hotspots:
+                menu.add_command(
+                    label=f"Unlock {name}",
+                    command=lambda: self._locked_hotspots.discard(name),
+                )
+            else:
+                menu.add_command(
+                    label=f"Lock {name} (prevent accidental changes)",
+                    command=lambda: self._locked_hotspots.add(name),
+                )
 
         try:
             menu.tk_popup(e.x_root, e.y_root)
@@ -1583,15 +1848,21 @@ class App(tk.Tk):
         self._keymap_status.set(f"[{name}] Press a keyboard key to bind… (Escape to cancel)")
 
     def _keymap_context_reset(self, name: str) -> None:
+        if not self._check_lock_before_unbind(name, "reset to passthrough"):
+            return
         self._keymap_selected_name = name
         self._keymap_reset_selected()
 
     def _keymap_context_clear(self, name: str) -> None:
+        if not self._check_lock_before_unbind(name, "clear binding"):
+            return
         self._keymap_selected_name = name
         self._keymap_clear_selected()
 
     def _keymap_context_disable(self, name: str) -> None:
         """Disable the selected hotspot's output."""
+        if not self._check_lock_before_unbind(name, "disable"):
+            return
         hs = self._keymap_hotspots()
         key_id = hs.get(name)
         if key_id is None:
@@ -1781,13 +2052,14 @@ class App(tk.Tk):
             prof["mappings"] = mappings
 
         mappings[str(key_id)] = {"type": "remap_hid", "mod": mod, "keycode": keycode}
-        self._set_profile_obj(prof)
+        self._set_profile_obj(prof, undo_label=f"bind {hotspot}")
 
         key_name = hid_keycodes.hid_to_name(mod, keycode)
         self._keymap_status.set(f"Bound {hotspot} → {key_name}")
         self._mapping_key_id.set(str(key_id))
         self._mapping_type.set("remap_hid")
         self._keymap_redraw()
+        self._play_sound("bind")
 
     def _keymap_reset_selected(self) -> None:
         """Remove the mapping for the currently selected hotspot (revert to passthrough)."""
@@ -1927,6 +2199,7 @@ class App(tk.Tk):
         self._set_profile_obj(prof)
         self._layer_edit_index.set(idx)
         self._keymap_redraw()
+        self._rebuild_layer_stack()
         self._log_line(f"[host] Added layer {idx + 1}")
 
     def _layer_remove(self) -> None:
@@ -1946,6 +2219,7 @@ class App(tk.Tk):
         self._set_profile_obj(prof)
         self._layer_edit_index.set(-1)
         self._keymap_redraw()
+        self._rebuild_layer_stack()
         self._log_line(f"[host] Removed layer '{removed.get('name', idx)}'")
 
     def _layer_apply_config(self) -> None:
@@ -1972,6 +2246,38 @@ class App(tk.Tk):
             layers[idx]["name"] = name
         self._set_profile_obj(prof)
         self._log_line(f"[host] Layer {idx + 1} config updated")
+
+    def _rebuild_layer_stack(self) -> None:
+        """Rebuild the visual layer stack summary (shows mapping counts per layer)."""
+        frame = getattr(self, "_layer_stack_frame", None)
+        if frame is None:
+            return
+        for lbl in self._layer_stack_labels:
+            lbl.destroy()
+        self._layer_stack_labels.clear()
+
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return
+        layers = prof.get("layers", [])
+        if not isinstance(layers, list):
+            layers = []
+        base_count = len(prof.get("mappings", {}))
+
+        desc = f"  Base  ({base_count} mappings)"
+        lbl = ttk.Label(frame, text=desc, relief="ridge", padding=(6, 2))
+        lbl.pack(side=tk.LEFT, padx=(0, 4))
+        self._layer_stack_labels.append(lbl)
+
+        for i, layer in enumerate(layers):
+            name = layer.get("name", f"layer{i+1}")
+            mode = layer.get("mode", "hold")
+            cnt = len(layer.get("mappings", {}))
+            txt = f"  {name} ({mode}, {cnt} overrides)  "
+            lbl = ttk.Label(frame, text=txt, relief="groove", padding=(6, 2))
+            lbl.pack(side=tk.LEFT, padx=(0, 4))
+            self._layer_stack_labels.append(lbl)
 
     def _build_input_test_tab(self) -> None:
         """Build the Input Test tab: live event log + visual timeline + active key summary."""
@@ -2068,6 +2374,663 @@ class App(tk.Tk):
             c.create_text(x, pad + 6, text=label, fill=color,
                          font=(self._typo.get("font_family", "Segoe UI"), 7), anchor="n")
 
+    # ------------------------------------------------------------------
+    # Undo / Redo
+    # ------------------------------------------------------------------
+
+    def _undo(self) -> None:
+        if not self._undo_stack:
+            return
+        # Save current state to redo stack
+        current = self.profile_text.get("1.0", "end").strip()
+        desc, snapshot = self._undo_stack.pop()
+        self._redo_stack.append((desc, current))
+        self._suppress_undo = True
+        try:
+            self.profile_text.delete("1.0", "end")
+            self.profile_text.insert("1.0", snapshot)
+            try:
+                prof = json.loads(snapshot)
+                self._refresh_macro_list()
+                self._stick_load_from_profile(prof)
+                self._keymap_refresh_visuals()
+            except Exception:
+                pass
+        finally:
+            self._suppress_undo = False
+        self._update_undo_ui()
+        self._play_sound("undo")
+        self._log_line(f"[host] Undo: {desc}")
+
+    def _redo(self) -> None:
+        if not self._redo_stack:
+            return
+        current = self.profile_text.get("1.0", "end").strip()
+        desc, snapshot = self._redo_stack.pop()
+        self._undo_stack.append((desc, current))
+        self._suppress_undo = True
+        try:
+            self.profile_text.delete("1.0", "end")
+            self.profile_text.insert("1.0", snapshot)
+            try:
+                prof = json.loads(snapshot)
+                self._refresh_macro_list()
+                self._stick_load_from_profile(prof)
+                self._keymap_refresh_visuals()
+            except Exception:
+                pass
+        finally:
+            self._suppress_undo = False
+        self._update_undo_ui()
+        self._play_sound("undo")
+        self._log_line(f"[host] Redo: {desc}")
+
+    def _update_undo_ui(self) -> None:
+        """Update undo/redo button states and history display."""
+        try:
+            if hasattr(self, "_undo_btn"):
+                self._undo_btn.configure(state="normal" if self._undo_stack else "disabled")
+            if hasattr(self, "_redo_btn"):
+                self._redo_btn.configure(state="normal" if self._redo_stack else "disabled")
+            if hasattr(self, "_undo_history_var"):
+                if self._undo_stack:
+                    last_5 = self._undo_stack[-5:]
+                    lines = [f"  {d}" for d, _s in reversed(last_5)]
+                    self._undo_history_var.set("History: " + " ← ".join(lines))
+                else:
+                    self._undo_history_var.set("History: (empty)")
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------
+    # Mode indicator / status bar
+    # ------------------------------------------------------------------
+
+    def _update_mode_indicator(self) -> None:
+        """Update the always-visible status bar at bottom."""
+        if not hasattr(self, "_mode_indicator_var"):
+            return
+        parts = []
+
+        # Active slot
+        try:
+            parts.append(f"Slot {self.slot_var.get()}")
+        except Exception:
+            pass
+
+        # Current layer
+        try:
+            li = self._layer_edit_index.get()
+            if li < 0:
+                parts.append("Base Layer")
+            else:
+                parts.append(f"Layer {li + 1}")
+        except Exception:
+            pass
+
+        # Bind mode
+        if self._bind_mode:
+            parts.append("BIND MODE")
+        elif self._keymap_learn_name:
+            parts.append("LEARN MODE")
+
+        # Sandbox
+        if self._sandbox_active.get():
+            parts.append("SANDBOX")
+
+        # UI mode
+        parts.append(f"UI: {self._ui_mode.get()}")
+
+        # Undo depth
+        if self._undo_stack:
+            parts.append(f"Undo: {len(self._undo_stack)}")
+
+        self._mode_indicator_var.set("  │  ".join(parts))
+
+    def _mode_indicator_tick(self) -> None:
+        self._update_mode_indicator()
+        self.after(300, self._mode_indicator_tick)
+
+    # ------------------------------------------------------------------
+    # Adaptive UI — simple / advanced mode
+    # ------------------------------------------------------------------
+
+    def _toggle_ui_mode(self) -> None:
+        if self._ui_mode.get() == "advanced":
+            self._ui_mode.set("simple")
+            self._ui_mode_btn.configure(text="Advanced mode")
+        else:
+            self._ui_mode.set("advanced")
+            self._ui_mode_btn.configure(text="Simple mode")
+        self._apply_ui_mode()
+
+    def _apply_ui_mode(self) -> None:
+        """Show/hide widgets based on current UI mode."""
+        simple = self._ui_mode.get() == "simple"
+        for w in self._advanced_widgets:
+            try:
+                if simple:
+                    w.pack_forget()
+                else:
+                    w.pack(fill=tk.X, padx=8, pady=(0, 4))
+            except Exception:
+                pass
+
+        # Hide/show full tabs in simple mode
+        try:
+            if simple:
+                # Hide Macros, Stick, Share tabs (keep Profile, Controller, Input Test, Overlay)
+                for tab_name in ("Macros", "Stick", "Share"):
+                    for i in range(self.tabs.index("end")):
+                        if self.tabs.tab(i, "text") == tab_name:
+                            self.tabs.hide(i)
+                            break
+            else:
+                # Show all tabs
+                for i in range(self.tabs.index("end")):
+                    self.tabs.add(self.tabs.tabs()[i])
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------
+    # Sandbox mode
+    # ------------------------------------------------------------------
+
+    def _toggle_sandbox(self) -> None:
+        if self._sandbox_active.get():
+            # Entering sandbox: snapshot current profile
+            self._sandbox_snapshot = self.profile_text.get("1.0", "end").strip()
+            self._log_line("[host] Sandbox mode ON — changes are temporary")
+        else:
+            # Exiting sandbox without applying
+            if self._sandbox_snapshot is not None:
+                confirm = messagebox.askyesno(
+                    "Exit Sandbox",
+                    "Apply sandbox changes to the real profile?\n\n"
+                    "Yes = keep changes\nNo = discard changes",
+                )
+                if not confirm and self._sandbox_snapshot:
+                    self.profile_text.delete("1.0", "end")
+                    self.profile_text.insert("1.0", self._sandbox_snapshot)
+                    try:
+                        prof = json.loads(self._sandbox_snapshot)
+                        self._refresh_macro_list()
+                        self._stick_load_from_profile(prof)
+                        self._keymap_refresh_visuals()
+                    except Exception:
+                        pass
+                    self._log_line("[host] Sandbox changes discarded")
+                else:
+                    self._log_line("[host] Sandbox changes applied")
+            self._sandbox_snapshot = None
+
+    # ------------------------------------------------------------------
+    # Smart Search
+    # ------------------------------------------------------------------
+
+    def _on_search_changed(self, *_args: Any) -> None:
+        """Filter and highlight hotspots matching the search query."""
+        query = self._search_var.get().strip().lower()
+        if not query:
+            self._search_matches = []
+            self._keymap_redraw()
+            return
+
+        hs = self._keymap_hotspots()
+        matches: List[str] = []
+
+        for name, _nx, _ny in KEYMAP_HOTSPOTS:
+            # Match against hotspot name
+            if query in name.lower():
+                matches.append(name)
+                continue
+
+            # Match against output key name
+            key_id = hs.get(name)
+            if key_id is not None:
+                out = self._get_mapping_output(key_id)
+                if out is not None:
+                    out_name = hid_keycodes.hid_to_name(out[0], out[1]).lower()
+                    if query in out_name:
+                        matches.append(name)
+                        continue
+
+                # Match against mapping type
+                try:
+                    prof = self._current_profile()
+                    entry = prof.get("mappings", {}).get(str(key_id))
+                    if isinstance(entry, dict):
+                        et = entry.get("type", "")
+                        if query in et.lower():
+                            matches.append(name)
+                            continue
+                except Exception:
+                    pass
+
+        self._search_matches = matches
+        self._keymap_redraw()
+
+    # ------------------------------------------------------------------
+    # Guided Mapping Wizard
+    # ------------------------------------------------------------------
+
+    # Common action presets for the guided wizard and intent-based mapping
+    INTENT_PRESETS: List[Tuple[str, str, int, int]] = [
+        # (label, description, mod, keycode)
+        ("Move Forward", "W key", 0, 0x1A),
+        ("Move Back", "S key", 0, 0x16),
+        ("Move Left", "A key", 0, 0x04),
+        ("Move Right", "D key", 0, 0x07),
+        ("Jump", "Space", 0, 0x2C),
+        ("Sprint", "Left Shift", 0x02, 0),
+        ("Crouch", "Left Ctrl", 0x01, 0),
+        ("Reload", "R key", 0, 0x15),
+        ("Interact", "E key", 0, 0x08),
+        ("Melee", "V key", 0, 0x19),
+        ("Aim / ADS", "Right Mouse (not HID — use custom)", 0, 0),
+        ("Open Map", "M key", 0, 0x10),
+        ("Inventory", "Tab", 0, 0x2B),
+        ("Custom key…", "Press any key to bind", 0, 0),
+    ]
+
+    def _open_guided_wizard(self) -> None:
+        """Open the guided mapping setup wizard."""
+        if self._guided_window is not None:
+            try:
+                self._guided_window.lift()
+            except Exception:
+                self._guided_window = None
+            if self._guided_window is not None:
+                return
+
+        win = tk.Toplevel(self)
+        win.title("Guided Setup — Let's set up your controller")
+        win.geometry("500x400")
+        win.attributes("-topmost", True)
+        win.protocol("WM_DELETE_WINDOW", lambda: self._close_guided_wizard(win))
+        self._guided_window = win
+
+        colors = self._colors
+        win.configure(bg=colors["bg"])
+
+        self._guided_steps = [
+            ("Move Forward", "Push the stick or press the button for FORWARD", "D-UP"),
+            ("Move Back", "Press the button for BACK", "D-DN"),
+            ("Move Left", "Press the button for LEFT", "D-L"),
+            ("Move Right", "Press the button for RIGHT", "D-R"),
+            ("Jump", "Press the button for JUMP", "A"),
+            ("Sprint", "Press the button for SPRINT", "ZL"),
+            ("Crouch", "Press the button for CROUCH", "ZR"),
+        ]
+        self._guided_step_idx = 0
+        self._guided_results: List[Tuple[str, str, int]] = []  # (action, hotspot, key_id)
+
+        tk.Label(
+            win, text="🎮 Guided Controller Setup",
+            bg=colors["bg"], fg=colors["text"],
+            font=(self._typo.get("font_family", "Segoe UI"), 14, "bold"),
+        ).pack(pady=(16, 8))
+
+        self._guided_prompt_var = tk.StringVar(value="")
+        self._guided_progress_var = tk.StringVar(value="")
+
+        tk.Label(
+            win, textvariable=self._guided_progress_var,
+            bg=colors["bg"], fg=colors["muted"],
+            font=(self._typo.get("font_family", "Segoe UI"), 9),
+        ).pack()
+
+        tk.Label(
+            win, textvariable=self._guided_prompt_var,
+            bg=colors["bg"], fg=colors["text"],
+            font=(self._typo.get("font_family", "Segoe UI"), 12),
+            wraplength=440,
+        ).pack(pady=(20, 10))
+
+        self._guided_status_var = tk.StringVar(value="Waiting for controller input…")
+        tk.Label(
+            win, textvariable=self._guided_status_var,
+            bg=colors["bg"], fg=colors["accent2"],
+            font=(self._typo.get("font_family", "Segoe UI"), 10),
+        ).pack(pady=(10, 0))
+
+        btn_frame = tk.Frame(win, bg=colors["bg"])
+        btn_frame.pack(side=tk.BOTTOM, pady=(0, 16))
+        ttk.Button(btn_frame, text="Skip this step", command=self._guided_skip).pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(btn_frame, text="Cancel", command=lambda: self._close_guided_wizard(win)).pack(side=tk.LEFT)
+
+        self._guided_advance_prompt()
+
+    def _guided_advance_prompt(self) -> None:
+        if self._guided_step_idx >= len(self._guided_steps):
+            self._guided_finish()
+            return
+
+        action, prompt, _hotspot = self._guided_steps[self._guided_step_idx]
+        total = len(self._guided_steps)
+        self._guided_progress_var.set(f"Step {self._guided_step_idx + 1} of {total}")
+        self._guided_prompt_var.set(prompt)
+        self._guided_status_var.set("Press the controller button now…")
+        # Set learn mode for the guided hotspot
+        self._keymap_learn_name = _hotspot
+        self._keymap_selected_name = _hotspot
+        self._keymap_redraw()
+
+    def _guided_on_input(self, key_id: int) -> None:
+        """Called when a controller button is pressed during guided setup."""
+        if self._guided_window is None or self._guided_step_idx >= len(self._guided_steps):
+            return
+
+        action, _prompt, hotspot = self._guided_steps[self._guided_step_idx]
+        self._guided_results.append((action, hotspot, key_id))
+        self._guided_status_var.set(f"Got key_id={key_id} for {action}!")
+
+        # Bind the hotspot
+        self._keymap_bind_selected(key_id)
+
+        # Apply default mapping for this action
+        defaults = {
+            "Move Forward": (0, 0x1A),  # W
+            "Move Back": (0, 0x16),  # S
+            "Move Left": (0, 0x04),  # A
+            "Move Right": (0, 0x07),  # D
+            "Jump": (0, 0x2C),  # Space
+            "Sprint": (0x02, 0),  # Left Shift
+            "Crouch": (0x01, 0),  # Left Ctrl
+        }
+        if action in defaults:
+            mod, kc = defaults[action]
+            try:
+                prof = self._current_profile()
+                mappings = prof.setdefault("mappings", {})
+                if not isinstance(mappings, dict):
+                    mappings = {}
+                    prof["mappings"] = mappings
+                mappings[str(key_id)] = {"type": "remap_hid", "mod": mod, "keycode": kc}
+                self._set_profile_obj(prof, undo_label=f"guided: {action}")
+            except Exception:
+                pass
+
+        self._guided_step_idx += 1
+        self.after(600, self._guided_advance_prompt)
+
+    def _guided_skip(self) -> None:
+        self._keymap_learn_name = None
+        self._guided_step_idx += 1
+        self._guided_advance_prompt()
+
+    def _guided_finish(self) -> None:
+        if self._guided_window is None:
+            return
+        self._guided_prompt_var.set("Setup complete!")
+        self._guided_status_var.set(
+            f"Mapped {len(self._guided_results)} buttons. You can fine-tune in the Controller tab."
+        )
+        self._guided_progress_var.set("Done!")
+        self._keymap_learn_name = None
+        self._keymap_redraw()
+        self._log_line(f"[host] Guided setup complete: {len(self._guided_results)} buttons mapped")
+
+    def _close_guided_wizard(self, win: tk.Toplevel) -> None:
+        self._keymap_learn_name = None
+        self._guided_window = None
+        try:
+            win.destroy()
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------
+    # Intent-Based Mapping
+    # ------------------------------------------------------------------
+
+    def _show_intent_menu(self, hotspot: str, key_id: int) -> None:
+        """Show 'What should this button do?' menu for intent-based mapping."""
+        menu = tk.Menu(self, tearoff=0)
+        menu.add_command(label="─ What should this button do? ─", state="disabled")
+        menu.add_separator()
+
+        for label, desc, mod, kc in self.INTENT_PRESETS:
+            if label == "Custom key…":
+                menu.add_separator()
+                menu.add_command(
+                    label=f"{label}  ({desc})",
+                    command=lambda h=hotspot: self._keymap_context_bind(h),
+                )
+            elif kc == 0 and mod == 0:
+                # Not a valid HID mapping (like "Aim / ADS")
+                menu.add_command(label=f"{label}  ({desc})", state="disabled")
+            else:
+                menu.add_command(
+                    label=f"{label}  →  {desc}",
+                    command=lambda m=mod, k=kc, lbl=label: self._apply_intent(hotspot, key_id, m, k, lbl),
+                )
+
+        try:
+            # Show at hotspot position
+            px, py = self._keymap_hotspot_px.get(hotspot, (0, 0))
+            cx = self._keymap_canvas.winfo_rootx() + int(px)
+            cy = self._keymap_canvas.winfo_rooty() + int(py)
+            menu.tk_popup(cx, cy)
+        except Exception:
+            menu.tk_popup(self.winfo_pointerx(), self.winfo_pointery())
+        finally:
+            menu.grab_release()
+
+    def _apply_intent(self, hotspot: str, key_id: int, mod: int, keycode: int, label: str) -> None:
+        """Apply an intent-based mapping."""
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return
+        mappings = prof.setdefault("mappings", {})
+        if not isinstance(mappings, dict):
+            mappings = {}
+            prof["mappings"] = mappings
+        mappings[str(key_id)] = {"type": "remap_hid", "mod": mod, "keycode": keycode}
+        self._set_profile_obj(prof, undo_label=f"intent: {label}")
+        key_name = hid_keycodes.hid_to_name(mod, keycode)
+        self._keymap_status.set(f"Mapped {hotspot} → {label} ({key_name})")
+        self._keymap_redraw()
+
+    # ------------------------------------------------------------------
+    # Smart Defaults
+    # ------------------------------------------------------------------
+
+    def _apply_smart_defaults(self) -> None:
+        """Apply sensible default mappings when profile is empty."""
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return
+
+        mappings = prof.get("mappings", {})
+        if isinstance(mappings, dict) and mappings:
+            # Profile already has mappings, don't overwrite
+            return
+
+        hs = self._keymap_hotspots()
+        if not hs:
+            return
+
+        defaults: Dict[str, Tuple[int, int]] = {
+            "D-UP": (0, 0x1A),  # W
+            "D-DN": (0, 0x16),  # S
+            "D-L": (0, 0x04),  # A
+            "D-R": (0, 0x07),  # D
+            "A": (0, 0x2C),  # Space
+            "B": (0, 0x08),  # E
+            "X": (0, 0x15),  # R
+            "Y": (0, 0x19),  # V
+            "ZL": (0x02, 0),  # LShift
+            "ZR": (0x01, 0),  # LCtrl
+        }
+
+        mappings = prof.setdefault("mappings", {})
+        if not isinstance(mappings, dict):
+            mappings = {}
+            prof["mappings"] = mappings
+
+        applied = 0
+        for name, (mod, kc) in defaults.items():
+            key_id = hs.get(name)
+            if key_id is not None and str(key_id) not in mappings:
+                mappings[str(key_id)] = {"type": "remap_hid", "mod": mod, "keycode": kc}
+                applied += 1
+
+        if applied > 0:
+            self._set_profile_obj(prof, undo_label="smart defaults")
+            self._log_line(f"[host] Smart defaults applied: {applied} mappings")
+
+    # ------------------------------------------------------------------
+    # Lock Critical Inputs
+    # ------------------------------------------------------------------
+
+    def _is_locked(self, hotspot: str) -> bool:
+        return hotspot in self._locked_hotspots
+
+    def _check_lock_before_unbind(self, hotspot: str, action: str) -> bool:
+        """Return True if the action is allowed. Shows confirmation for locked hotspots."""
+        if hotspot not in self._locked_hotspots:
+            return True
+        return messagebox.askyesno(
+            "Locked Input",
+            f"'{hotspot}' is marked as a critical input.\n\n"
+            f"Are you sure you want to {action}?",
+        )
+
+    # ------------------------------------------------------------------
+    # Debug Chain View ("Why isn't this working?")
+    # ------------------------------------------------------------------
+
+    def _explain_mapping(self, hotspot: str) -> str:
+        """Build a human-readable explanation of the full mapping chain for a hotspot."""
+        hs = self._keymap_hotspots()
+        key_id = hs.get(hotspot)
+
+        lines: List[str] = [f"=== {hotspot} Mapping Chain ===", ""]
+
+        if key_id is None:
+            lines.append(f"1. Input: {hotspot} — NO key_id learned")
+            lines.append("   Status: Not configured. Use Learn to assign a controller button.")
+            return "\n".join(lines)
+
+        lines.append(f"1. Input: {hotspot} → key_id = {key_id}")
+
+        # Check if active
+        if key_id in self._active_key_ids:
+            lines.append("   Status: ACTIVE (button is held down)")
+        else:
+            lines.append("   Status: idle")
+
+        # Check mapping
+        try:
+            prof = self._current_profile()
+        except Exception:
+            lines.append("2. Mapping: ERROR — could not read profile")
+            return "\n".join(lines)
+
+        mappings = prof.get("mappings", {})
+        entry = mappings.get(str(key_id)) if isinstance(mappings, dict) else None
+
+        if entry is None or not isinstance(entry, dict):
+            lines.append("2. Mapping: passthrough (default keymap.c)")
+            dk = hid_keycodes.DEFAULT_KEYMAP.get(key_id)
+            if dk:
+                lines.append(f"3. Output: {hid_keycodes.hid_to_name(dk[0], dk[1])}")
+                lines.append("   Status: OK — key will be sent via default mapping")
+            else:
+                lines.append(f"3. Output: NONE (key_id {key_id} not in default keymap)")
+                lines.append("   Status: WARNING — this key_id has no default output")
+        else:
+            et = entry.get("type", "?")
+            lines.append(f"2. Mapping: {et}")
+
+            if et == "disable":
+                lines.append("3. Output: DISABLED — input is ignored")
+                lines.append("   Status: Intentionally disabled")
+            elif et == "remap_hid":
+                mod = entry.get("mod", 0)
+                kc = entry.get("keycode", 0)
+                lines.append(f"3. Output: {hid_keycodes.hid_to_name(mod, kc)} (mod=0x{mod:02X} keycode=0x{kc:02X})")
+                lines.append("   Status: OK — direct HID output")
+            elif et == "remap":
+                to = entry.get("to", 0)
+                dk = hid_keycodes.DEFAULT_KEYMAP.get(to)
+                if dk:
+                    lines.append(f"3. Output: remap to key_id={to} → {hid_keycodes.hid_to_name(dk[0], dk[1])}")
+                else:
+                    lines.append(f"3. Output: remap to key_id={to} → NOT IN KEYMAP")
+                    lines.append("   Status: WARNING — remap target not in default keymap")
+            elif et == "macro":
+                mid = entry.get("id", "?")
+                lines.append(f"3. Output: triggers macro '{mid}'")
+                macros = prof.get("macros", [])
+                found = any(m.get("id") == mid for m in macros if isinstance(m, dict))
+                if found:
+                    lines.append("   Status: OK — macro exists in profile")
+                else:
+                    lines.append(f"   Status: ERROR — macro '{mid}' not found in profile!")
+            elif et == "tap_hold":
+                tap = entry.get("tap", {})
+                hold = entry.get("hold", {})
+                hold_ms = entry.get("hold_ms", 300)
+                lines.append(f"3. Output (tap <{hold_ms}ms): {tap.get('type', '?')}")
+                if isinstance(hold, dict) and hold.get("type") == "remap_hid":
+                    hkc = hold.get("keycode", 0)
+                    hmod = hold.get("mod", 0)
+                    lines.append(f"   Output (hold >={hold_ms}ms): {hid_keycodes.hid_to_name(hmod, hkc)}")
+                lines.append("   Status: OK — dual-action mapping")
+
+        # Check for conflicts
+        conflicts = self._detect_conflicts()
+        for output_key, names in conflicts.items():
+            if hotspot in names:
+                others = [n for n in names if n != hotspot]
+                lines.append(f"")
+                lines.append(f"⚠ CONFLICT: Same output '{output_key}' shared with: {', '.join(others)}")
+
+        # Check layer overrides
+        layers = prof.get("layers", [])
+        if isinstance(layers, list):
+            for i, layer in enumerate(layers):
+                if isinstance(layer, dict):
+                    lm = layer.get("mappings", {})
+                    if isinstance(lm, dict) and str(key_id) in lm:
+                        lname = layer.get("name", f"Layer {i+1}")
+                        lines.append(f"")
+                        lines.append(f"Layer override: '{lname}' overrides this key_id")
+
+        return "\n".join(lines)
+
+    def _show_explain_dialog(self, hotspot: str) -> None:
+        """Show the mapping explanation in a dialog."""
+        text = self._explain_mapping(hotspot)
+        win = tk.Toplevel(self)
+        win.title(f"Mapping Details — {hotspot}")
+        win.geometry("500x350")
+        win.attributes("-topmost", True)
+        colors = self._colors
+        win.configure(bg=colors["bg"])
+
+        txt = ScrolledText(win, height=18, wrap="word")
+        txt.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
+        self._theme_scrolled_text(txt)
+        txt.insert("1.0", text)
+        txt.configure(state="disabled")
+
+        ttk.Button(win, text="Close", command=win.destroy).pack(pady=(0, 8))
+
+    # ── Feedback sounds ──
+    _sounds_enabled: bool = True
+
+    def _play_sound(self, kind: str = "bind") -> None:
+        """Play a short feedback sound (non-blocking). kind: bind, unbind, error, undo."""
+        if not _HAS_WINSOUND or not self._sounds_enabled:
+            return
+        freq_map = {"bind": (800, 60), "unbind": (400, 60), "error": (300, 120), "undo": (600, 50)}
+        freq, dur = freq_map.get(kind, (600, 60))
+        threading.Thread(target=winsound.Beep, args=(freq, dur), daemon=True).start()
+
     def _keymap_bind_selected(self, key_id: int) -> None:
         if not self._keymap_learn_name:
             return
@@ -2094,6 +3057,7 @@ class App(tk.Tk):
         self._mapping_key_id.set(str(int(key_id)))
         self._mapping_load_from_profile(int(key_id))
         self._keymap_status.set(f"Bound {learned_name} → key_id={int(key_id)}")
+        self._play_sound("bind")
 
     def _keymap_clear_selected(self) -> None:
         if not self._keymap_selected_name:
@@ -2203,7 +3167,20 @@ class App(tk.Tk):
             raise
         return _ensure_profile_defaults(obj)
 
-    def _set_profile_obj(self, obj: dict) -> None:
+    def _set_profile_obj(self, obj: dict, undo_label: str = "edit") -> None:
+        # Push current state to undo stack before overwriting
+        if not self._suppress_undo:
+            try:
+                old_raw = self.profile_text.get("1.0", "end").strip()
+                if old_raw:
+                    self._undo_stack.append((undo_label, old_raw))
+                    if len(self._undo_stack) > self._undo_max:
+                        self._undo_stack = self._undo_stack[-self._undo_max:]
+                    self._redo_stack.clear()
+            except Exception:
+                pass
+            self._update_undo_ui()
+
         obj = _ensure_profile_defaults(obj)
         self.profile_text.delete("1.0", "end")
         self.profile_text.insert("1.0", json.dumps(obj, indent=2, ensure_ascii=False))
@@ -2368,6 +3345,10 @@ class App(tk.Tk):
             if self._recording.get():
                 self._record_macro_event(pressed, key_id)
 
+            # Guided wizard captures input before normal learn flow.
+            if pressed and self._guided_window is not None:
+                self._guided_on_input(key_id)
+
             # Keymap editor learn mode: bind hotspot -> observed input key_id.
             if pressed and self._keymap_learn_name:
                 self._keymap_bind_selected(key_id)
@@ -2457,6 +3438,9 @@ class App(tk.Tk):
                     self._bt_connected_left = True
                 elif side == "R":
                     self._bt_connected_right = True
+
+                # Auto-apply smart defaults if profile is mostly empty.
+                self.after(500, self._apply_smart_defaults)
 
             elif state == "disconnected":
                 side = None
@@ -2741,8 +3725,10 @@ class App(tk.Tk):
                 "hold_ms": hold_ms,
             }
 
-        self._set_profile_obj(prof)
+        self._set_profile_obj(prof, undo_label="apply mapping")
         self._keymap_redraw()
+        self._rebuild_layer_stack()
+        self._play_sound("bind")
 
     def _share_export(self) -> None:
         try:

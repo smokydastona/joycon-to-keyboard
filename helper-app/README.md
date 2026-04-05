@@ -31,6 +31,19 @@ Current UI tabs:
   - **Tap-hold mapping**: a single button can produce different actions for quick tap vs long hold
   - **Chording**: define multi-button combos that trigger a single action when pressed simultaneously
   - Learn mode, clear binding, and reset-to-passthrough
+  - **Undo / Redo** (Ctrl+Z / Ctrl+Y): up to 50 levels of profile change history
+  - **Guided Setup wizard**: step-by-step walkthrough that auto-binds WASD/Space/Shift/Ctrl by pressing controller buttons
+  - **Intent-based mapping**: right-click → "What should this button do?" with 14 common game actions
+  - **Smart Defaults**: auto-applies sensible WASD mappings when a controller connects and profile is empty
+  - **Smart Search**: filter hotspots by name, output, or mapping type with highlighted matches on the diagram
+  - **Sandbox mode**: temporary playground mode — try changes without saving, then keep or discard
+  - **Ghost labels**: hover over the diagram to see faint tooltips with hotspot name and current mapping
+  - **Visual layer stack**: badges below the layer selector showing each layer's name, mode, and mapping count
+  - **Explain mapping**: right-click → full input→output chain dialog showing conflicts and layer overrides
+  - **Lock critical inputs**: prevent accidental unbinding with a right-click lock; locked buttons require confirmation
+  - **Feedback sounds**: optional Windows beep on bind/unbind/undo for tactile feedback
+  - **Adaptive UI**: toggle between Simple and Advanced modes; Simple hides layers, chords, macros tabs
+  - **Mode indicator**: always-visible status bar showing slot, layer, mode, sandbox, and undo depth
 - **Input Test**: live event log showing controller button presses/releases with timestamps, a summary of currently active keys, and a **visual event timeline** showing the last 5 seconds of input events as colored marks
 
 The Controller tab keymap artwork switches between four Joy-Con states based on BT status: disconnected (`joycons-none.png`), left only, right only, and both connected.
