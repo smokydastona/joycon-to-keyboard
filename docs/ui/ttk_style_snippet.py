@@ -7,6 +7,17 @@ Tkinter/ttk limitations to keep in mind:
 - Many widgets are OS-themed; exact colors vary by platform/theme.
 - ttk does not natively support rounded corners; use padding + flat relief.
 - A consistent look is still achievable by styling the key controls.
+
+Sketch / sketchbook-ink visual direction:
+- font_family is "Segoe Print" (hand-drawn look, ships with Windows).
+  Tkinter resolves to the system fallback font if Segoe Print is unavailable —
+  safe to always request it.
+- Background and panel colors are cool off-white (#eceae2, #f4f2eb) to match
+  the near-white paper base of the Joy-Con overlay sketch art.
+- Border/outline color is a blue-grey ink tone (#8a9ab8) that harmonises with
+  the blue ballpoint hatch lines in the background SVG.
+- Use the 'rough' displacement filter in SVG assets for any hand-drawn outlines;
+  keep ttk widgets flat (relief="flat") so they sit naturally on the sketch background.
 """
 
 from __future__ import annotations
