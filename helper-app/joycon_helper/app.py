@@ -114,6 +114,7 @@ def _ensure_profile_defaults(profile: dict) -> dict:
 
 JOYCONS_IMAGE_W = 1536
 JOYCONS_IMAGE_H = 1024
+JOYCONS_IMAGE_STATE_NAMES = ("none", "left", "right", "both")
 
 # Normalized hotspot positions over joycons.png.
 # These are intentionally approximate: the recommended flow is to use Learn
@@ -269,6 +270,8 @@ class App(tk.Tk):
         self._keymap_selected_name: Optional[str] = None
         self._keymap_learn_name: Optional[str] = None
         self._keymap_canvas: Optional[tk.Canvas] = None
+        self._keymap_img_state = "none"
+        self._keymap_img_paths: Dict[str, Path] = {}
         self._keymap_img_path: Optional[Path] = None
         self._keymap_img_base: Optional[tk.PhotoImage] = None
         self._keymap_img_scaled: Optional[tk.PhotoImage] = None
@@ -714,30 +717,116 @@ class App(tk.Tk):
 
         self._update_bt_background()
 
-    def _find_joycons_png(self) -> Optional[Path]:
-        candidates: List[Path] = []
+    def _joycons_image_state(self) -> str:
+        if self._bt_connected_left and self._bt_connected_right:
+            return "both"
+        if self._bt_connected_left:
+            return "left"
+        if self._bt_connected_right:
+            return "right"
+        return "none"
+
+    def _find_joycons_png_variants(self) -> Dict[str, Path]:
+        variant_names = {
+            "none": "joycons-none.png",
+            "left": "joycons-left.png",
+            "right": "joycons-right.png",
+            "both": "joycons-both.png",
+        }
+        search_roots: List[Path] = []
         try:
-            candidates.append(Path.cwd() / "joycons.png")
-            candidates.append(Path.cwd() / ".ui-bundle" / "joycons.png")
+            search_roots.extend(
+                [
+                    Path.cwd(),
+                    Path.cwd() / ".ui-bundle",
+                    Path.cwd() / "docs" / "ui" / "assets",
+                ]
+            )
         except Exception:
             pass
 
         here = Path(__file__).resolve()
-        for p in (
-            here.parents[1] / "joycons.png",  # helper-app/joycons.png
-            here.parents[1] / ".ui-bundle" / "joycons.png",  # helper-app/.ui-bundle/joycons.png
-            here.parents[3] / "joycons.png",  # repo root/joycons.png
-            here.parents[3] / ".ui-bundle" / "joycons.png",  # repo root/.ui-bundle/joycons.png
-        ):
-            candidates.append(p)
+        search_roots.extend(
+            [
+                here.parents[1],  # helper-app/
+                here.parents[1] / ".ui-bundle",  # helper-app/.ui-bundle/
+                here.parents[3],  # repo root/
+                here.parents[3] / ".ui-bundle",  # repo root/.ui-bundle/
+                here.parents[3] / "docs" / "ui" / "assets",  # repo root/docs/ui/assets/
+            ]
+        )
 
-        for c in candidates:
+        found: Dict[str, Path] = {}
+        for state, file_name in variant_names.items():
+            for root in search_roots:
+                candidate = root / file_name
+                try:
+                    if candidate.exists():
+                        found[state] = candidate
+                        break
+                except Exception:
+                    continue
+
+        fallback_base: Optional[Path] = None
+        fallback_none: Optional[Path] = None
+        fallback_candidates = [
+            Path.cwd() / "joycons.png",
+            here.parents[1] / "joycons.png",
+            here.parents[3] / "joycons.png",
+            Path.cwd() / ".ui-bundle" / "joycons.png",
+            here.parents[1] / ".ui-bundle" / "joycons.png",
+            here.parents[3] / ".ui-bundle" / "joycons.png",
+        ]
+        none_candidates = [
+            Path.cwd() / "joycons-grey.png",
+            here.parents[3] / "joycons-grey.png",
+        ]
+        for candidate in fallback_candidates:
             try:
-                if c.exists():
-                    return c
+                if candidate.exists():
+                    fallback_base = candidate
+                    break
             except Exception:
                 continue
-        return None
+        for candidate in none_candidates:
+            try:
+                if candidate.exists():
+                    fallback_none = candidate
+                    break
+            except Exception:
+                continue
+
+        if fallback_base is not None:
+            found.setdefault("both", fallback_base)
+            found.setdefault("left", fallback_base)
+            found.setdefault("right", fallback_base)
+        if fallback_none is not None:
+            found.setdefault("none", fallback_none)
+        elif fallback_base is not None:
+            found.setdefault("none", fallback_base)
+
+        return found
+
+    def _set_keymap_image_state(self, state: Optional[str] = None) -> None:
+        next_state = state or self._joycons_image_state()
+        if next_state not in JOYCONS_IMAGE_STATE_NAMES:
+            next_state = "none"
+
+        path = self._keymap_img_paths.get(next_state)
+        if path == self._keymap_img_path and self._keymap_img_base is not None:
+            self._keymap_img_state = next_state
+            return
+
+        self._keymap_img_state = next_state
+        self._keymap_img_path = path
+        self._keymap_img_base = None
+        self._keymap_img_scaled = None
+
+        if self._keymap_img_path:
+            try:
+                self._keymap_img_base = tk.PhotoImage(file=str(self._keymap_img_path))
+            except Exception:
+                self._keymap_img_base = None
 
     def _keymap_hotspots(self) -> Dict[str, int]:
         try:
@@ -821,12 +910,8 @@ class App(tk.Tk):
         self._keymap_canvas.bind("<Button-1>", self._keymap_on_click)
         self._keymap_canvas.bind("<Configure>", lambda _e: self._keymap_redraw())
 
-        self._keymap_img_path = self._find_joycons_png()
-        if self._keymap_img_path:
-            try:
-                self._keymap_img_base = tk.PhotoImage(file=str(self._keymap_img_path))
-            except Exception:
-                self._keymap_img_base = None
+        self._keymap_img_paths = self._find_joycons_png_variants()
+        self._set_keymap_image_state()
 
         self._keymap_redraw()
 
@@ -867,7 +952,12 @@ class App(tk.Tk):
         h = max(c.winfo_height(), 1)
 
         if not self._keymap_img_base:
-            msg = "joycons.png not found" if not self._keymap_img_path else "Failed to load joycons.png"
+            state_name = self._keymap_img_state
+            msg = (
+                f"Joy-Con image for state '{state_name}' not found"
+                if not self._keymap_img_path
+                else f"Failed to load Joy-Con image for state '{state_name}'"
+            )
             c.create_text(w // 2, h // 2, text=msg, fill=self._colors.get("muted", "#666"))
             self._keymap_hotspot_px = {}
             return
@@ -1022,6 +1112,8 @@ class App(tk.Tk):
 
         self._bt_banner.configure(bg=bg)
         self._bt_banner_label.configure(bg=bg, fg=_contrast_on(bg))
+        self._set_keymap_image_state()
+        self._keymap_refresh_visuals()
 
     def _bt_apply_preset(self) -> None:
         p = self._bt_target_preset.get().strip()

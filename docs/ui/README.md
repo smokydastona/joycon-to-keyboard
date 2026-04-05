@@ -29,9 +29,12 @@ This repo relies on `joycons.png` as an overlay reference:
 
 To keep reviewable inspection copies up-to-date, we also keep these files in git:
 
+- `docs/ui/assets/joycons-none.png`
 - `docs/ui/assets/joycons-left.png`
 - `docs/ui/assets/joycons-right.png`
 - `docs/ui/assets/joycons-both.png`
+
+`joycons-none.png` is the fully-grey disconnected state. `joycons-left.png` and `joycons-right.png` now composite the active side from `joycons.png` with the inactive side from `joycons-grey.png`.
 
 Generate/update them (and refresh the local `.ui-bundle/` folder when needed) with:
 
@@ -127,7 +130,11 @@ It writes a “UI bundle” folder containing:
 - `background-left.svg` (compat copy)
 - `background-right.svg` (compat copy)
 - `background-both.svg` (compat copy)
-- `joycons.png` (overlay artwork, when present)
+- `joycons.png` (compatibility overlay artwork for older backgrounds/tools)
+- `joycons-both.png`
+- `joycons-left.png`
+- `joycons-right.png`
+- `joycons-none.png`
 - `layout.json`
 - `README.md`
 

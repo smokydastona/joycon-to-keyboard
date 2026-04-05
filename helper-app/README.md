@@ -23,6 +23,8 @@ Current UI tabs:
 - **Overlay**: a safe always-on-top status window (no hooking/injection)
 - **Controller**: set target name substring and trigger BT scan/connect via the device (requires return UART wiring); includes a keymap editor that lets you bind controller hotspots to observed input `key_id`s (Learn) and edit the mapping
 
+The Controller tab keymap artwork switches between four Joy-Con states based on BT status: disconnected (`joycons-none.png`), left only, right only, and both connected.
+
 ## UI pack
 
 Design artifacts (mockup/background/theme/generator/bundle example/layout snippet/architecture diagram):

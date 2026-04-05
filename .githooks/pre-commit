@@ -18,4 +18,4 @@ else
 fi
 
 # Stage the inspection copies if they exist/changed.
-git add -A docs/ui/assets/joycons-left.png docs/ui/assets/joycons-right.png docs/ui/assets/joycons-both.png 2>/dev/null || true
+git add -A docs/ui/assets/joycons-none.png docs/ui/assets/joycons-left.png docs/ui/assets/joycons-right.png docs/ui/assets/joycons-both.png 2>/dev/null || true

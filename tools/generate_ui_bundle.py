@@ -75,7 +75,11 @@ Files:
 - layout.json: layout metadata for documentation / future UI refactors
 - icons.svg: optional icon set
 - components.svg: optional component sheet
-- joycons.png: optional overlay artwork (used by some backgrounds)
+- joycons.png: compatibility overlay artwork for older backgrounds/tools
+- joycons-both.png: full-color overlay artwork for both connected
+- joycons-left.png: left-connected overlay artwork with the right side greyed out
+- joycons-right.png: right-connected overlay artwork with the left side greyed out
+- joycons-none.png: fully-grey overlay artwork for no controllers connected
 
 This bundle is *not automatically loaded* by the helper app.
 """
@@ -159,12 +163,19 @@ def main() -> int:
     # Keep a compatibility copy for older docs/tools.
     (out_dir / "background.svg").write_text(_rewrite_bundle_svg(_read_text(bg_both_path)), encoding="utf-8")
 
-    overlay = Path("joycons.png")
-    if overlay.exists():
-        try:
-            (out_dir / "joycons.png").write_bytes(overlay.read_bytes())
-        except Exception:
-            pass
+    overlays = {
+        "joycons.png": Path("joycons.png"),
+        "joycons-both.png": Path("docs/ui/assets/joycons-both.png"),
+        "joycons-left.png": Path("docs/ui/assets/joycons-left.png"),
+        "joycons-right.png": Path("docs/ui/assets/joycons-right.png"),
+        "joycons-none.png": Path("docs/ui/assets/joycons-none.png"),
+    }
+    for name, overlay_path in overlays.items():
+        if overlay_path.exists():
+            try:
+                (out_dir / name).write_bytes(overlay_path.read_bytes())
+            except Exception:
+                pass
 
     icons_path = Path(args.icons)
     if icons_path.exists():
