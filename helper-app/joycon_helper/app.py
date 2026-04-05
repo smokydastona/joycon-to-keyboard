@@ -2742,6 +2742,14 @@ class App(tk.Tk):
         layout_cb.pack(side=tk.LEFT, padx=4)
         layout_cb.bind("<<ComboboxSelected>>", lambda _: self._m913_on_layout_changed())
 
+        self._m913_edit_layout_btn = ttk.Button(
+            layout_row, text="Edit Map\u2026",
+            command=self._m913_edit_incedius_map)
+        self._m913_edit_layout_btn.pack(side=tk.LEFT, padx=4)
+        # Only enable when IncediusMod is selected
+        self._m913_edit_layout_btn.state(
+            ["!disabled"] if self._m913_profile.layout == "incedius" else ["disabled"])
+
         # ── M913 overlay image ──
         self._m913_overlay_canvas = tk.Canvas(parent, height=220, highlightthickness=1)
         self._m913_overlay_canvas.pack(fill=tk.X, padx=6, pady=(3, 3))
@@ -2779,8 +2787,7 @@ class App(tk.Tk):
         action_choices = m913_device.ALL_ACTIONS + m913_device.ALL_KEY_NAMES
 
         self._m913_button_labels: Dict[str, ttk.Label] = {}
-        display_names = m913_device.LAYOUT_DISPLAY_NAMES.get(
-            self._m913_profile.layout, m913_device.BUTTON_DISPLAY_NAMES)
+        display_names = self._m913_resolved_display_names(self._m913_profile.layout)
         for i, btn_name in enumerate(m913_device.BUTTON_ORDER):
             r = ttk.Frame(btn_frame)
             r.pack(fill=tk.X, padx=4, pady=1)
@@ -2984,10 +2991,93 @@ class App(tk.Tk):
         selected = self._m913_layout_var.get()
         mode = self._m913_layout_reverse.get(selected, "stock")
         self._m913_profile.layout = mode
-        display_names = m913_device.LAYOUT_DISPLAY_NAMES.get(
-            mode, m913_device.BUTTON_DISPLAY_NAMES)
+        # Enable/disable the Edit Map button
+        if hasattr(self, "_m913_edit_layout_btn"):
+            self._m913_edit_layout_btn.state(
+                ["!disabled"] if mode == "incedius" else ["disabled"])
+        display_names = self._m913_resolved_display_names(mode)
         for btn_name, lbl in self._m913_button_labels.items():
             lbl.configure(text=f"{display_names.get(btn_name, btn_name)}:")
+
+    def _m913_resolved_display_names(self, mode: str) -> Dict[str, str]:
+        """Return the effective display-name dict for the given layout mode.
+
+        For 'incedius', overlays the user's custom ``incedius_map`` on top
+        of the fixed names (left/right/middle/fire stay constant).
+        """
+        if mode == "incedius":
+            names: Dict[str, str] = {
+                "left": "Left Click", "right": "Right Click",
+                "middle": "Middle Click", "fire": "Fire",
+            }
+            names.update(self._m913_profile.incedius_map)
+            return names
+        return dict(m913_device.BUTTON_DISPLAY_NAMES)
+
+    def _m913_edit_incedius_map(self) -> None:
+        """Open a dialog to reassign IncediusMod labels to physical M913 side buttons."""
+        dlg = tk.Toplevel(self)
+        dlg.title("Edit IncediusMod Button Map")
+        dlg.geometry("380x460")
+        dlg.resizable(False, False)
+        dlg.transient(self)
+        dlg.grab_set()
+
+        ttk.Label(dlg, text="Assign each M913 side button to the matching\n"
+                            "physical position on your IncediusMod mouse.",
+                  justify="center").pack(padx=10, pady=(10, 6))
+
+        frame = ttk.Frame(dlg)
+        frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=4)
+
+        current_map = dict(self._m913_profile.incedius_map)
+        combo_vars: Dict[str, tk.StringVar] = {}
+        combos: Dict[str, ttk.Combobox] = {}
+
+        for i, key in enumerate(m913_device.INCEDIUS_SIDE_KEYS):
+            row = ttk.Frame(frame)
+            row.pack(fill=tk.X, pady=1)
+            stock_label = m913_device.BUTTON_DISPLAY_NAMES.get(key, key)
+            ttk.Label(row, text=f"{stock_label}  →", width=12, anchor="w").pack(side=tk.LEFT)
+            var = tk.StringVar(value=current_map.get(key, m913_device.DEFAULT_INCEDIUS_MAP[key]))
+            combo_vars[key] = var
+            cb = ttk.Combobox(row, textvariable=var,
+                              values=m913_device.INCEDIUS_LABEL_CHOICES,
+                              state="readonly", width=14)
+            cb.pack(side=tk.LEFT, padx=4)
+            combos[key] = cb
+
+        status_var = tk.StringVar(value="")
+        ttk.Label(dlg, textvariable=status_var, foreground="red").pack(pady=(2, 0))
+
+        btn_row = ttk.Frame(dlg)
+        btn_row.pack(pady=(4, 10))
+
+        def _on_reset() -> None:
+            for key in m913_device.INCEDIUS_SIDE_KEYS:
+                combo_vars[key].set(m913_device.DEFAULT_INCEDIUS_MAP[key])
+            status_var.set("")
+
+        def _on_save() -> None:
+            new_map: Dict[str, str] = {}
+            used_labels: Dict[str, str] = {}
+            for key in m913_device.INCEDIUS_SIDE_KEYS:
+                label = combo_vars[key].get()
+                if label in used_labels:
+                    status_var.set(
+                        f"Duplicate: {label} is assigned to both "
+                        f"{m913_device.BUTTON_DISPLAY_NAMES[used_labels[label]]} "
+                        f"and {m913_device.BUTTON_DISPLAY_NAMES[key]}")
+                    return
+                used_labels[label] = key
+                new_map[key] = label
+            self._m913_profile.incedius_map = new_map
+            self._m913_on_layout_changed()
+            dlg.destroy()
+
+        ttk.Button(btn_row, text="Reset to Default", command=_on_reset).pack(side=tk.LEFT, padx=6)
+        ttk.Button(btn_row, text="Save", command=_on_save).pack(side=tk.LEFT, padx=6)
+        ttk.Button(btn_row, text="Cancel", command=dlg.destroy).pack(side=tk.LEFT, padx=6)
 
     def _m913_ui_to_profile(self) -> None:
         """Sync UI widget values into self._m913_profile."""

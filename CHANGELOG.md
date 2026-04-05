@@ -9,6 +9,10 @@ Until then, entries are grouped by date.
 
 - Capture real controller HID reports and implement evidence-based mapping in the ESP32 host mapper (no guessing report layouts).
 
+### Added
+
+- **Mouse tab: IncediusMod custom button map editor** — since the IncediusMod is a physical rewiring mod, each user's button IDs may differ. The "Edit Map…" button (visible when IncediusMod layout is selected) opens a dialog where users can reassign which M913 side button corresponds to each Thumb/Finger position, with duplicate detection. The custom map is saved per-profile.
+
 ### Changed
 
 - **Performance: diff-based keymap canvas**: hotspot redraws now update items in-place via `itemconfigure`/`coords` instead of `canvas.delete("all")` + full rebuild. Full rebuilds only happen on resize or profile change.

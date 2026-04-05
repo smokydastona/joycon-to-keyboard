@@ -116,6 +116,23 @@ LAYOUT_DISPLAY_NAMES: Dict[str, Dict[str, str]] = {
     "incedius": INCEDIUS_DISPLAY_NAMES,
 }
 
+# The 12 side-button keys that can be reassigned in IncediusMod.
+INCEDIUS_SIDE_KEYS = [
+    "side1", "side2", "side3", "side4", "side5", "side6",
+    "side7", "side8", "side9", "side10", "side11", "side12",
+]
+
+# All IncediusMod label choices for the side buttons (Thumb 1-6, Finger 1-6).
+INCEDIUS_LABEL_CHOICES = [
+    "Thumb 1", "Thumb 2", "Thumb 3", "Thumb 4", "Thumb 5", "Thumb 6",
+    "Finger 1", "Finger 2", "Finger 3", "Finger 4", "Finger 5", "Finger 6",
+]
+
+# Default mapping: side button key → IncediusMod label.
+DEFAULT_INCEDIUS_MAP: Dict[str, str] = {
+    k: INCEDIUS_DISPLAY_NAMES[k] for k in INCEDIUS_SIDE_KEYS
+}
+
 # Ordered for UI display (logical grouping)
 BUTTON_ORDER = [
     "left", "right", "middle", "fire",
@@ -721,6 +738,14 @@ class M913Profile:
     # Layout mode: "stock" (default M913) or "incedius" (IncediusMod)
     layout: str = "stock"
 
+    # Custom IncediusMod button assignments (side key → label).
+    # Users physically rewire the M913, so the button IDs may not match
+    # the default Incedius mapping.  This lets each user match the UI to
+    # their specific wiring.
+    incedius_map: Dict[str, str] = field(
+        default_factory=lambda: dict(DEFAULT_INCEDIUS_MAP)
+    )
+
     def to_dict(self) -> dict:
         return {
             "ver": 1,
@@ -739,6 +764,7 @@ class M913Profile:
             },
             "polling_rate": self.polling_rate,
             "sister_slot": self.sister_slot,
+            "incedius_map": dict(self.incedius_map),
         }
 
     @classmethod
@@ -762,6 +788,13 @@ class M913Profile:
         p.sister_slot = d.get("sister_slot", None)
         layout = d.get("layout", "stock")
         p.layout = layout if layout in LAYOUT_MODES else "stock"
+        raw_map = d.get("incedius_map", None)
+        if isinstance(raw_map, dict):
+            merged = dict(DEFAULT_INCEDIUS_MAP)
+            for k, v in raw_map.items():
+                if k in INCEDIUS_SIDE_KEYS and v in INCEDIUS_LABEL_CHOICES:
+                    merged[k] = v
+            p.incedius_map = merged
         return p
 
     def save(self, path: str) -> None:
