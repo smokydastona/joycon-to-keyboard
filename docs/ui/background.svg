@@ -35,6 +35,9 @@
   <rect width="980" height="680" fill="url(#hatch)"/>
   <rect width="980" height="680" fill="url(#cross)"/>
 
+  <!-- Controller overlay artwork (repo root). Keeping as a separate layer lets us align UI controls visually. -->
+  <image href="../../joycons.png" x="0" y="0" width="980" height="680" preserveAspectRatio="xMidYMid slice" opacity="0.92"/>
+
   <!-- Generic: hint both accents without implying any brand -->
   <g filter="url(#rough)" fill="none" stroke-linecap="round" stroke-linejoin="round">
     <path d="M72 152 C 160 84, 252 86, 330 140" stroke="#2f4a9e" stroke-opacity="0.18" stroke-width="2.6" stroke-dasharray="2 7"/>
