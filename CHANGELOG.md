@@ -38,6 +38,20 @@ Until then, entries are grouped by date.
 
 ### Added
 
+- **Redragon M913 Impact Elite mouse support** (helper app):
+  - New `m913_device.py` module: full USB HID protocol ported from C++ (`m913-ctl` by Qehbr / `mouse_m908` by dokutan) to Python using `hidapi`.
+  - Anti-cheat safe: all button remapping is written to the mouse's onboard microcontroller memory — no software injection.
+  - 16-button remapping: mouse actions, keyboard keys/combos (Ctrl+C etc.), multimedia keys, DPI controls, fire mode.
+  - 5-slot DPI configuration (100–16000 in steps of 100) with per-slot enable/disable.
+  - LED modes: off, steady (color + brightness), respiration (color + speed), rainbow.
+  - Polling rate: 125 / 250 / 500 / 1000 Hz.
+  - **Multi-device support**: auto-detects all connected M913 mice (via wireless receiver VID `0x25a7` / PID `0xfa07`); each device configurable independently.
+  - **Sister profiles**: link an M913 profile to a Joy-Con slot (1–4) so mouse config can travel with controller mappings.
+  - M913 profiles saved as JSON to `%APPDATA%/JoyConBridge/m913/` with per-device registry.
+  - New "Mouse" tab (lazy-loaded) with device scanner, button mapping grid, DPI editor, LED picker, polling rate selector, and profile save/load/delete.
+  - Graceful fallback when `hidapi` is not installed (tab shows install hint, rest of app unaffected).
+  - Added `hidapi>=0.14` to `requirements.txt` and `hid` to PyInstaller hidden imports.
+
 - **Auto-advance unbound hotspot**: after binding a hotspot, the editor automatically selects the next unbound hotspot in layout order for faster mapping.
 - **Latency profiling mode** (Input Test tab): toggle checkbox displays real-time redraw frame time and input processing latency (avg/max over last 50 samples).
 - **Faster guided wizard**: auto-advance delay reduced from 600 ms to 300 ms for snappier step-by-step flow.

@@ -29,6 +29,7 @@ from ._version import __version__
 from . import updater
 from . import fw_updater
 from . import hid_keycodes
+from . import m913_device
 
 log = logging.getLogger("joycon_helper.app")
 
@@ -760,6 +761,7 @@ class App(tk.Tk):
         self.tab_overlay = ttk.Frame(self.tabs)
         self.tab_controller = ttk.Frame(self.tabs)
         self.tab_input_test = ttk.Frame(self.tabs)
+        self.tab_mouse = ttk.Frame(self.tabs)
 
         self.tabs.add(self.tab_profile, text="Profile")
         self.tabs.add(self.tab_macros, text="Macros")
@@ -768,6 +770,7 @@ class App(tk.Tk):
         self.tabs.add(self.tab_overlay, text="Overlay")
         self.tabs.add(self.tab_controller, text="Controller")
         self.tabs.add(self.tab_input_test, text="Input Test")
+        self.tabs.add(self.tab_mouse, text="Mouse")
 
         # Build critical tabs eagerly; defer the rest until first selected.
         self._build_profile_tab()
@@ -875,6 +878,7 @@ class App(tk.Tk):
             "Share": self._build_share_tab,
             "Overlay": self._build_overlay_tab,
             "Input Test": self._build_input_test_tab,
+            "Mouse": self._build_mouse_tab,
         }
         builder = builders.get(tab_name)
         if builder:
@@ -2578,6 +2582,321 @@ class App(tk.Tk):
             parts.append(f"Input: avg {avg_lat:.1f}ms, max {max_lat:.1f}ms")
         self._perf_stats_var.set("  |  ".join(parts) if parts else "Collecting...")
         self.after(500, self._perf_update_tick)
+
+    # ------------------------------------------------------------------
+    # Mouse tab  (M913 Impact Elite configuration)
+    # ------------------------------------------------------------------
+
+    def _build_mouse_tab(self) -> None:
+        """Build the Mouse tab: M913 device selection, buttons, DPI, LED, polling."""
+        parent = self.tab_mouse
+
+        # ── Instance state ──
+        self._m913_devices: List[m913_device.M913DeviceInfo] = []
+        self._m913_open_devs: Dict[str, m913_device.M913Device] = {}  # device_id → open device
+        self._m913_profile = m913_device.M913Profile()
+        self._m913_button_vars: Dict[str, tk.StringVar] = {}
+        self._m913_dpi_vars: List[tk.IntVar] = []
+        self._m913_dpi_en_vars: List[tk.BooleanVar] = []
+        self._m913_registry = m913_device.load_device_registry()
+
+        # ── Top bar: device selector + scan ──
+        dev_frame = ttk.LabelFrame(parent, text="M913 Device")
+        dev_frame.pack(fill=tk.X, padx=6, pady=(6, 3))
+
+        row = ttk.Frame(dev_frame)
+        row.pack(fill=tk.X, padx=6, pady=4)
+
+        ttk.Label(row, text="Device:").pack(side=tk.LEFT)
+        self._m913_dev_var = tk.StringVar()
+        self._m913_dev_combo = ttk.Combobox(row, textvariable=self._m913_dev_var,
+                                            state="readonly", width=36)
+        self._m913_dev_combo.pack(side=tk.LEFT, padx=(4, 6))
+        self._m913_dev_combo.bind("<<ComboboxSelected>>", lambda _: self._m913_on_device_selected())
+
+        ttk.Button(row, text="Scan", command=self._m913_scan_devices).pack(side=tk.LEFT, padx=2)
+        ttk.Button(row, text="Apply", command=self._m913_apply_config).pack(side=tk.LEFT, padx=2)
+
+        if not m913_device.HID_AVAILABLE:
+            ttk.Label(dev_frame, text="⚠ hidapi not installed — install with: pip install hidapi",
+                      foreground=self._colors.get("danger", "red")).pack(padx=6, pady=2)
+
+        # ── Sister profile linking ──
+        sister_row = ttk.Frame(dev_frame)
+        sister_row.pack(fill=tk.X, padx=6, pady=(0, 4))
+        ttk.Label(sister_row, text="Link to Joy-Con slot:").pack(side=tk.LEFT)
+        self._m913_sister_var = tk.StringVar(value="None")
+        sister_cb = ttk.Combobox(sister_row, textvariable=self._m913_sister_var,
+                                 values=["None", "Slot 1", "Slot 2", "Slot 3", "Slot 4"],
+                                 state="readonly", width=10)
+        sister_cb.pack(side=tk.LEFT, padx=4)
+        sister_cb.bind("<<ComboboxSelected>>", lambda _: self._m913_on_sister_changed())
+
+        # ── Scrollable content ──
+        canvas_wrap = ttk.Frame(parent)
+        canvas_wrap.pack(fill=tk.BOTH, expand=True, padx=6, pady=3)
+
+        m_canvas = tk.Canvas(canvas_wrap, highlightthickness=0,
+                             bg=self._colors.get("panel", "#f2e8d0"))
+        m_scroll = ttk.Scrollbar(canvas_wrap, orient=tk.VERTICAL, command=m_canvas.yview)
+        m_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        m_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        m_canvas.configure(yscrollcommand=m_scroll.set)
+
+        inner = ttk.Frame(m_canvas)
+        m_canvas.create_window((0, 0), window=inner, anchor="nw")
+        inner.bind("<Configure>", lambda e: m_canvas.configure(scrollregion=m_canvas.bbox("all")))
+        m_canvas.bind_all("<MouseWheel>", lambda e: m_canvas.yview_scroll(-e.delta // 120, "units"))
+
+        # ── Button mapping ──
+        btn_frame = ttk.LabelFrame(inner, text="Button Mapping (16 buttons)")
+        btn_frame.pack(fill=tk.X, padx=4, pady=(4, 2))
+
+        action_choices = m913_device.ALL_ACTIONS + m913_device.ALL_KEY_NAMES
+
+        for i, btn_name in enumerate(m913_device.BUTTON_ORDER):
+            r = ttk.Frame(btn_frame)
+            r.pack(fill=tk.X, padx=4, pady=1)
+            display = m913_device.BUTTON_DISPLAY_NAMES.get(btn_name, btn_name)
+            ttk.Label(r, text=f"{display}:", width=14, anchor="w").pack(side=tk.LEFT)
+            var = tk.StringVar(value=self._m913_profile.buttons.get(btn_name, "none"))
+            self._m913_button_vars[btn_name] = var
+            cb = ttk.Combobox(r, textvariable=var, values=action_choices, width=24)
+            cb.pack(side=tk.LEFT, padx=4)
+
+        # ── DPI settings ──
+        dpi_frame = ttk.LabelFrame(inner, text="DPI (5 levels, 100–16000)")
+        dpi_frame.pack(fill=tk.X, padx=4, pady=2)
+
+        self._m913_dpi_vars = []
+        self._m913_dpi_en_vars = []
+        for i in range(5):
+            r = ttk.Frame(dpi_frame)
+            r.pack(fill=tk.X, padx=4, pady=1)
+            en_var = tk.BooleanVar(value=self._m913_profile.dpi_enabled[i])
+            self._m913_dpi_en_vars.append(en_var)
+            ttk.Checkbutton(r, variable=en_var).pack(side=tk.LEFT)
+            ttk.Label(r, text=f"Level {i + 1}:").pack(side=tk.LEFT, padx=(4, 0))
+            dpi_var = tk.IntVar(value=self._m913_profile.dpi_values[i])
+            self._m913_dpi_vars.append(dpi_var)
+            sb = ttk.Spinbox(r, from_=100, to=16000, increment=100,
+                             textvariable=dpi_var, width=8)
+            sb.pack(side=tk.LEFT, padx=4)
+
+        # ── LED settings ──
+        led_frame = ttk.LabelFrame(inner, text="LED")
+        led_frame.pack(fill=tk.X, padx=4, pady=2)
+
+        lr1 = ttk.Frame(led_frame)
+        lr1.pack(fill=tk.X, padx=4, pady=2)
+        ttk.Label(lr1, text="Mode:").pack(side=tk.LEFT)
+        self._m913_led_mode_var = tk.StringVar(value=self._m913_profile.led_mode)
+        led_mode_cb = ttk.Combobox(lr1, textvariable=self._m913_led_mode_var,
+                                   values=["off", "steady", "respiration", "rainbow"],
+                                   state="readonly", width=14)
+        led_mode_cb.pack(side=tk.LEFT, padx=4)
+
+        ttk.Label(lr1, text="Color (#hex):").pack(side=tk.LEFT, padx=(8, 0))
+        self._m913_led_color_var = tk.StringVar(value=f"{self._m913_profile.led_color:06x}")
+        ttk.Entry(lr1, textvariable=self._m913_led_color_var, width=8).pack(side=tk.LEFT, padx=4)
+
+        lr2 = ttk.Frame(led_frame)
+        lr2.pack(fill=tk.X, padx=4, pady=2)
+        ttk.Label(lr2, text="Brightness:").pack(side=tk.LEFT)
+        self._m913_led_bright_var = tk.IntVar(value=self._m913_profile.led_brightness)
+        ttk.Scale(lr2, from_=0, to=255, variable=self._m913_led_bright_var,
+                  orient=tk.HORIZONTAL, length=120).pack(side=tk.LEFT, padx=4)
+        ttk.Label(lr2, text="Speed (1-5):").pack(side=tk.LEFT, padx=(8, 0))
+        self._m913_led_speed_var = tk.IntVar(value=self._m913_profile.led_speed)
+        ttk.Spinbox(lr2, from_=1, to=5, textvariable=self._m913_led_speed_var,
+                     width=4).pack(side=tk.LEFT, padx=4)
+
+        # ── Polling rate ──
+        poll_frame = ttk.LabelFrame(inner, text="Polling Rate")
+        poll_frame.pack(fill=tk.X, padx=4, pady=2)
+
+        pr = ttk.Frame(poll_frame)
+        pr.pack(fill=tk.X, padx=4, pady=2)
+        self._m913_poll_var = tk.IntVar(value=self._m913_profile.polling_rate)
+        for hz in (125, 250, 500, 1000):
+            ttk.Radiobutton(pr, text=f"{hz} Hz", value=hz,
+                            variable=self._m913_poll_var).pack(side=tk.LEFT, padx=6)
+
+        # ── Profile save/load ──
+        prof_frame = ttk.LabelFrame(inner, text="M913 Profile")
+        prof_frame.pack(fill=tk.X, padx=4, pady=(2, 6))
+
+        pfr = ttk.Frame(prof_frame)
+        pfr.pack(fill=tk.X, padx=4, pady=4)
+        ttk.Label(pfr, text="Name:").pack(side=tk.LEFT)
+        self._m913_prof_name_var = tk.StringVar(value=self._m913_profile.name)
+        ttk.Entry(pfr, textvariable=self._m913_prof_name_var, width=20).pack(side=tk.LEFT, padx=4)
+
+        ttk.Button(pfr, text="Save", command=self._m913_save_profile).pack(side=tk.LEFT, padx=2)
+        ttk.Button(pfr, text="Load", command=self._m913_load_profile).pack(side=tk.LEFT, padx=2)
+        ttk.Button(pfr, text="Delete", command=self._m913_delete_profile).pack(side=tk.LEFT, padx=2)
+
+        # ── Status label ──
+        self._m913_status_var = tk.StringVar(value="Ready — click Scan to detect M913 devices")
+        ttk.Label(parent, textvariable=self._m913_status_var).pack(anchor="w", padx=6, pady=(0, 6))
+
+        # Auto-scan on tab open
+        self.after(200, self._m913_scan_devices)
+
+    # ── M913 helpers ──
+
+    def _m913_scan_devices(self) -> None:
+        """Scan for connected M913 mice."""
+        self._m913_devices = m913_device.M913Device.enumerate()
+        names = [d.display_name for d in self._m913_devices]
+        self._m913_dev_combo["values"] = names
+        if names:
+            self._m913_dev_combo.current(0)
+            self._m913_status_var.set(f"Found {len(names)} M913 device(s)")
+        else:
+            self._m913_dev_var.set("")
+            self._m913_status_var.set("No M913 devices found — is the receiver plugged in?")
+
+    def _m913_on_device_selected(self) -> None:
+        """When a device is selected in the combo, load any saved profile."""
+        idx = self._m913_dev_combo.current()
+        if idx < 0 or idx >= len(self._m913_devices):
+            return
+        dev_info = self._m913_devices[idx]
+        dev_id = dev_info.device_id
+        reg = self._m913_registry.get(dev_id, {})
+        linked_profile = reg.get("profile")
+        if linked_profile:
+            try:
+                self._m913_profile = m913_device.load_profile(linked_profile)
+                self._m913_ui_from_profile()
+                self._m913_status_var.set(f"Loaded profile '{linked_profile}' for {dev_info.display_name}")
+                return
+            except Exception:
+                pass
+        self._m913_status_var.set(f"Selected {dev_info.display_name} (no saved profile)")
+
+    def _m913_on_sister_changed(self) -> None:
+        """Update sister slot linkage."""
+        val = self._m913_sister_var.get()
+        if val.startswith("Slot "):
+            try:
+                self._m913_profile.sister_slot = int(val.split()[-1])
+            except ValueError:
+                self._m913_profile.sister_slot = None
+        else:
+            self._m913_profile.sister_slot = None
+
+    def _m913_ui_to_profile(self) -> None:
+        """Sync UI widget values into self._m913_profile."""
+        p = self._m913_profile
+        p.name = self._m913_prof_name_var.get().strip() or "Default"
+        for btn_name, var in self._m913_button_vars.items():
+            p.buttons[btn_name] = var.get().strip().lower() or "none"
+        p.dpi_values = [max(100, min(16000, v.get())) for v in self._m913_dpi_vars]
+        p.dpi_enabled = [v.get() for v in self._m913_dpi_en_vars]
+        p.led_mode = self._m913_led_mode_var.get()
+        try:
+            p.led_color = int(self._m913_led_color_var.get().strip().lstrip("#"), 16)
+        except ValueError:
+            p.led_color = 0x00FF00
+        p.led_brightness = max(0, min(255, self._m913_led_bright_var.get()))
+        p.led_speed = max(1, min(5, self._m913_led_speed_var.get()))
+        p.polling_rate = self._m913_poll_var.get()
+
+    def _m913_ui_from_profile(self) -> None:
+        """Sync self._m913_profile values into UI widgets."""
+        p = self._m913_profile
+        self._m913_prof_name_var.set(p.name)
+        for btn_name, var in self._m913_button_vars.items():
+            var.set(p.buttons.get(btn_name, "none"))
+        for i in range(5):
+            self._m913_dpi_vars[i].set(p.dpi_values[i])
+            self._m913_dpi_en_vars[i].set(p.dpi_enabled[i])
+        self._m913_led_mode_var.set(p.led_mode)
+        self._m913_led_color_var.set(f"{p.led_color:06x}")
+        self._m913_led_bright_var.set(p.led_brightness)
+        self._m913_led_speed_var.set(p.led_speed)
+        self._m913_poll_var.set(p.polling_rate)
+        if p.sister_slot:
+            self._m913_sister_var.set(f"Slot {p.sister_slot}")
+        else:
+            self._m913_sister_var.set("None")
+
+    def _m913_apply_config(self) -> None:
+        """Apply current UI settings to the selected M913 mouse."""
+        idx = self._m913_dev_combo.current()
+        if idx < 0 or idx >= len(self._m913_devices):
+            self._m913_status_var.set("No device selected")
+            return
+        dev_info = self._m913_devices[idx]
+        self._m913_ui_to_profile()
+
+        dev = m913_device.M913Device()
+        try:
+            dev.open(dev_info)
+            sent, errors = dev.apply_profile(self._m913_profile)
+            if errors:
+                self._m913_status_var.set(f"Applied with {errors} error(s) — {sent} packets sent")
+            else:
+                self._m913_status_var.set(f"Applied successfully — {sent} packets sent to {dev_info.display_name}")
+            self._log_append(f"[M913] Config applied to {dev_info.display_name}: {sent} packets, {errors} errors")
+        except Exception as e:
+            self._m913_status_var.set(f"Error: {e}")
+            self._log_append(f"[M913] Apply error: {e}")
+        finally:
+            dev.close()
+
+    def _m913_save_profile(self) -> None:
+        """Save current settings as an M913 profile."""
+        self._m913_ui_to_profile()
+        if not self._m913_profile.name.strip():
+            self._m913_profile.name = "Default"
+        try:
+            path = m913_device.save_profile(self._m913_profile)
+            # Update device registry
+            idx = self._m913_dev_combo.current()
+            if 0 <= idx < len(self._m913_devices):
+                dev_id = self._m913_devices[idx].device_id
+                self._m913_registry[dev_id] = {"profile": self._m913_profile.name}
+                m913_device.save_device_registry(self._m913_registry)
+            self._m913_status_var.set(f"Saved profile '{self._m913_profile.name}'")
+            self._log_append(f"[M913] Profile saved: {self._m913_profile.name}")
+        except Exception as e:
+            self._m913_status_var.set(f"Save error: {e}")
+
+    def _m913_load_profile(self) -> None:
+        """Show a dialog to load a saved M913 profile."""
+        saved = m913_device.list_saved_profiles()
+        if not saved:
+            self._m913_status_var.set("No saved M913 profiles found")
+            return
+        name = simpledialog.askstring("Load M913 Profile",
+                                      f"Enter profile name:\nAvailable: {', '.join(saved)}",
+                                      parent=self)
+        if not name or name not in saved:
+            return
+        try:
+            self._m913_profile = m913_device.load_profile(name)
+            self._m913_ui_from_profile()
+            self._m913_status_var.set(f"Loaded profile '{name}'")
+        except Exception as e:
+            self._m913_status_var.set(f"Load error: {e}")
+
+    def _m913_delete_profile(self) -> None:
+        """Delete a saved M913 profile."""
+        saved = m913_device.list_saved_profiles()
+        if not saved:
+            self._m913_status_var.set("No saved profiles to delete")
+            return
+        name = simpledialog.askstring("Delete M913 Profile",
+                                      f"Enter profile name to delete:\nAvailable: {', '.join(saved)}",
+                                      parent=self)
+        if not name or name not in saved:
+            return
+        if messagebox.askyesno("Confirm Delete", f"Delete M913 profile '{name}'?"):
+            m913_device.delete_profile(name)
+            self._m913_status_var.set(f"Deleted profile '{name}'")
 
     # ------------------------------------------------------------------
     # Undo / Redo
