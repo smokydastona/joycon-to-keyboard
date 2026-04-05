@@ -23,6 +23,12 @@ Current UI tabs:
 - **Overlay**: a safe always-on-top status window (no hooking/injection)
 - **Controller**: set target name substring and trigger BT scan/connect via the device (requires return UART wiring)
 
+## UI pack
+
+Design artifacts (mockup/background/theme/generator/bundle example/layout snippet/architecture diagram):
+
+- `docs/ui/README.md`
+
 ## Install
 
 Create a venv (recommended) and install deps:

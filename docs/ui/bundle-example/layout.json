@@ -1,0 +1,37 @@
+{
+  "window": {
+    "width": 980,
+    "height": 680
+  },
+  "regions": [
+    {
+      "id": "topbar",
+      "type": "row",
+      "items": [
+        "port",
+        "baud",
+        "connect",
+        "bt_status"
+      ]
+    },
+    {
+      "id": "main",
+      "type": "split",
+      "left": "tabs",
+      "right": "actions"
+    },
+    {
+      "id": "log",
+      "type": "panel",
+      "title": "Device log / events"
+    }
+  ],
+  "tabs": [
+    "Profile",
+    "Macros",
+    "Stick",
+    "Share",
+    "Overlay",
+    "Controller"
+  ]
+}
