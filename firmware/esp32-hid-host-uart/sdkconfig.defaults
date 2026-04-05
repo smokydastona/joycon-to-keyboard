@@ -1,5 +1,8 @@
 # ESP32 Classic-BT Host — sdkconfig overrides.
 
+# Flash size — partition table requires ~3.6 MB (two OTA app slots).
+CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y
+
 # OTA-enabled partition table (two app slots + NVS + OTA data).
 CONFIG_PARTITION_TABLE_CUSTOM=y
 CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
