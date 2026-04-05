@@ -7,5 +7,7 @@ Files:
 - theme.json: semantic tokens (colors/typography/spacing)
 - background.svg: optional background artwork (no trademarks/logos)
 - layout.json: layout metadata for documentation / future UI refactors
+- icons.svg: optional icon set
+- components.svg: optional component sheet
 
 This bundle is *not automatically loaded* by the helper app.

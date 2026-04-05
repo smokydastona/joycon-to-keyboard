@@ -4,6 +4,8 @@ A UI bundle is a folder containing:
 - theme.json
 - background.svg
 - layout.json
+- icons.svg (optional)
+- components.svg (optional)
 - README.md
 
 This script is intentionally dependency-free (stdlib only) so it can run anywhere.
@@ -65,6 +67,8 @@ Files:
 - theme.json: semantic tokens (colors/typography/spacing)
 - background.svg: optional background artwork (no trademarks/logos)
 - layout.json: layout metadata for documentation / future UI refactors
+- icons.svg: optional icon set
+- components.svg: optional component sheet
 
 This bundle is *not automatically loaded* by the helper app.
 """
@@ -82,6 +86,16 @@ def main() -> int:
         default="docs/ui/background.svg",
         help="Path to background.svg to include (default: docs/ui/background.svg)",
     )
+    ap.add_argument(
+        "--icons",
+        default="docs/ui/assets/icons.svg",
+        help="Path to icons.svg to include when present (default: docs/ui/assets/icons.svg)",
+    )
+    ap.add_argument(
+        "--components",
+        default="docs/ui/assets/components.svg",
+        help="Path to components.svg to include when present (default: docs/ui/assets/components.svg)",
+    )
     args = ap.parse_args()
 
     out_dir = Path(args.out)
@@ -94,6 +108,15 @@ def main() -> int:
     (out_dir / "theme.json").write_text(json.dumps(DEFAULT_THEME, indent=2), encoding="utf-8")
     (out_dir / "layout.json").write_text(json.dumps(DEFAULT_LAYOUT, indent=2), encoding="utf-8")
     (out_dir / "background.svg").write_text(_read_text(bg_path), encoding="utf-8")
+
+    icons_path = Path(args.icons)
+    if icons_path.exists():
+        (out_dir / "icons.svg").write_text(_read_text(icons_path), encoding="utf-8")
+
+    components_path = Path(args.components)
+    if components_path.exists():
+        (out_dir / "components.svg").write_text(_read_text(components_path), encoding="utf-8")
+
     (out_dir / "README.md").write_text(BUNDLE_README, encoding="utf-8")
 
     print(f"Wrote UI bundle to: {out_dir}")

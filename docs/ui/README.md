@@ -12,6 +12,13 @@ Deliverables in this pack:
 - UI layout snippet: `layout_snippet.py`
 - UI architecture diagram: `architecture.md`
 
+UI kit (theme-matched controls):
+
+- Icons: `assets/icons.svg`
+- Components sheet (buttons/toggles/dials/pills): `assets/components.svg`
+- Component guidance: `components.md`
+- ttk styling snippet: `ttk_style_snippet.py`
+
 ---
 
 ## UI mockup (single window)
