@@ -42,7 +42,13 @@ To keep reviewable inspection copies up-to-date, we also keep these files in git
 - `docs/ui/assets/joycons-dark-right.png`
 - `docs/ui/assets/joycons-dark-both.png`
 
-`*-none.png` is the fully-grey disconnected state. `*-left.png` and `*-right.png` composite the active side from the color source with the inactive side from the grey source.
+**M913 mouse overlays** (pre-rendered, no compositing):
+- `docs/ui/assets/m913.png` — light theme, connected
+- `docs/ui/assets/m913-none.png` — light theme, disconnected
+- `docs/ui/assets/m913-dark.png` — dark theme, connected
+- `docs/ui/assets/m913-dark-none.png` — dark theme, disconnected
+
+`*-none.png` is the fully-grey disconnected state. `*-left.png` and `*-right.png` composite the active side from the color source with the inactive side from the grey source. The M913 overlays are pre-rendered (no compositing needed) and are simply copied into the UI bundle.
 
 Generate/update them (and refresh the local `.ui-bundle/` folder when needed) with:
 

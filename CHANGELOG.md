@@ -38,6 +38,8 @@ Until then, entries are grouped by date.
 
 ### Added
 
+- **M913 mouse overlay artwork**: four sketchbook-ink themed M913 overlay PNGs (light connected/disconnected, dark connected/disconnected) wired into the Mouse tab, matching the Joy-Con overlay pattern in the Controller tab. The UI bundle generator and artifact generator now include M913 images alongside Joy-Con overlays.
+
 - **Redragon M913 Impact Elite mouse support** (helper app):
   - New `m913_device.py` module: full USB HID protocol ported from C++ (`m913-ctl` by Qehbr / `mouse_m908` by dokutan) to Python using `hidapi`.
   - Anti-cheat safe: all button remapping is written to the mouse's onboard microcontroller memory — no software injection.

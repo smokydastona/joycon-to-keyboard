@@ -39,6 +39,17 @@ JOYCONS_DARK_COPIES = {
     "joycons-dark-both.png": "Dark inspection copy (both connected) derived from joycons-dark.png",
 }
 
+# M913 mouse overlays — pre-rendered, no compositing needed.  Just copy.
+M913_SRC_DIR = REPO_ROOT / "docs" / "ui" / "assets"
+M913_LIGHT_COPIES = {
+    "m913.png": "M913 mouse overlay (light theme, connected)",
+    "m913-none.png": "M913 mouse overlay (light theme, disconnected)",
+}
+M913_DARK_COPIES = {
+    "m913-dark.png": "M913 mouse overlay (dark theme, connected)",
+    "m913-dark-none.png": "M913 mouse overlay (dark theme, disconnected)",
+}
+
 GENERATOR_SRC = Path(__file__).resolve()
 
 UI_BUNDLE_DIR = REPO_ROOT / ".ui-bundle"
@@ -58,6 +69,10 @@ UI_BUNDLE_INPUTS = [
     REPO_ROOT / "docs" / "ui" / "assets" / "icons.svg",
     REPO_ROOT / "docs" / "ui" / "assets" / "components-dark.svg",
     REPO_ROOT / "docs" / "ui" / "assets" / "icons-dark.svg",
+    REPO_ROOT / "docs" / "ui" / "assets" / "m913.png",
+    REPO_ROOT / "docs" / "ui" / "assets" / "m913-none.png",
+    REPO_ROOT / "docs" / "ui" / "assets" / "m913-dark.png",
+    REPO_ROOT / "docs" / "ui" / "assets" / "m913-dark-none.png",
 ]
 
 
@@ -143,6 +158,8 @@ def _run_ui_bundle_generator() -> bool:
         UI_BUNDLE_DIR / "joycons-left.png",
         UI_BUNDLE_DIR / "joycons-right.png",
         UI_BUNDLE_DIR / "joycons-both.png",
+        UI_BUNDLE_DIR / "m913.png",
+        UI_BUNDLE_DIR / "m913-none.png",
     ]
     if all(p.exists() for p in expected) and not any(_needs_update(UI_BUNDLE_INPUTS, p) for p in expected):
         return False

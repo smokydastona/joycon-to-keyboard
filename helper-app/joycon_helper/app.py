@@ -272,6 +272,8 @@ JOYCONS_IMAGE_W = 1536
 JOYCONS_IMAGE_H = 1024
 JOYCONS_IMAGE_STATE_NAMES = ("none", "left", "right", "both")
 
+M913_IMAGE_STATE_NAMES = ("none", "connected")
+
 # Normalized hotspot positions over joycons.png.
 # These are intentionally approximate: the recommended flow is to use Learn
 # to bind each physical control to its observed input key_id.
@@ -440,6 +442,14 @@ class App(tk.Tk):
         self._keymap_img_base: Optional[tk.PhotoImage] = None
         self._keymap_img_scaled: Optional[tk.PhotoImage] = None
         self._keymap_hotspot_px: Dict[str, Tuple[float, float]] = {}
+
+        # M913 mouse overlay image (Mouse tab)
+        self._m913_overlay_canvas: Optional[tk.Canvas] = None
+        self._m913_img_state: str = "none"
+        self._m913_img_paths: Dict[str, Path] = {}
+        self._m913_img_path: Optional[Path] = None
+        self._m913_img_base: Optional[tk.PhotoImage] = None
+        self._m913_img_scaled: Optional[tk.PhotoImage] = None
 
         # Press-to-bind state
         self._bind_mode = False  # True = waiting for a keyboard key press
@@ -1313,6 +1323,88 @@ class App(tk.Tk):
                 self._keymap_img_base = tk.PhotoImage(file=str(self._keymap_img_path))
             except Exception:
                 self._keymap_img_base = None
+
+    # ------------------------------------------------------------------
+    # M913 mouse overlay image helpers
+    # ------------------------------------------------------------------
+
+    def _find_m913_png_variants(self) -> Dict[str, Path]:
+        variant_names = {
+            "connected": "m913.png",
+            "none": "m913-none.png",
+        }
+        search_roots = _joycons_search_roots()
+
+        found: Dict[str, Path] = {}
+        for state, file_name in variant_names.items():
+            for root in search_roots:
+                candidate = root / file_name
+                try:
+                    if candidate.exists():
+                        found[state] = candidate
+                        break
+                except Exception:
+                    continue
+
+        # Fallback: use connected image for disconnected state if only one exists
+        if "connected" in found and "none" not in found:
+            found["none"] = found["connected"]
+        elif "none" in found and "connected" not in found:
+            found["connected"] = found["none"]
+
+        return found
+
+    def _m913_set_image_state(self, state: str = "none") -> None:
+        if state not in M913_IMAGE_STATE_NAMES:
+            state = "none"
+
+        path = self._m913_img_paths.get(state)
+        if path == self._m913_img_path and self._m913_img_base is not None:
+            self._m913_img_state = state
+            return
+
+        self._m913_img_state = state
+        self._m913_img_path = path
+        self._m913_img_base = None
+        self._m913_img_scaled = None
+
+        if self._m913_img_path:
+            try:
+                self._m913_img_base = tk.PhotoImage(file=str(self._m913_img_path))
+            except Exception:
+                self._m913_img_base = None
+
+        self._m913_redraw_overlay()
+
+    def _m913_redraw_overlay(self) -> None:
+        c = self._m913_overlay_canvas
+        if not c:
+            return
+
+        c.delete("all")
+
+        w = max(c.winfo_width(), 1)
+        h = max(c.winfo_height(), 1)
+
+        if not self._m913_img_base:
+            msg = "M913 mouse image not found" if not self._m913_img_path else "Failed to load M913 image"
+            c.create_text(w // 2, h // 2, text=msg, fill=self._colors.get("muted", "#666"))
+            return
+
+        base_w = self._m913_img_base.width()
+        base_h = self._m913_img_base.height()
+        factor = max(1, int(math.ceil(base_w / max(1, w))), int(math.ceil(base_h / max(1, h))))
+
+        try:
+            self._m913_img_scaled = self._m913_img_base.subsample(factor, factor)
+        except Exception:
+            self._m913_img_scaled = self._m913_img_base
+
+        img_w = self._m913_img_scaled.width()
+        img_h = self._m913_img_scaled.height()
+        ox = (w - img_w) / 2.0
+        oy = (h - img_h) / 2.0
+        c.create_image(ox, oy, image=self._m913_img_scaled, anchor="nw")
 
     # ------------------------------------------------------------------
     # Pulse animation for active hotspot highlighting
@@ -2632,6 +2724,20 @@ class App(tk.Tk):
         sister_cb.pack(side=tk.LEFT, padx=4)
         sister_cb.bind("<<ComboboxSelected>>", lambda _: self._m913_on_sister_changed())
 
+        # ── M913 overlay image ──
+        self._m913_overlay_canvas = tk.Canvas(parent, height=220, highlightthickness=1)
+        self._m913_overlay_canvas.pack(fill=tk.X, padx=6, pady=(3, 3))
+        try:
+            self._m913_overlay_canvas.configure(
+                bg=self._colors.get("panel2", "#f2e8d0"),
+                highlightbackground=self._colors.get("border", "#b09878"),
+            )
+        except Exception:
+            pass
+        self._m913_overlay_canvas.bind("<Configure>", lambda _e: self._m913_redraw_overlay())
+        self._m913_img_paths = self._find_m913_png_variants()
+        self._m913_set_image_state("none")
+
         # ── Scrollable content ──
         canvas_wrap = ttk.Frame(parent)
         canvas_wrap.pack(fill=tk.BOTH, expand=True, padx=6, pady=3)
@@ -2753,9 +2859,11 @@ class App(tk.Tk):
         if names:
             self._m913_dev_combo.current(0)
             self._m913_status_var.set(f"Found {len(names)} M913 device(s)")
+            self._m913_set_image_state("connected")
         else:
             self._m913_dev_var.set("")
             self._m913_status_var.set("No M913 devices found — is the receiver plugged in?")
+            self._m913_set_image_state("none")
 
     def _m913_on_device_selected(self) -> None:
         """When a device is selected in the combo, load any saved profile."""
