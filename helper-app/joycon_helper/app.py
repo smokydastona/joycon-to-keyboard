@@ -378,6 +378,14 @@ class App(tk.Tk):
         self.title("JoyCon Bridge Helper")
         self.geometry("980x720")
 
+        # Window icon — look next to the exe (frozen), otherwise next to this file.
+        _icon_path = self._find_icon()
+        if _icon_path:
+            try:
+                self.iconbitmap(str(_icon_path))
+            except tk.TclError:
+                log.debug("iconbitmap failed for %s", _icon_path)
+
         self._ui_theme = self._load_ui_theme()
         self._colors = self._ui_theme.get("colors", DEFAULT_UI_THEME["colors"])
         self._typo = self._ui_theme.get("typography", DEFAULT_UI_THEME["typography"])
@@ -502,6 +510,18 @@ class App(tk.Tk):
         self._pending_fw_offered = False
         if self._pending_fw_files:
             self.after(3000, self._check_pending_fw)
+
+    @staticmethod
+    def _find_icon() -> Optional[Path]:
+        """Locate icon.ico next to the exe (frozen) or in the helper-app dir."""
+        candidates: list[Path] = []
+        if getattr(sys, "frozen", False):
+            candidates.append(Path(sys.executable).resolve().parent / "icon.ico")
+        candidates.append(Path(__file__).resolve().parent.parent / "icon.ico")
+        for p in candidates:
+            if p.is_file():
+                return p
+        return None
 
     def _load_ui_theme(self) -> dict:
         # Decide light vs dark: check --dark flag, env var, or Windows dark-mode setting.
