@@ -10,6 +10,12 @@
 #include "tinyusb.h"
 #include "tusb.h"
 
+// Descriptors defined in tusb_desc.c
+extern const tusb_desc_device_t desc_device;
+extern const uint8_t desc_configuration[];
+extern char const* string_desc_arr[];
+extern const int string_desc_arr_count;
+
 static const char* TAG = "usb-kbd";
 
 static uint8_t s_mod = 0;
@@ -43,10 +49,11 @@ static void send_report(void) {
 
 void usb_kbd_init(void) {
     const tinyusb_config_t tusb_cfg = {
-        .device_descriptor = NULL,
-        .string_descriptor = NULL,
+        .device_descriptor = &desc_device,
+        .string_descriptor = string_desc_arr,
+        .string_descriptor_count = string_desc_arr_count,
         .external_phy = false,
-        .configuration_descriptor = NULL,
+        .configuration_descriptor = desc_configuration,
     };
 
     ESP_ERROR_CHECK(tinyusb_driver_install(&tusb_cfg));
