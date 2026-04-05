@@ -40,6 +40,8 @@ Until then, entries are grouped by date.
 
 - **IncediusMod layout mode** (Mouse tab): optional alternative button label set for the [Red Dragon M913 mod by Incedius](https://www.printables.com/model/1191307-red-dragon-m913-mod). A "Layout" dropdown in the Device section switches between "Stock M913" (Side 1–12) and "IncediusMod" (Thumb 1–6, Finger 1–6). The layout choice is saved per-profile and labels update instantly.
 
+- **App icon**: converted `icon.png` (1024×1024 sketchbook-ink artwork) to a multi-size `icon.ico` (16–256 px) at `helper-app/icon.ico`. Used as the window icon at runtime and embedded in the PyInstaller `.exe`.
+
 - **M913 mouse overlay artwork**: four sketchbook-ink themed M913 overlay PNGs (light connected/disconnected, dark connected/disconnected) wired into the Mouse tab, matching the Joy-Con overlay pattern in the Controller tab. The UI bundle generator and artifact generator now include M913 images alongside Joy-Con overlays.
 
 - **Redragon M913 Impact Elite mouse support** (helper app):
