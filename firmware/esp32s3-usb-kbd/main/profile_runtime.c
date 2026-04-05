@@ -93,6 +93,8 @@ typedef struct {
     bool active;
     size_t override_count;
     layer_override_t overrides[MAX_LAYER_OVERRIDES];
+    // O(1) lookup table: key_id → index into overrides[], or -1 if none.
+    int8_t override_index[INPUT_KEY_ID_MAX];
 } layer_t;
 
 static map_entry_t s_map[INPUT_KEY_ID_MAX];
@@ -130,6 +132,7 @@ static void free_profile(void) {
 
     for (size_t l = 0; l < MAX_LAYERS; l++) {
         memset(&s_layers[l], 0, sizeof(layer_t));
+        memset(s_layers[l].override_index, -1, sizeof(s_layers[l].override_index));
     }
     s_layer_count = 0;
 }
@@ -403,6 +406,8 @@ static void parse_layers(cJSON *root) {
 
         layer_t *l = &s_layers[count];
         memset(l, 0, sizeof(*l));
+        // Initialize override_index to -1 (no override).
+        memset(l->override_index, -1, sizeof(l->override_index));
 
         if (cJSON_IsString(name) && name->valuestring) {
             strncpy(l->name, name->valuestring, sizeof(l->name) - 1);
@@ -419,6 +424,11 @@ static void parse_layers(cJSON *root) {
         l->active = false;
 
         parse_layer_mappings(mappings, l);
+
+        // Build O(1) override_index from parsed overrides.
+        for (size_t i = 0; i < l->override_count; i++) {
+            l->override_index[l->overrides[i].key_id] = (int8_t)i;
+        }
 
         ESP_LOGI(TAG, "Layer '%s': activation=key_id %u, mode=%s, %u overrides",
                  l->name, l->activation_key_id,
@@ -579,12 +589,12 @@ static void send_key_id(bool pressed, uint8_t key_id) {
 
 static map_entry_t *find_layer_override(uint8_t key_id) {
     // Check layers in reverse priority (last active layer wins).
+    // O(1) lookup per layer via the override_index table.
     for (int l = (int)s_layer_count - 1; l >= 0; l--) {
         if (!s_layers[l].active) continue;
-        for (size_t i = 0; i < s_layers[l].override_count; i++) {
-            if (s_layers[l].overrides[i].key_id == key_id) {
-                return &s_layers[l].overrides[i].entry;
-            }
+        int8_t idx = s_layers[l].override_index[key_id];
+        if (idx >= 0) {
+            return &s_layers[l].overrides[idx].entry;
         }
     }
     return NULL;

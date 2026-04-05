@@ -461,6 +461,9 @@ class App(tk.Tk):
         self._event_timeline: List[Tuple[float, str, str]] = []
         self._timeline_canvas: Optional[tk.Canvas] = None
 
+        # Pre-initialize Input Test tab variables (used before tab is built)
+        self._input_test_active_var = tk.StringVar(value="(none)")
+
         # ── Undo / Redo history ──
         self._undo_stack: List[Tuple[str, str]] = []  # (description, json_snapshot)
         self._redo_stack: List[Tuple[str, str]] = []
@@ -488,6 +491,32 @@ class App(tk.Tk):
         # ── Drag-and-drop state ──
         self._drag_source: Optional[str] = None  # keysym being dragged
         self._drag_item: Optional[int] = None  # canvas item id for drag ghost
+
+        # ── Performance: dirty-flag batched keymap redraw ──
+        self._keymap_dirty: bool = False  # True = needs redraw on next pulse tick
+        self._keymap_canvas_items: Dict[str, list] = {}  # hotspot name → [canvas item ids]
+        self._keymap_bg_item: Optional[int] = None  # canvas item id for background image
+        self._keymap_last_scale_factor: int = 0  # cached subsample factor
+        self._keymap_last_canvas_size: Tuple[int, int] = (0, 0)  # (w, h)
+
+        # ── Performance: cached conflict detection ──
+        self._conflict_cache: Optional[Dict[str, List[str]]] = None  # invalidated on profile change
+        self._conflict_hotspot_cache: Optional[set] = None
+
+        # ── Performance: cached reverse lookup ──
+        self._key_id_to_hotspot_cache: Optional[Dict[int, str]] = None
+
+        # ── Performance: timeline change tracking ──
+        self._timeline_last_count: int = 0  # event count at last draw
+        self._timeline_last_draw_time: float = 0.0
+
+        # ── Performance: lazy tab loading ──
+        self._tabs_built: set[str] = set()  # tab names that have been built
+
+        # ── Performance: latency profiling ──
+        self._perf_enabled: bool = False
+        self._perf_redraw_times: List[float] = []  # last N redraw durations
+        self._perf_input_times: List[Tuple[float, float]] = []  # (recv_time, process_time)
 
         self._build_ui()
         self._apply_widget_theme()
@@ -740,13 +769,12 @@ class App(tk.Tk):
         self.tabs.add(self.tab_controller, text="Controller")
         self.tabs.add(self.tab_input_test, text="Input Test")
 
+        # Build critical tabs eagerly; defer the rest until first selected.
         self._build_profile_tab()
-        self._build_macros_tab()
-        self._build_stick_tab()
-        self._build_share_tab()
-        self._build_overlay_tab()
         self._build_controller_tab()
-        self._build_input_test_tab()
+
+        # Lazy-load remaining tabs on first selection.
+        self.tabs.bind("<<NotebookTabChanged>>", self._on_tab_changed)
 
         # Log view (below tabs)
         ttk.Label(left, text="Device log / events").pack(anchor="w", pady=(6, 0))
@@ -826,6 +854,32 @@ class App(tk.Tk):
 
         # Start periodic mode indicator refresh
         self.after(300, self._mode_indicator_tick)
+
+    def _on_tab_changed(self, _event: Any = None) -> None:
+        """Lazy-build tab contents on first selection."""
+        try:
+            tab_id = self.tabs.select()
+            tab_name = self.tabs.tab(tab_id, "text")
+        except Exception:
+            return
+        self._ensure_tab_built(tab_name)
+
+    def _ensure_tab_built(self, tab_name: str) -> None:
+        """Build a tab's contents if not already built."""
+        if tab_name in self._tabs_built:
+            return
+        self._tabs_built.add(tab_name)
+        builders: Dict[str, Any] = {
+            "Macros": self._build_macros_tab,
+            "Stick": self._build_stick_tab,
+            "Share": self._build_share_tab,
+            "Overlay": self._build_overlay_tab,
+            "Input Test": self._build_input_test_tab,
+        }
+        builder = builders.get(tab_name)
+        if builder:
+            builder()
+            self._apply_widget_theme()
 
     def _build_profile_tab(self) -> None:
         # ── Slot quick-select row ──
@@ -1261,7 +1315,7 @@ class App(tk.Tk):
     # ------------------------------------------------------------------
 
     def _pulse_tick(self) -> None:
-        """Advance the pulse animation phase and redraw if active keys exist."""
+        """Advance the pulse animation phase and redraw if active keys exist or dirty."""
         if self._active_key_ids:
             step = 0.07
             if self._pulse_growing:
@@ -1274,6 +1328,8 @@ class App(tk.Tk):
                 if self._pulse_phase <= 0.3:
                     self._pulse_phase = 0.3
                     self._pulse_growing = True
+            self._keymap_redraw()
+        elif self._keymap_dirty:
             self._keymap_redraw()
         else:
             self._pulse_phase = 0.0
@@ -1306,6 +1362,9 @@ class App(tk.Tk):
     def _keymap_refresh_visuals(self) -> None:
         if not self._keymap_canvas:
             return
+        self._invalidate_caches()
+        # Force full rebuild by clearing canvas items cache
+        self._keymap_canvas_items = {}
         self._keymap_redraw()
 
     def _mapping_load_from_profile(self, in_id: int) -> None:
@@ -1529,8 +1588,23 @@ class App(tk.Tk):
             return None
         return None
 
+    def _invalidate_caches(self) -> None:
+        """Invalidate all profile-dependent caches. Call after any profile/mapping change."""
+        self._conflict_cache = None
+        self._conflict_hotspot_cache = None
+        self._key_id_to_hotspot_cache = None
+
+    def _get_hotspot_name(self, key_id: int) -> str:
+        """Fast cached reverse lookup: key_id → hotspot name."""
+        if self._key_id_to_hotspot_cache is None:
+            hs = self._keymap_hotspots()
+            self._key_id_to_hotspot_cache = {v: k for k, v in hs.items()}
+        return self._key_id_to_hotspot_cache.get(key_id, f"key_id={key_id}")
+
     def _detect_conflicts(self) -> Dict[str, List[str]]:
-        """Return a dict mapping output key name → list of hotspot names that produce it."""
+        """Return a dict mapping output key name → list of hotspot names that produce it. Cached."""
+        if self._conflict_cache is not None:
+            return self._conflict_cache
         hs_bindings = self._keymap_hotspots()
         output_map: Dict[str, List[str]] = {}
         for name, key_id in hs_bindings.items():
@@ -1539,17 +1613,33 @@ class App(tk.Tk):
                 continue
             label = hid_keycodes.hid_to_name(out[0], out[1])
             output_map.setdefault(label, []).append(name)
-        return {k: v for k, v in output_map.items() if len(v) > 1}
+        self._conflict_cache = {k: v for k, v in output_map.items() if len(v) > 1}
+        # Build conflict hotspot set
+        conflict_hs: set[str] = set()
+        for names in self._conflict_cache.values():
+            conflict_hs.update(names)
+        self._conflict_hotspot_cache = conflict_hs
+        return self._conflict_cache
 
     def _keymap_redraw(self) -> None:
+        t0 = time.monotonic() if self._perf_enabled else 0.0
         c = self._keymap_canvas
         if not c:
             return
 
-        c.delete("all")
+        self._keymap_dirty = False
 
         w = max(c.winfo_width(), 1)
         h = max(c.winfo_height(), 1)
+
+        # Determine if a full rebuild is needed (layout change) or just a color/pulse update.
+        need_full = (w, h) != self._keymap_last_canvas_size or not self._keymap_canvas_items
+
+        if need_full:
+            c.delete("all")
+            self._keymap_canvas_items = {}
+            self._keymap_bg_item = None
+            self._keymap_last_canvas_size = (w, h)
 
         if not self._keymap_img_base:
             state_name = self._keymap_img_state
@@ -1558,7 +1648,8 @@ class App(tk.Tk):
                 if not self._keymap_img_path
                 else f"Failed to load Joy-Con image for state '{state_name}'"
             )
-            c.create_text(w // 2, h // 2, text=msg, fill=self._colors.get("muted", "#666"))
+            if need_full:
+                c.create_text(w // 2, h // 2, text=msg, fill=self._colors.get("muted", "#666"))
             self._keymap_hotspot_px = {}
             return
 
@@ -1566,41 +1657,40 @@ class App(tk.Tk):
         base_h = self._keymap_img_base.height()
         factor = max(1, int(math.ceil(base_w / max(1, w))), int(math.ceil(base_h / max(1, h))))
 
-        try:
-            self._keymap_img_scaled = self._keymap_img_base.subsample(factor, factor)
-        except Exception:
-            self._keymap_img_scaled = self._keymap_img_base
+        if need_full or factor != self._keymap_last_scale_factor:
+            self._keymap_last_scale_factor = factor
+            try:
+                self._keymap_img_scaled = self._keymap_img_base.subsample(factor, factor)
+            except Exception:
+                self._keymap_img_scaled = self._keymap_img_base
 
         img_w = self._keymap_img_scaled.width()
         img_h = self._keymap_img_scaled.height()
         ox = (w - img_w) / 2.0
         oy = (h - img_h) / 2.0
 
-        c.create_image(ox, oy, image=self._keymap_img_scaled, anchor="nw")
+        if need_full:
+            self._keymap_bg_item = c.create_image(ox, oy, image=self._keymap_img_scaled, anchor="nw")
 
         hs_bindings = self._keymap_hotspots()
         conflicts = self._detect_conflicts()
-        conflict_hotspots: set[str] = set()
-        for names in conflicts.values():
-            conflict_hotspots.update(names)
+        conflict_hotspots = self._conflict_hotspot_cache or set()
 
-        # Update conflict label and fix button
-        if conflicts:
-            parts = [f"{key}: {', '.join(names)}" for key, names in conflicts.items()]
-            self._conflict_var.set("Conflicts: " + "; ".join(parts))
-            try:
-                self._conflict_fix_btn.pack(padx=8, anchor="w", pady=(0, 4))
-            except Exception:
-                pass
-        else:
-            self._conflict_var.set("")
-            try:
-                self._conflict_fix_btn.pack_forget()
-            except Exception:
-                pass
-
-        # Reverse lookup: key_id → hotspot name
-        key_id_to_hotspot: Dict[int, str] = {v: k for k, v in hs_bindings.items()}
+        # Update conflict label and fix button (only on full rebuild to avoid flicker)
+        if need_full:
+            if conflicts:
+                parts = [f"{key}: {', '.join(names)}" for key, names in conflicts.items()]
+                self._conflict_var.set("Conflicts: " + "; ".join(parts))
+                try:
+                    self._conflict_fix_btn.pack(padx=8, anchor="w", pady=(0, 4))
+                except Exception:
+                    pass
+            else:
+                self._conflict_var.set("")
+                try:
+                    self._conflict_fix_btn.pack_forget()
+                except Exception:
+                    pass
 
         self._keymap_hotspot_px = {}
         radius = max(14, int(min(img_w, img_h) * 0.02))
@@ -1651,56 +1741,92 @@ class App(tk.Tk):
 
             # Color coding
             if is_active:
-                # Pulse effect: blend between accent2 and a brighter version
                 base_active = self._colors.get("accent2", "#3a8a5c")
                 bright = _blend_hex(base_active, "#ffffff", 0.4)
                 fill = _blend_hex(base_active, bright, self._pulse_phase)
                 outline = fill
             elif is_conflict:
-                fill = self._colors.get("danger", "#c84848")  # red
+                fill = self._colors.get("danger", "#c84848")
                 outline = self._colors.get("danger", "#c84848")
             elif selected:
-                fill = self._colors.get("accent", "#4a7cc8")  # blue
+                fill = self._colors.get("accent", "#4a7cc8")
                 outline = self._colors.get("accent", "#4a7cc8")
             elif has_mapping:
-                fill = self._colors.get("warning", "#b89030")  # yellow
+                fill = self._colors.get("warning", "#b89030")
                 outline = self._colors.get("warning", "#b89030")
             else:
                 fill = self._colors.get("panel", "#fff")
                 outline = self._colors.get("border", "#333")
 
             text_col = _contrast_on(fill)
-
-            # Search highlight ring
-            is_search_match = name in self._search_matches
-            if is_search_match:
-                sr = radius + 5
-                c.create_oval(
-                    px - sr, py - sr, px + sr, py + sr,
-                    outline=self._colors.get("accent", "#4a7cc8"), width=3, dash=(6, 2),
-                )
-
-            c.create_oval(px - radius, py - radius, px + radius, py + radius, outline=outline, width=2, fill=fill)
-
-            # Pulse ring for active hotspots
-            if is_active:
-                pulse_r = radius + int(6 * self._pulse_phase)
-                pulse_alpha_col = _blend_hex(fill, self._colors.get("bg", "#e8d8b8"), 0.5)
-                c.create_oval(
-                    px - pulse_r, py - pulse_r, px + pulse_r, py + pulse_r,
-                    outline=pulse_alpha_col, width=2, dash=(4, 4),
-                )
-
             label = name
             if mapping_label:
                 label = f"{name}\n{mapping_label}"
-            c.create_text(
-                px,
-                py,
-                text=label,
-                fill=text_col,
-                font=(self._typo.get("font_family", "Segoe UI"), 8, "bold"),
-            )
+
+            existing = self._keymap_canvas_items.get(name)
+            if existing and not need_full:
+                # Update in-place: recolor oval + pulse ring + text
+                oval_id, text_id, search_id, pulse_id = existing
+                c.itemconfigure(oval_id, outline=outline, fill=fill)
+                c.itemconfigure(text_id, text=label, fill=text_col)
+
+                # Update pulse ring
+                if is_active:
+                    pulse_r = radius + int(6 * self._pulse_phase)
+                    pulse_col = _blend_hex(fill, self._colors.get("bg", "#e8d8b8"), 0.5)
+                    if pulse_id:
+                        c.coords(pulse_id, px - pulse_r, py - pulse_r, px + pulse_r, py + pulse_r)
+                        c.itemconfigure(pulse_id, outline=pulse_col, state="normal")
+                    else:
+                        pulse_id = c.create_oval(
+                            px - pulse_r, py - pulse_r, px + pulse_r, py + pulse_r,
+                            outline=pulse_col, width=2, dash=(4, 4),
+                        )
+                        self._keymap_canvas_items[name] = (oval_id, text_id, search_id, pulse_id)
+                elif pulse_id:
+                    c.itemconfigure(pulse_id, state="hidden")
+
+                # Search highlight
+                is_search_match = name in self._search_matches
+                if search_id:
+                    c.itemconfigure(search_id, state="normal" if is_search_match else "hidden")
+            else:
+                # Full create
+                is_search_match = name in self._search_matches
+                search_id = None
+                if is_search_match:
+                    sr = radius + 5
+                    search_id = c.create_oval(
+                        px - sr, py - sr, px + sr, py + sr,
+                        outline=self._colors.get("accent", "#4a7cc8"), width=3, dash=(6, 2),
+                    )
+
+                oval_id = c.create_oval(
+                    px - radius, py - radius, px + radius, py + radius,
+                    outline=outline, width=2, fill=fill,
+                )
+
+                pulse_id = None
+                if is_active:
+                    pulse_r = radius + int(6 * self._pulse_phase)
+                    pulse_col = _blend_hex(fill, self._colors.get("bg", "#e8d8b8"), 0.5)
+                    pulse_id = c.create_oval(
+                        px - pulse_r, py - pulse_r, px + pulse_r, py + pulse_r,
+                        outline=pulse_col, width=2, dash=(4, 4),
+                    )
+
+                text_id = c.create_text(
+                    px, py, text=label, fill=text_col,
+                    font=(self._typo.get("font_family", "Segoe UI"), 8, "bold"),
+                )
+
+                self._keymap_canvas_items[name] = (oval_id, text_id, search_id, pulse_id)
+
+        if self._perf_enabled:
+            dt = time.monotonic() - t0
+            self._perf_redraw_times.append(dt)
+            if len(self._perf_redraw_times) > 60:
+                self._perf_redraw_times = self._perf_redraw_times[-60:]
 
     def _keymap_pick_hotspot(self, x: float, y: float) -> Optional[str]:
         best: Optional[Tuple[str, float]] = None
@@ -2310,11 +2436,20 @@ class App(tk.Tk):
         top = ttk.Frame(self.tab_input_test)
         top.pack(fill=tk.X, padx=8, pady=(8, 4))
         ttk.Label(top, text="Active keys:").pack(side=tk.LEFT)
-        self._input_test_active_var = tk.StringVar(value="(none)")
         ttk.Label(top, textvariable=self._input_test_active_var, wraplength=700, justify="left").pack(
             side=tk.LEFT, padx=(8, 0)
         )
         ttk.Button(top, text="Clear log", command=self._input_test_clear).pack(side=tk.RIGHT)
+
+        # ── Performance profiling toggle ──
+        perf_row = ttk.Frame(self.tab_input_test)
+        perf_row.pack(fill=tk.X, padx=8, pady=(0, 4))
+        self._perf_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(perf_row, text="Show performance stats", variable=self._perf_var,
+                        command=self._toggle_perf).pack(side=tk.LEFT)
+        self._perf_stats_var = tk.StringVar(value="")
+        self._perf_label = ttk.Label(perf_row, textvariable=self._perf_stats_var, style="Muted.TLabel")
+        self._perf_label.pack(side=tk.LEFT, padx=(12, 0))
 
         # ── Visual event timeline ──
         tl_frame = ttk.LabelFrame(self.tab_input_test, text="Event timeline (last 5 seconds)")
@@ -2338,11 +2473,15 @@ class App(tk.Tk):
         self.after(200, self._timeline_redraw_tick)
 
     def _input_test_clear(self) -> None:
+        if not hasattr(self, "_input_test_log"):
+            return
         self._input_test_log.configure(state="normal")
         self._input_test_log.delete("1.0", "end")
         self._input_test_log.configure(state="disabled")
 
     def _input_test_append(self, line: str) -> None:
+        if not hasattr(self, "_input_test_log"):
+            return
         log_w = self._input_test_log
         log_w.configure(state="normal")
         log_w.insert("1.0", line + "\n")
@@ -2360,8 +2499,14 @@ class App(tk.Tk):
         self._event_timeline = [(t, l, c) for t, l, c in self._event_timeline if t > cutoff]
 
     def _timeline_redraw_tick(self) -> None:
-        """Periodically redraw the event timeline canvas."""
-        self._timeline_redraw()
+        """Periodically redraw the event timeline canvas — skip if no changes."""
+        now = time.time()
+        # Only redraw if events changed or old events expired (every ~1s)
+        if (len(self._event_timeline) != self._timeline_last_count
+                or now - self._timeline_last_draw_time > 1.0):
+            self._timeline_redraw()
+            self._timeline_last_count = len(self._event_timeline)
+            self._timeline_last_draw_time = now
         self.after(200, self._timeline_redraw_tick)
 
     def _timeline_redraw(self) -> None:
@@ -2399,6 +2544,40 @@ class App(tk.Tk):
             c.create_line(x, pad, x, h - 18, fill=color, width=2)
             c.create_text(x, pad + 6, text=label, fill=color,
                          font=(self._typo.get("font_family", "Segoe UI"), 7), anchor="n")
+
+    # ------------------------------------------------------------------
+    # Performance profiling display
+    # ------------------------------------------------------------------
+
+    def _toggle_perf(self) -> None:
+        """Toggle performance stats collection and display."""
+        self._perf_enabled = self._perf_var.get()
+        if self._perf_enabled:
+            self._perf_redraw_times.clear()
+            self._perf_input_times.clear()
+            self._perf_stats_var.set("Collecting...")
+            self._perf_update_tick()
+        else:
+            self._perf_stats_var.set("")
+
+    def _perf_update_tick(self) -> None:
+        """Periodically update profiling stats display."""
+        if not self._perf_enabled:
+            return
+        parts: list[str] = []
+        if self._perf_redraw_times:
+            recent = self._perf_redraw_times[-50:]
+            avg_ms = sum(recent) / len(recent) * 1000
+            max_ms = max(recent) * 1000
+            parts.append(f"Redraw: avg {avg_ms:.1f}ms, max {max_ms:.1f}ms ({len(recent)} samples)")
+        if self._perf_input_times:
+            recent = self._perf_input_times[-50:]
+            lats = [proc - recv for recv, proc in recent]
+            avg_lat = sum(lats) / len(lats) * 1000
+            max_lat = max(lats) * 1000
+            parts.append(f"Input: avg {avg_lat:.1f}ms, max {max_lat:.1f}ms")
+        self._perf_stats_var.set("  |  ".join(parts) if parts else "Collecting...")
+        self.after(500, self._perf_update_tick)
 
     # ------------------------------------------------------------------
     # Undo / Redo
@@ -2778,7 +2957,7 @@ class App(tk.Tk):
                 pass
 
         self._guided_step_idx += 1
-        self.after(600, self._guided_advance_prompt)
+        self.after(300, self._guided_advance_prompt)  # Auto-advance quickly
 
     def _guided_skip(self) -> None:
         self._keymap_learn_name = None
@@ -3085,6 +3264,29 @@ class App(tk.Tk):
         self._keymap_status.set(f"Bound {learned_name} → key_id={int(key_id)}")
         self._play_sound("bind")
 
+        # Auto-advance: select the next unbound hotspot for fast sequential mapping.
+        if self._guided_window is None:
+            self._auto_advance_to_next_unbound(learned_name)
+
+    def _auto_advance_to_next_unbound(self, current_name: str) -> None:
+        """Select the next unbound hotspot in the KEYMAP_HOTSPOTS order."""
+        hs = self._keymap_hotspots()
+        names = [n for n, _x, _y in KEYMAP_HOTSPOTS]
+        try:
+            idx = names.index(current_name)
+        except ValueError:
+            return
+        # Scan forward from current+1, wrapping around
+        for offset in range(1, len(names)):
+            candidate = names[(idx + offset) % len(names)]
+            if candidate not in hs:
+                self._keymap_selected_name = candidate
+                self._keymap_status.set(
+                    f"Auto-selected '{candidate}' — press Learn to bind, or click another."
+                )
+                self._keymap_dirty = True
+                return
+
     def _keymap_clear_selected(self) -> None:
         if not self._keymap_selected_name:
             return
@@ -3210,6 +3412,7 @@ class App(tk.Tk):
         obj = _ensure_profile_defaults(obj)
         self.profile_text.delete("1.0", "end")
         self.profile_text.insert("1.0", json.dumps(obj, indent=2, ensure_ascii=False))
+        self._invalidate_caches()
         self._refresh_macro_list()
         self._stick_load_from_profile(obj)
         self._keymap_refresh_visuals()
@@ -3384,16 +3587,15 @@ class App(tk.Tk):
                 self._active_key_ids.add(key_id)
             else:
                 self._active_key_ids.discard(key_id)
-            self._keymap_redraw()
+            self._keymap_dirty = True  # Batched: redrawn on next pulse tick (≤80ms)
 
             # Input test tab: log the event and update active display.
             try:
+                recv_t = time.monotonic()
                 ts = time.strftime("%H:%M:%S")
                 action = "pressed" if pressed else "released"
-                # Try to find a hotspot name for this key_id
-                hs = self._keymap_hotspots()
-                hs_rev = {v: k for k, v in hs.items()}
-                name = hs_rev.get(key_id, f"key_id={key_id}")
+                # Use cached reverse lookup
+                name = self._get_hotspot_name(key_id)
                 self._input_test_append(f"[{ts}] {name} {action}")
 
                 # Add to visual timeline
@@ -3401,13 +3603,16 @@ class App(tk.Tk):
                 self._timeline_add_event(name, tl_color)
 
                 if self._active_key_ids:
-                    names = []
-                    for kid in sorted(self._active_key_ids):
-                        n = hs_rev.get(kid, f"#{kid}")
-                        names.append(n)
+                    names = [self._get_hotspot_name(kid) for kid in sorted(self._active_key_ids)]
                     self._input_test_active_var.set(", ".join(names))
                 else:
                     self._input_test_active_var.set("(none)")
+
+                # Record latency for profiling
+                if self._perf_enabled:
+                    self._perf_input_times.append((recv_t, time.monotonic()))
+                    if len(self._perf_input_times) > 100:
+                        self._perf_input_times = self._perf_input_times[-100:]
             except Exception:
                 pass
 
@@ -3493,6 +3698,8 @@ class App(tk.Tk):
         return macros if isinstance(macros, list) else []
 
     def _refresh_macro_list(self) -> None:
+        if not hasattr(self, "macro_list"):
+            return
         try:
             macros = self._macros()
         except Exception:
@@ -3524,12 +3731,16 @@ class App(tk.Tk):
             self._mapping_macro_id.set(picked)
 
     def _selected_macro_index(self) -> Optional[int]:
+        if not hasattr(self, "macro_list"):
+            return None
         sel = self.macro_list.curselection()
         if not sel:
             return None
         return int(sel[0])
 
     def _refresh_macro_steps(self) -> None:
+        if not hasattr(self, "step_list"):
+            return
         self.step_list.delete(0, "end")
         idx = self._selected_macro_index()
         if idx is None:

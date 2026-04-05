@@ -44,7 +44,7 @@ Current UI tabs:
   - **Feedback sounds**: optional Windows beep on bind/unbind/undo for tactile feedback
   - **Adaptive UI**: toggle between Simple and Advanced modes; Simple hides layers, chords, macros tabs
   - **Mode indicator**: always-visible status bar showing slot, layer, mode, sandbox, and undo depth
-- **Input Test**: live event log showing controller button presses/releases with timestamps, a summary of currently active keys, and a **visual event timeline** showing the last 5 seconds of input events as colored marks
+- **Input Test**: live event log showing controller button presses/releases with timestamps, a summary of currently active keys, a **visual event timeline** showing the last 5 seconds of input events as colored marks, and an optional **latency profiling** display (toggle checkbox) showing real-time redraw and input processing stats
 
 The Controller tab keymap artwork switches between four Joy-Con states based on BT status: disconnected (`joycons-none.png`), left only, right only, and both connected.
 

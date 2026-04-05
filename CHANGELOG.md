@@ -11,6 +11,14 @@ Until then, entries are grouped by date.
 
 ### Changed
 
+- **Performance: diff-based keymap canvas**: hotspot redraws now update items in-place via `itemconfigure`/`coords` instead of `canvas.delete("all")` + full rebuild. Full rebuilds only happen on resize or profile change.
+- **Performance: dirty-flag batched redraw**: incoming `mapped_key` events set a dirty flag; the 80 ms pulse tick coalesces redraws instead of redrawing on every single input event.
+- **Performance: cached conflict detection**: `_detect_conflicts()` result is cached and only invalidated on profile/mapping changes, not on every redraw.
+- **Performance: cached reverse lookup**: `key_id → hotspot name` mapping is cached with explicit invalidation instead of rebuilding a dict on every input event.
+- **Performance: lazy tab loading**: only Profile and Controller tabs are built at startup; Macros, Stick, Share, Overlay, and Input Test tabs are deferred until first selection.
+- **Performance: O(1) firmware layer override lookup**: `find_layer_override()` now uses a per-layer `override_index[256]` array instead of linear scan (+1 KB RAM total for 4 layers).
+- **Performance: timeline skip-if-unchanged**: timeline canvas skips redraw when event count hasn't changed and less than 1 second has elapsed.
+
 - **CI: Node.js 24 migration**: upgraded all GitHub Actions to Node 24-compatible versions to resolve deprecation warnings:
   - `actions/checkout` v4 → v5
   - `actions/setup-python` v5 → v6
@@ -29,6 +37,10 @@ Until then, entries are grouped by date.
 - **ESP32 link: missing Kconfig parent for HID Host**: `CONFIG_BT_HID_HOST_ENABLED=y` was set in `sdkconfig.defaults` but its parent menuconfig `CONFIG_BT_HID_ENABLED=y` was missing. Without the parent, Kconfig silently ignored the child option, so `BTC_HH_INCLUDED` evaluated to `FALSE` and all `esp_bt_hid_host_*` function bodies were compiled out of `libbt.a`, causing undefined reference linker errors. Added the missing `CONFIG_BT_HID_ENABLED=y`.
 
 ### Added
+
+- **Auto-advance unbound hotspot**: after binding a hotspot, the editor automatically selects the next unbound hotspot in layout order for faster mapping.
+- **Latency profiling mode** (Input Test tab): toggle checkbox displays real-time redraw frame time and input processing latency (avg/max over last 50 samples).
+- **Faster guided wizard**: auto-advance delay reduced from 600 ms to 300 ms for snappier step-by-step flow.
 
 - **Auto-update date guard**: both the helper-app updater and the firmware updater now compare the GitHub release `published_at` timestamp against a build date (`__build_date__`) embedded at CI time. If the running build is newer than the latest release, the update is skipped even if version numbers would suggest otherwise. Local dev builds (empty `__build_date__`) fall back to version-only comparison.
 
