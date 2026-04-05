@@ -5,9 +5,18 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create a GitHub Release with the built artifacts'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'false'
+          - 'true'
 
 permissions:
-  contents: read
+  contents: write
 
 env:
   REPO_VERSION_FILE: version.json
@@ -112,6 +121,7 @@ jobs:
         shell: pwsh
         run: |
           python tools/versioning.py write-pyinstaller-version-file --repo-version version.json --run-number ${{ github.run_number }} --output helper-app/build/pyinstaller-version-info.txt
+          python tools/versioning.py write-app-version --repo-version version.json --output helper-app/joycon_helper/_version.py
 
       - name: Build helper app exe
         shell: pwsh
@@ -184,3 +194,67 @@ jobs:
           name: joycon-bridge-release-bundle-${{ needs.version-metadata.outputs.artifact_version }}
           path: release-bundle
           if-no-files-found: error
+
+  create-release:
+    name: Create GitHub Release
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.event.inputs.create_release == 'true'
+    runs-on: ubuntu-latest
+    needs:
+      - version-metadata
+      - bundle-release
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate version increments
+        shell: bash
+        run: |
+          set -euo pipefail
+          NEW_VER="${{ needs.version-metadata.outputs.source_version }}"
+
+          # Fetch the latest release tag (may be empty if no releases exist yet).
+          LATEST_TAG=$(gh release view --json tagName --jq '.tagName' 2>/dev/null || echo "")
+          if [ -z "$LATEST_TAG" ]; then
+            echo "No existing release found — first release will be v${NEW_VER}"
+            exit 0
+          fi
+
+          LATEST_VER="${LATEST_TAG#v}"
+          echo "Latest release: ${LATEST_VER} | New: ${NEW_VER}"
+
+          # Compare using sort -V (version sort). The newer version must sort last.
+          SORTED_LAST=$(printf '%s\n%s' "$LATEST_VER" "$NEW_VER" | sort -V | tail -n1)
+          if [ "$SORTED_LAST" = "$LATEST_VER" ] || [ "$NEW_VER" = "$LATEST_VER" ]; then
+            echo "::error::Version ${NEW_VER} does not increment over latest release ${LATEST_VER}"
+            exit 1
+          fi
+          echo "Version ${NEW_VER} > ${LATEST_VER} ✓"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download release bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: joycon-bridge-release-bundle-${{ needs.version-metadata.outputs.artifact_version }}
+          path: release-bundle
+
+      - name: Create GitHub Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="v${{ needs.version-metadata.outputs.source_version }}"
+          TITLE="Joy-Con Bridge ${TAG}"
+          NOTES="Build version: ${{ needs.version-metadata.outputs.build_version }}"
+
+          # Create the release with the exe as a direct download asset.
+          gh release create "${TAG}" \
+            --title "${TITLE}" \
+            --notes "${NOTES}" \
+            release-bundle/helper-app/JoyConBridgeHelper.exe
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

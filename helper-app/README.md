@@ -82,3 +82,12 @@ Both folders are created next to the installed application (next to the `.exe` w
 
 - **Auto-cleanup**: files older than 15 days are deleted on each startup.
 - **No personal data**: logs contain only application-level events (serial traffic, errors, platform info). No user paths, environment variables, or identifying data are recorded.
+
+## Auto-update
+
+When running as a packaged `.exe`, the app checks the [GitHub Releases](https://github.com/smokydastona/joycon-to-keyboard/releases) for a newer version on startup.
+
+- If an update is available, the version label in the sidebar changes to **"Update to X.Y.Z"**.
+- Clicking updates downloads the new `.exe`, swaps it in place, and prompts you to restart.
+- When running from source (not frozen), only a notification is shown — no auto-install.
+- The check uses an unauthenticated GET to the public GitHub API. No personal data is sent.

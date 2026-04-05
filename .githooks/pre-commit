@@ -10,17 +10,20 @@ set -e
 
 if command -v py >/dev/null 2>&1; then
   py -3 tools/versioning.py write-repo-version --output version.json --next-commit
+  py -3 tools/versioning.py write-app-version --repo-version version.json --output helper-app/joycon_helper/_version.py
   py -3 tools/generate_ui_artifacts.py
 elif command -v python >/dev/null 2>&1; then
   python tools/versioning.py write-repo-version --output version.json --next-commit
+  python tools/versioning.py write-app-version --repo-version version.json --output helper-app/joycon_helper/_version.py
   python tools/generate_ui_artifacts.py
 else
   echo "[pre-commit] python/py not found; cannot generate mandatory UI artifacts" >&2
   exit 1
 fi
 
-# Stage the auto-incremented repo version file.
+# Stage the auto-incremented repo version file and app version.
 git add version.json 2>/dev/null || true
+git add helper-app/joycon_helper/_version.py 2>/dev/null || true
 
 # Stage the inspection copies if they exist/changed.
 git add -A docs/ui/assets/joycons-none.png docs/ui/assets/joycons-left.png docs/ui/assets/joycons-right.png docs/ui/assets/joycons-both.png 2>/dev/null || true

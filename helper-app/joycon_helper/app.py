@@ -17,6 +17,8 @@ from typing import Any, Dict, List, Optional, Tuple
 from serial.tools import list_ports
 
 from .serial_client import SerialClient
+from ._version import __version__
+from . import updater
 
 log = logging.getLogger("joycon_helper.app")
 
@@ -405,6 +407,10 @@ class App(tk.Tk):
         self._refresh_ports()
         self.after(50, self._drain_rx)
 
+        # Check for updates in the background after the UI is visible.
+        self._pending_update: Optional[Dict[str, str]] = None
+        self.after(2000, self._start_update_check)
+
     def _load_ui_theme(self) -> dict:
         # Decide light vs dark: check --dark flag, env var, or Windows dark-mode setting.
         prefer_dark = self._detect_dark_preference()
@@ -644,6 +650,18 @@ class App(tk.Tk):
         self.raw_entry = ttk.Entry(right, width=30)
         self.raw_entry.pack(pady=(4, 0))
         ttk.Button(right, text="Send", command=self._send_raw, width=22).pack(pady=(6, 0))
+
+        # Version & update (bottom of right panel)
+        ver_frame = ttk.Frame(right)
+        ver_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=(12, 0))
+        ttk.Label(ver_frame, text=f"v{__version__}", style="Muted.TLabel").pack(anchor="w")
+        self._update_btn = ttk.Button(
+            ver_frame, text="Check for updates…", command=self._do_update, width=22
+        )
+        self._update_btn.pack(pady=(4, 0))
+        self._update_status = tk.StringVar(value="")
+        self._update_label = ttk.Label(ver_frame, textvariable=self._update_status, style="Muted.TLabel", wraplength=180)
+        self._update_label.pack(anchor="w", pady=(2, 0))
 
     def _build_profile_tab(self) -> None:
         ttk.Label(self.tab_profile, text="Profile JSON").pack(anchor="w")
@@ -1876,6 +1894,93 @@ class App(tk.Tk):
 
         for i in range(1, len(pts)):
             c.create_line(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], fill=curve_col)
+
+    def _start_update_check(self) -> None:
+        """Kick off a background update check."""
+        def _on_result(info: Optional[Dict[str, str]]) -> None:
+            # Called from a background thread → schedule onto the Tk main loop.
+            self.after(0, self._on_update_result, info)
+
+        updater.check_in_background(_on_result)
+
+    def _on_update_result(self, info: Optional[Dict[str, str]]) -> None:
+        if info is None:
+            self._update_status.set("Up to date.")
+            return
+        self._pending_update = info
+        self._update_btn.configure(text=f"Update to {info['version']}")
+        self._update_status.set(f"New version available: {info['version']}")
+        log.info("Update available: %s → %s", __version__, info["version"])
+
+    def _do_update(self) -> None:
+        if self._pending_update is None:
+            # Manual recheck.
+            self._update_status.set("Checking…")
+            self._update_btn.configure(state="disabled")
+            def _on_result(info: Optional[Dict[str, str]]) -> None:
+                self.after(0, self._on_manual_check_result, info)
+            updater.check_in_background(_on_result)
+            return
+        self._apply_update()
+
+    def _on_manual_check_result(self, info: Optional[Dict[str, str]]) -> None:
+        self._update_btn.configure(state="normal")
+        if info is None:
+            self._update_status.set("Up to date.")
+            return
+        self._pending_update = info
+        self._update_btn.configure(text=f"Update to {info['version']}")
+        self._update_status.set(f"New version available: {info['version']}")
+
+    def _apply_update(self) -> None:
+        info = self._pending_update
+        if not info:
+            return
+
+        if not updater.is_frozen():
+            self._update_status.set("Auto-update only works in the packaged .exe build.")
+            return
+
+        confirm = messagebox.askyesno(
+            "Update available",
+            f"Download and install {info['release_name']}?\n\n"
+            f"Current: v{__version__}\n"
+            f"New: {info['version']}\n\n"
+            "The app will need to restart after updating.",
+        )
+        if not confirm:
+            return
+
+        self._update_btn.configure(state="disabled")
+        self._update_status.set("Downloading…")
+
+        def _progress(downloaded: int, total: int) -> None:
+            pct = int(downloaded * 100 / total) if total > 0 else 0
+            self.after(0, lambda: self._update_status.set(f"Downloading… {pct}%"))
+
+        def _download() -> None:
+            try:
+                updater.download_and_install(info["download_url"], progress_cb=_progress)
+                self.after(0, self._on_update_installed)
+            except Exception as e:
+                log.error("Update failed: %s", e, exc_info=True)
+                self.after(0, lambda: self._on_update_failed(str(e)))
+
+        import threading
+        threading.Thread(target=_download, name="updater-dl", daemon=True).start()
+
+    def _on_update_installed(self) -> None:
+        self._update_status.set("Update installed! Restart to use the new version.")
+        messagebox.showinfo(
+            "Update installed",
+            "The update has been installed.\n\n"
+            "Please close and re-open the app to use the new version.",
+        )
+
+    def _on_update_failed(self, error: str) -> None:
+        self._update_btn.configure(state="normal")
+        self._update_status.set(f"Update failed: {error}")
+        messagebox.showerror("Update failed", error)
 
     def _log_line(self, text: str) -> None:
         log.debug("SERIAL: %s", text)
