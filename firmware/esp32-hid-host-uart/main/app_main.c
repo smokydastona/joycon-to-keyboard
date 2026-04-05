@@ -21,7 +21,9 @@ static void uart_init_bridge(void) {
         .source_clk = UART_SCLK_DEFAULT,
     };
 
-    ESP_ERROR_CHECK(uart_driver_install(BRIDGE_UART_PORT, 2048, 0, 0, NULL, 0));
+    // Previously this was TX-only (RX buffer size 0). For helper-app control
+    // commands (ESP32-S3 -> ESP32), RX must be enabled.
+    ESP_ERROR_CHECK(uart_driver_install(BRIDGE_UART_PORT, 2048, 2048, 0, NULL, 0));
     ESP_ERROR_CHECK(uart_param_config(BRIDGE_UART_PORT, &cfg));
     ESP_ERROR_CHECK(uart_set_pin(BRIDGE_UART_PORT, BRIDGE_UART_TX_GPIO, BRIDGE_UART_RX_GPIO,
                                  UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
