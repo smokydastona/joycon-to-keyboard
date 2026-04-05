@@ -11,6 +11,22 @@ Until then, entries are grouped by date.
 
 ### Added
 
+- **IncediusMod mouse overlay support**: M913 Mouse tab now uses layout-specific overlay images — Stock M913 (`m913.png` / `m913-none.png`) or IncediusMod (`m913_Incedius.png` / `m913_Incedius-none.png`) — selected automatically when the user switches layout mode. Switching layout mode live reloads the overlay instantly.
+- **Dark mode overlay images**: both M913 and Joy-Con overlay finders now select dark-variant PNGs when dark mode is active, matching the background theme.
+
+### Removed
+
+- **Dead SVG files**: removed 6 SVGs (`background.svg`, `background-dark.svg`, `components.svg`, `components-dark.svg`, `icons.svg`, `icons-dark.svg`) that were never rendered at runtime (Tkinter has no SVG support).
+- **Standalone snippet files**: removed `layout_snippet.py` and `ttk_style_snippet.py` (doc-only reference files, superseded by the live app code).
+- **SVG infrastructure in bundle generator**: removed `_read_text()`, `_rewrite_bundle_svg()`, `_resolve_bg_paths()`, and all SVG-related CLI arguments from `generate_ui_bundle.py`. Bundles are now PNG-only.
+
+### Changed
+
+- `generate_ui_artifacts.py`: updated `UI_BUNDLE_INPUTS` to reference Incedius overlays instead of deleted SVGs.
+- `docs/ui/README.md`: updated to reflect PNG-only bundles, Incedius overlays, and removed snippet references.
+
+### Added
+
 - **App background image**: the helper app now displays a full-window background image (light and dark variants) behind the UI. Images scale to cover the window on resize using Pillow. Background PNGs are discovered from `docs/ui/`, `.ui-bundle/`, or the frozen bundle and are selected automatically based on the active theme (light/dark).
 - **Full Joy-Con button support (Nintendo 0x30 reports)**: expanded from 7 key_ids (WASD + jump/sprint/crouch) to 25 key_ids covering all Joy-Con buttons — face buttons (A/B/X/Y), shoulders (L/R), triggers (ZL/ZR), system (Plus/Minus/Home/Capture), stick clicks, and right stick virtual directions. All button bitmask definitions added to `nintendo_candidate.h`.
 - **Stick auto-calibration**: replaced the fixed center value (2048) with per-axis auto-calibration that tracks min/center/max at runtime. The first 8 samples establish the center via running average, then min/max expand as the stick reaches its limits. Raw values are normalized to a ±4096 scale for deadzone comparison. Inspired by GamepadPhoenix's `StickCal` approach.

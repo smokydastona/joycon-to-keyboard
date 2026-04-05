@@ -1347,12 +1347,21 @@ class App(tk.Tk):
         return "none"
 
     def _find_joycons_png_variants(self) -> Dict[str, Path]:
-        variant_names = {
-            "none": "joycons-none.png",
-            "left": "joycons-left.png",
-            "right": "joycons-right.png",
-            "both": "joycons-both.png",
-        }
+        prefer_dark = self._detect_dark_preference()
+        if prefer_dark:
+            variant_names = {
+                "none": "joycons-dark-none.png",
+                "left": "joycons-dark-left.png",
+                "right": "joycons-dark-right.png",
+                "both": "joycons-dark-both.png",
+            }
+        else:
+            variant_names = {
+                "none": "joycons-none.png",
+                "left": "joycons-left.png",
+                "right": "joycons-right.png",
+                "both": "joycons-both.png",
+            }
         search_roots = _joycons_search_roots()
 
         found: Dict[str, Path] = {}
@@ -1421,11 +1430,32 @@ class App(tk.Tk):
     # M913 mouse overlay image helpers
     # ------------------------------------------------------------------
 
-    def _find_m913_png_variants(self) -> Dict[str, Path]:
-        variant_names = {
-            "connected": "m913.png",
-            "none": "m913-none.png",
-        }
+    def _find_m913_png_variants(self, layout: str = "stock") -> Dict[str, Path]:
+        prefer_dark = self._detect_dark_preference()
+
+        if layout == "incedius":
+            if prefer_dark:
+                variant_names = {
+                    "connected": "m913_Incedius-dark.png",
+                    "none": "m913_Incedius-dark-none.png",
+                }
+            else:
+                variant_names = {
+                    "connected": "m913_Incedius.png",
+                    "none": "m913_Incedius-none.png",
+                }
+        else:
+            if prefer_dark:
+                variant_names = {
+                    "connected": "m913-dark.png",
+                    "none": "m913-dark-none.png",
+                }
+            else:
+                variant_names = {
+                    "connected": "m913.png",
+                    "none": "m913-none.png",
+                }
+
         search_roots = _joycons_search_roots()
 
         found: Dict[str, Path] = {}
@@ -2851,7 +2881,7 @@ class App(tk.Tk):
         except Exception:
             pass
         self._m913_overlay_canvas.bind("<Configure>", lambda _e: self._m913_redraw_overlay())
-        self._m913_img_paths = self._find_m913_png_variants()
+        self._m913_img_paths = self._find_m913_png_variants(self._m913_profile.layout)
         self._m913_set_image_state("none")
 
         # ── Scrollable content ──
@@ -3077,7 +3107,7 @@ class App(tk.Tk):
             self._m913_profile.sister_slot = None
 
     def _m913_on_layout_changed(self) -> None:
-        """Switch button display names when layout mode changes."""
+        """Switch button display names and overlay image when layout mode changes."""
         selected = self._m913_layout_var.get()
         mode = self._m913_layout_reverse.get(selected, "stock")
         self._m913_profile.layout = mode
@@ -3088,6 +3118,13 @@ class App(tk.Tk):
         display_names = self._m913_resolved_display_names(mode)
         for btn_name, lbl in self._m913_button_labels.items():
             lbl.configure(text=f"{display_names.get(btn_name, btn_name)}:")
+
+        # Reload overlay image to match the selected layout.
+        self._m913_img_paths = self._find_m913_png_variants(mode)
+        self._m913_img_base = None
+        self._m913_img_scaled = None
+        self._m913_img_path = None
+        self._m913_set_image_state(self._m913_img_state)
 
     def _m913_resolved_display_names(self, mode: str) -> Dict[str, str]:
         """Return the effective display-name dict for the given layout mode.
