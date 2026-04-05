@@ -9,6 +9,14 @@ Until then, entries are grouped by date.
 
 - Capture real controller HID reports and implement evidence-based mapping in the ESP32 host mapper (no guessing report layouts).
 
+### Changed
+
+- **CI: Node.js 24 migration**: upgraded all GitHub Actions to Node 24-compatible versions to resolve deprecation warnings:
+  - `actions/checkout` v4 → v5
+  - `actions/setup-python` v5 → v6
+  - `actions/upload-artifact` v4 → v5
+  - `actions/download-artifact` v4 → v5
+
 ### Added
 
 - **Unified click-to-bind** (helper app):
