@@ -1,18 +1,26 @@
 # Bind Bandit (Windows, Python + Tkinter)
 
-This helper app talks to the bridge over a **serial (COM) port**.
+Bind Bandit is a standalone desktop app for configuring gaming peripherals. **No specific hardware is required to launch it** — use whichever features match your setup:
 
-That COM port is provided by the **ESP32-S3 USB keyboard firmware** (USB CDC-ACM). If you haven’t flashed the ESP32-S3 yet, start with:
+| Use case | What you need | Tabs you'll use |
+|---|---|---|
+| **Joy-Con → keyboard bridge** | ESP32 + ESP32-S3 boards (flashed) | Profile, Controller, Macros, Stick, Overlay, Input Test |
+| **M913 mouse configuration** | Redragon M913 mouse (USB) | Mouse |
+| **Both** | All of the above | All tabs |
 
-- `docs/firmware-install.md`
+### Joy-Con bridge features (requires ESP32-S3 serial connection)
 
-Minimum goals:
+The bridge talks over a **serial (COM) port** provided by the **ESP32-S3 USB keyboard firmware** (USB CDC-ACM). If you haven't flashed the ESP32-S3 yet, start with `docs/firmware-install.md`.
 
 - Select a COM port and connect
 - View live text/JSON coming from the device
 - Upload a profile JSON (slot 0–3)
 - Set the active profile slot
 - One-click "Upload + Activate" for the selected slot
+
+### M913 mouse features (no serial connection needed)
+
+The Mouse tab communicates directly with Redragon M913 mice over USB HID (`hidapi`). No ESP32 hardware or COM port is needed — just plug in the mouse.
 
 Current UI tabs:
 

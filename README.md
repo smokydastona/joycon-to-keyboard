@@ -25,7 +25,7 @@ Before buying parts, read `docs/board-checklist.md`.
 - `firmware/esp32-hid-host-uart/` — ESP32 firmware (HID host → UART)
 - `firmware/esp32s3-usb-kbd/` — ESP32-S3 firmware (USB HID keyboard + CDC serial)
 - `tools/` — optional offline helpers (log decoding)
-- `helper-app/` — optional PC helper (serial UI for profiles/logs + M913 mouse configuration)
+- `helper-app/` — **Bind Bandit** PC app (works standalone for M913 mouse config, or with the bridge hardware for Joy-Con profiles/logs, or both)
 - `docs/` — wiring + notes
 
 ## Hardware assumptions (default)
