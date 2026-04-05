@@ -57,7 +57,7 @@
     <rect x="0" y="0" width="96" height="96" rx="14" fill="#fff6e1" stroke="#c6ad7d" stroke-opacity="0.9"/>
     <path class="s g" d="M48 64V28"/>
     <path class="s g" d="M36 40l12-12 12 12"/>
-    <path class="s" d="M30 70h36a10 10 0 0 0 10-10v0"/>
+    <path class="s" d="M30 70h36a10 10 0 0 0 10-10v0" transform="translate(96 0) scale(-1 1)"/>
     <text class="t" x="48" y="130" text-anchor="middle">upload</text>
   </g>
 
