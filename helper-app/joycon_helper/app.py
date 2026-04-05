@@ -6,13 +6,71 @@ import tkinter as tk
 import tkinter.ttk as ttk
 import time
 import zlib
+from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog
 from tkinter.scrolledtext import ScrolledText
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from serial.tools import list_ports
 
 from .serial_client import SerialClient
+
+
+DEFAULT_UI_THEME: dict = {
+    "name": "midnight-grid",
+    "version": 1,
+    "colors": {
+        "bg": "#0b1220",
+        "panel": "#0f1a2e",
+        "panel2": "#111f37",
+        "text": "#e5e7eb",
+        "muted": "#94a3b8",
+        "border": "#22314f",
+        "accent": "#2b63ff",
+        "accent2": "#22c55e",
+        "danger": "#ef4444",
+        "warning": "#f59e0b",
+    },
+    "typography": {
+        "font_family": "Segoe UI",
+        "font_size": 10,
+        "mono_family": "Consolas",
+        "mono_size": 10,
+    },
+    "spacing": {"xs": 4, "sm": 8, "md": 12, "lg": 16},
+    "radii": {"sm": 6, "md": 10, "lg": 14},
+}
+
+
+def _hex_to_rgb(h: str) -> Tuple[int, int, int]:
+    h = h.strip().lstrip("#")
+    if len(h) != 6:
+        raise ValueError(f"bad hex color: {h!r}")
+    return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
+
+def _rgb_to_hex(rgb: Tuple[int, int, int]) -> str:
+    r, g, b = rgb
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _blend_hex(a: str, b: str, t: float) -> str:
+    t = max(0.0, min(1.0, float(t)))
+    ar, ag, ab = _hex_to_rgb(a)
+    br, bg, bb = _hex_to_rgb(b)
+    rr = int(ar + (br - ar) * t)
+    rg = int(ag + (bg - ag) * t)
+    rb = int(ab + (bb - ab) * t)
+    return _rgb_to_hex((rr, rg, rb))
+
+
+def _load_theme_json(path: Path) -> dict:
+    obj = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(obj, dict):
+        raise ValueError("theme.json must be a JSON object")
+    if not isinstance(obj.get("colors"), dict) or not isinstance(obj.get("typography"), dict):
+        raise ValueError("theme.json missing required keys")
+    return obj
 
 
 def _ensure_profile_defaults(profile: dict) -> dict:
@@ -56,7 +114,7 @@ def _share_code_to_profile(code: str) -> dict:
 
 
 class OverlayWindow(tk.Toplevel):
-    def __init__(self, parent: tk.Tk) -> None:
+    def __init__(self, parent: tk.Tk, theme: Optional[dict] = None) -> None:
         super().__init__(parent)
         self.title("JoyCon Overlay")
         self.geometry("280x120")
@@ -73,13 +131,24 @@ class OverlayWindow(tk.Toplevel):
         self.last_key_var = tk.StringVar(value="-")
         self.last_macro_var = tk.StringVar(value="-")
 
-        frm = tk.Frame(self)
+        colors = (theme or DEFAULT_UI_THEME).get("colors", DEFAULT_UI_THEME["colors"])
+        typo = (theme or DEFAULT_UI_THEME).get("typography", DEFAULT_UI_THEME["typography"])
+
+        self.configure(bg=colors["bg"])
+
+        frm = tk.Frame(self, bg=colors["bg"])
         frm.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        tk.Label(frm, text="JoyCon Bridge Overlay", font=("Segoe UI", 11, "bold")).pack(anchor="w")
-        tk.Label(frm, textvariable=self.slot_var).pack(anchor="w", pady=(6, 0))
-        tk.Label(frm, textvariable=self.last_key_var).pack(anchor="w")
-        tk.Label(frm, textvariable=self.last_macro_var).pack(anchor="w")
+        tk.Label(
+            frm,
+            text="JoyCon Bridge Overlay",
+            font=(typo.get("font_family", "Segoe UI"), 11, "bold"),
+            bg=colors["bg"],
+            fg=colors["text"],
+        ).pack(anchor="w")
+        tk.Label(frm, textvariable=self.slot_var, bg=colors["bg"], fg=colors["text"]).pack(anchor="w", pady=(6, 0))
+        tk.Label(frm, textvariable=self.last_key_var, bg=colors["bg"], fg=colors["text"]).pack(anchor="w")
+        tk.Label(frm, textvariable=self.last_macro_var, bg=colors["bg"], fg=colors["text"]).pack(anchor="w")
 
     def _on_close(self) -> None:
         self._closed = True
@@ -107,6 +176,12 @@ class App(tk.Tk):
         super().__init__()
         self.title("JoyCon Bridge Helper")
         self.geometry("980x680")
+
+        self._ui_theme = self._load_ui_theme()
+        self._colors = self._ui_theme.get("colors", DEFAULT_UI_THEME["colors"])
+        self._typo = self._ui_theme.get("typography", DEFAULT_UI_THEME["typography"])
+
+        self._apply_ttk_theme()
 
         self.client = SerialClient()
 
@@ -145,45 +220,172 @@ class App(tk.Tk):
         self._bt_banner_label: Optional[tk.Label] = None
 
         self._build_ui()
+        self._apply_widget_theme()
         self._refresh_ports()
         self.after(50, self._drain_rx)
 
+    def _load_ui_theme(self) -> dict:
+        # Load a local UI bundle theme if present; otherwise use defaults.
+        candidates: List[Path] = []
+        try:
+            candidates.append(Path.cwd() / ".ui-bundle" / "theme.json")
+        except Exception:
+            pass
+
+        here = Path(__file__).resolve()
+        # .../helper-app/joycon_helper/app.py -> repo root is parents[3]
+        for p in (
+            here.parents[1] / ".ui-bundle" / "theme.json",  # helper-app/.ui-bundle
+            here.parents[3] / ".ui-bundle" / "theme.json",  # repo root/.ui-bundle
+        ):
+            candidates.append(p)
+
+        for c in candidates:
+            try:
+                if c.exists():
+                    return _load_theme_json(c)
+            except Exception:
+                continue
+
+        return DEFAULT_UI_THEME
+
+    def _apply_ttk_theme(self) -> None:
+        colors = self._colors
+        typo = self._typo
+
+        try:
+            self.configure(bg=colors["bg"])
+        except Exception:
+            pass
+
+        style = ttk.Style(self)
+        try:
+            style.theme_use("vista")
+        except Exception:
+            pass
+
+        base_font = (typo.get("font_family", "Segoe UI"), int(typo.get("font_size", 10)))
+
+        style.configure("TFrame", background=colors["bg"])
+        style.configure("TLabel", background=colors["bg"], foreground=colors["text"], font=base_font)
+        style.configure("Muted.TLabel", background=colors["bg"], foreground=colors["muted"], font=base_font)
+
+        # Inputs
+        style.configure(
+            "TEntry",
+            padding=(6, 4),
+        )
+        style.configure("TCombobox", padding=(6, 3))
+
+        # Buttons
+        style.configure("TButton", padding=(10, 6), font=base_font)
+        style.configure("Primary.TButton", padding=(10, 6), font=base_font)
+
+        # Notebook
+        try:
+            style.configure("TNotebook", background=colors["bg"], borderwidth=0)
+            style.configure("TNotebook.Tab", padding=(10, 6))
+        except Exception:
+            pass
+
+    def _theme_scrolled_text(self, w: ScrolledText) -> None:
+        colors = self._colors
+        typo = self._typo
+        try:
+            w.configure(
+                bg=colors["panel2"],
+                fg=colors["text"],
+                insertbackground=colors["text"],
+                selectbackground=colors["accent"],
+                selectforeground=colors["text"],
+                highlightthickness=1,
+                highlightbackground=colors["border"],
+                highlightcolor=colors["accent"],
+                font=(typo.get("mono_family", "Consolas"), int(typo.get("mono_size", 10))),
+            )
+        except Exception:
+            pass
+
+    def _theme_listbox(self, w: tk.Listbox) -> None:
+        colors = self._colors
+        typo = self._typo
+        try:
+            w.configure(
+                bg=colors["panel2"],
+                fg=colors["text"],
+                selectbackground=colors["accent"],
+                selectforeground=colors["text"],
+                highlightthickness=1,
+                highlightbackground=colors["border"],
+                highlightcolor=colors["accent"],
+                font=(typo.get("mono_family", "Consolas"), int(typo.get("mono_size", 10))),
+            )
+        except Exception:
+            pass
+
+    def _apply_widget_theme(self) -> None:
+        # Apply token colors to widgets that are not ttk-styled.
+        try:
+            self._theme_scrolled_text(self.log)
+        except Exception:
+            pass
+        for maybe in ("profile_text", "share_text"):
+            w = getattr(self, maybe, None)
+            if isinstance(w, ScrolledText):
+                self._theme_scrolled_text(w)
+
+        for maybe in ("macro_list", "step_list"):
+            w = getattr(self, maybe, None)
+            if isinstance(w, tk.Listbox):
+                self._theme_listbox(w)
+
+        # Curve canvas
+        if hasattr(self, "curve_canvas") and isinstance(self.curve_canvas, tk.Canvas):
+            try:
+                self.curve_canvas.configure(
+                    bg=self._colors["panel2"],
+                    highlightthickness=1,
+                    highlightbackground=self._colors["border"],
+                    highlightcolor=self._colors["accent"],
+                )
+            except Exception:
+                pass
+
     def _build_ui(self) -> None:
-        top = tk.Frame(self)
+        top = ttk.Frame(self)
         top.pack(fill=tk.X, padx=8, pady=8)
 
-        tk.Label(top, text="Port:").pack(side=tk.LEFT)
-        self.port_menu = tk.OptionMenu(top, self.port_var, "")
-        self.port_menu.config(width=40)
-        self.port_menu.pack(side=tk.LEFT, padx=(4, 8))
+        ttk.Label(top, text="Port:").pack(side=tk.LEFT)
+        self.port_combo = ttk.Combobox(top, textvariable=self.port_var, values=[], width=40, state="readonly")
+        self.port_combo.pack(side=tk.LEFT, padx=(4, 8))
 
-        tk.Button(top, text="Refresh", command=self._refresh_ports).pack(side=tk.LEFT)
+        ttk.Button(top, text="Refresh", command=self._refresh_ports).pack(side=tk.LEFT)
 
-        tk.Label(top, text="Baud:").pack(side=tk.LEFT, padx=(12, 0))
-        tk.Entry(top, textvariable=self.baud_var, width=10).pack(side=tk.LEFT, padx=(4, 8))
+        ttk.Label(top, text="Baud:").pack(side=tk.LEFT, padx=(12, 0))
+        ttk.Entry(top, textvariable=self.baud_var, width=10).pack(side=tk.LEFT, padx=(4, 8))
 
-        self.connect_btn = tk.Button(top, text="Connect", command=self._toggle_connect)
+        self.connect_btn = ttk.Button(top, text="Connect", command=self._toggle_connect)
         self.connect_btn.pack(side=tk.LEFT)
 
-        body = tk.Frame(self)
+        body = ttk.Frame(self)
         body.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
 
-        left = tk.Frame(body)
+        left = ttk.Frame(body)
         left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        right = tk.Frame(body)
+        right = ttk.Frame(body)
         right.pack(side=tk.RIGHT, fill=tk.Y)
 
         # Tabs (left)
         self.tabs = ttk.Notebook(left)
         self.tabs.pack(fill=tk.BOTH, expand=True)
 
-        self.tab_profile = tk.Frame(self.tabs)
-        self.tab_macros = tk.Frame(self.tabs)
-        self.tab_stick = tk.Frame(self.tabs)
-        self.tab_share = tk.Frame(self.tabs)
-        self.tab_overlay = tk.Frame(self.tabs)
-        self.tab_controller = tk.Frame(self.tabs)
+        self.tab_profile = ttk.Frame(self.tabs)
+        self.tab_macros = ttk.Frame(self.tabs)
+        self.tab_stick = ttk.Frame(self.tabs)
+        self.tab_share = ttk.Frame(self.tabs)
+        self.tab_overlay = ttk.Frame(self.tabs)
+        self.tab_controller = ttk.Frame(self.tabs)
 
         self.tabs.add(self.tab_profile, text="Profile")
         self.tabs.add(self.tab_macros, text="Macros")
@@ -200,86 +402,90 @@ class App(tk.Tk):
         self._build_controller_tab()
 
         # Log view (below tabs)
-        tk.Label(left, text="Device log / events").pack(anchor="w", pady=(6, 0))
+        ttk.Label(left, text="Device log / events").pack(anchor="w", pady=(6, 0))
         self.log = ScrolledText(left, height=14, state="disabled")
         self.log.pack(fill=tk.BOTH, expand=False)
 
         # Right side controls
-        tk.Label(right, text="Actions").pack(anchor="w")
+        ttk.Label(right, text="Actions").pack(anchor="w")
 
-        slot_row = tk.Frame(right)
+        slot_row = ttk.Frame(right)
         slot_row.pack(fill=tk.X, pady=(6, 0))
-        tk.Label(slot_row, text="Slot:").pack(side=tk.LEFT)
-        tk.OptionMenu(slot_row, self.slot_var, "0", "1", "2", "3").pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Label(slot_row, text="Slot:").pack(side=tk.LEFT)
+        self.slot_combo = ttk.Combobox(slot_row, textvariable=self.slot_var, values=["0", "1", "2", "3"], width=4, state="readonly")
+        self.slot_combo.pack(side=tk.LEFT, padx=(6, 0))
 
-        tk.Button(right, text="Ping", command=self._cmd_ping, width=22).pack(pady=(8, 0))
-        tk.Button(right, text="Upload profile to slot", command=self._cmd_write_profile, width=22).pack(pady=(6, 0))
-        tk.Button(right, text="Upload + Activate", command=self._cmd_upload_and_set_active, width=22).pack(pady=(6, 0))
-        tk.Button(right, text="Read profile from slot", command=self._cmd_read_profile, width=22).pack(pady=(6, 0))
-        tk.Button(right, text="Set active slot", command=self._cmd_set_active, width=22).pack(pady=(6, 0))
+        ttk.Button(right, text="Ping", command=self._cmd_ping, width=22).pack(pady=(8, 0))
+        ttk.Button(right, text="Upload profile to slot", command=self._cmd_write_profile, width=22).pack(pady=(6, 0))
+        ttk.Button(right, text="Upload + Activate", command=self._cmd_upload_and_set_active, width=22).pack(pady=(6, 0))
+        ttk.Button(right, text="Read profile from slot", command=self._cmd_read_profile, width=22).pack(pady=(6, 0))
+        ttk.Button(right, text="Set active slot", command=self._cmd_set_active, width=22).pack(pady=(6, 0))
 
-        tk.Label(right, text="Raw command (JSON line)").pack(anchor="w", pady=(14, 0))
-        self.raw_entry = tk.Entry(right, width=30)
+        ttk.Label(right, text="Raw command (JSON line)").pack(anchor="w", pady=(14, 0))
+        self.raw_entry = ttk.Entry(right, width=30)
         self.raw_entry.pack(pady=(4, 0))
-        tk.Button(right, text="Send", command=self._send_raw, width=22).pack(pady=(6, 0))
+        ttk.Button(right, text="Send", command=self._send_raw, width=22).pack(pady=(6, 0))
 
     def _build_profile_tab(self) -> None:
-        tk.Label(self.tab_profile, text="Profile JSON").pack(anchor="w")
+        ttk.Label(self.tab_profile, text="Profile JSON").pack(anchor="w")
         self.profile_text = ScrolledText(self.tab_profile, height=18)
         self.profile_text.pack(fill=tk.BOTH, expand=True)
+        self._theme_scrolled_text(self.profile_text)
 
         initial = _ensure_profile_defaults({"name": "default"})
         self.profile_text.insert("1.0", json.dumps(initial, indent=2))
 
-        prof_btns = tk.Frame(self.tab_profile)
+        prof_btns = ttk.Frame(self.tab_profile)
         prof_btns.pack(fill=tk.X, pady=(6, 6))
-        tk.Button(prof_btns, text="Load…", command=self._load_profile).pack(side=tk.LEFT)
-        tk.Button(prof_btns, text="Save…", command=self._save_profile).pack(side=tk.LEFT, padx=(6, 0))
-        tk.Button(prof_btns, text="Validate", command=self._validate_profile).pack(side=tk.LEFT, padx=(6, 0))
-        tk.Button(prof_btns, text="Apply Stick→JSON", command=self._stick_apply_to_profile).pack(
+        ttk.Button(prof_btns, text="Load…", command=self._load_profile).pack(side=tk.LEFT)
+        ttk.Button(prof_btns, text="Save…", command=self._save_profile).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Button(prof_btns, text="Validate", command=self._validate_profile).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Button(prof_btns, text="Apply Stick→JSON", command=self._stick_apply_to_profile).pack(
             side=tk.LEFT, padx=(6, 0)
         )
 
     def _build_macros_tab(self) -> None:
-        row = tk.Frame(self.tab_macros)
+        row = ttk.Frame(self.tab_macros)
         row.pack(fill=tk.BOTH, expand=True)
 
-        left = tk.Frame(row)
+        left = ttk.Frame(row)
         left.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 8))
 
-        right = tk.Frame(row)
+        right = ttk.Frame(row)
         right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
-        tk.Label(left, text="Macros").pack(anchor="w")
+        ttk.Label(left, text="Macros").pack(anchor="w")
         self.macro_list = tk.Listbox(left, height=18, width=22)
         self.macro_list.pack(fill=tk.Y, expand=False)
         self.macro_list.bind("<<ListboxSelect>>", lambda _e: self._refresh_macro_steps())
+        self._theme_listbox(self.macro_list)
 
-        btns = tk.Frame(left)
+        btns = ttk.Frame(left)
         btns.pack(fill=tk.X, pady=(6, 0))
-        tk.Button(btns, text="New", command=self._macro_new).pack(side=tk.LEFT)
-        tk.Button(btns, text="Delete", command=self._macro_delete).pack(side=tk.LEFT, padx=(6, 0))
-        tk.Checkbutton(left, text="Record mode", variable=self._recording).pack(anchor="w", pady=(10, 0))
+        ttk.Button(btns, text="New", command=self._macro_new).pack(side=tk.LEFT)
+        ttk.Button(btns, text="Delete", command=self._macro_delete).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Checkbutton(left, text="Record mode", variable=self._recording).pack(anchor="w", pady=(10, 0))
 
-        tk.Label(right, text="Steps").pack(anchor="w")
+        ttk.Label(right, text="Steps").pack(anchor="w")
         self.step_list = tk.Listbox(right, height=14)
         self.step_list.pack(fill=tk.BOTH, expand=True)
+        self._theme_listbox(self.step_list)
 
-        step_btns = tk.Frame(right)
+        step_btns = ttk.Frame(right)
         step_btns.pack(fill=tk.X, pady=(6, 0))
-        tk.Button(step_btns, text="Add key step", command=self._step_add_key).pack(side=tk.LEFT)
-        tk.Button(step_btns, text="Add delay", command=self._step_add_delay).pack(side=tk.LEFT, padx=(6, 0))
-        tk.Button(step_btns, text="Delete step", command=self._step_delete).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Button(step_btns, text="Add key step", command=self._step_add_key).pack(side=tk.LEFT)
+        ttk.Button(step_btns, text="Add delay", command=self._step_add_delay).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Button(step_btns, text="Delete step", command=self._step_delete).pack(side=tk.LEFT, padx=(6, 0))
 
-        map_box = tk.LabelFrame(self.tab_macros, text="Input mapping (key_id → action)")
+        map_box = ttk.LabelFrame(self.tab_macros, text="Input mapping (key_id → action)")
         map_box.pack(fill=tk.X, pady=(10, 0))
 
-        r1 = tk.Frame(map_box)
+        r1 = ttk.Frame(map_box)
         r1.pack(fill=tk.X, padx=8, pady=(6, 0))
-        tk.Label(r1, text="Input key_id:").pack(side=tk.LEFT)
-        tk.Entry(r1, textvariable=self._mapping_key_id, width=6).pack(side=tk.LEFT, padx=(6, 12))
+        ttk.Label(r1, text="Input key_id:").pack(side=tk.LEFT)
+        ttk.Entry(r1, textvariable=self._mapping_key_id, width=6).pack(side=tk.LEFT, padx=(6, 12))
 
-        tk.Label(r1, text="Type:").pack(side=tk.LEFT)
+        ttk.Label(r1, text="Type:").pack(side=tk.LEFT)
         ttk.Combobox(
             r1,
             textvariable=self._mapping_type,
@@ -288,13 +494,13 @@ class App(tk.Tk):
             state="readonly",
         ).pack(side=tk.LEFT, padx=(6, 12))
 
-        tk.Label(r1, text="Remap to:").pack(side=tk.LEFT)
-        tk.Entry(r1, textvariable=self._mapping_remap_to, width=6).pack(side=tk.LEFT, padx=(6, 12))
+        ttk.Label(r1, text="Remap to:").pack(side=tk.LEFT)
+        ttk.Entry(r1, textvariable=self._mapping_remap_to, width=6).pack(side=tk.LEFT, padx=(6, 12))
 
-        tk.Label(r1, text="Macro id:").pack(side=tk.LEFT)
-        tk.Entry(r1, textvariable=self._mapping_macro_id, width=14).pack(side=tk.LEFT, padx=(6, 12))
+        ttk.Label(r1, text="Macro id:").pack(side=tk.LEFT)
+        ttk.Entry(r1, textvariable=self._mapping_macro_id, width=14).pack(side=tk.LEFT, padx=(6, 12))
 
-        tk.Label(r1, text="Pick:").pack(side=tk.LEFT)
+        ttk.Label(r1, text="Pick:").pack(side=tk.LEFT)
         self.macro_pick = ttk.Combobox(
             r1,
             textvariable=self._mapping_macro_pick,
@@ -305,12 +511,12 @@ class App(tk.Tk):
         self.macro_pick.pack(side=tk.LEFT, padx=(6, 12))
         self.macro_pick.bind("<<ComboboxSelected>>", lambda _e: self._mapping_pick_macro())
 
-        tk.Button(r1, text="Apply", command=self._mapping_apply).pack(side=tk.LEFT)
+        ttk.Button(r1, text="Apply", command=self._mapping_apply).pack(side=tk.LEFT)
 
         self._refresh_macro_list()
 
     def _build_stick_tab(self) -> None:
-        info = tk.Label(
+        info = ttk.Label(
             self.tab_stick,
             text=(
                 "These settings are stored in the profile for future use. "
@@ -321,15 +527,15 @@ class App(tk.Tk):
         )
         info.pack(anchor="w", pady=(0, 8))
 
-        row = tk.Frame(self.tab_stick)
+        row = ttk.Frame(self.tab_stick)
         row.pack(fill=tk.X)
 
-        tk.Label(row, text="Deadzone:").pack(side=tk.LEFT)
+        ttk.Label(row, text="Deadzone:").pack(side=tk.LEFT)
         tk.Scale(row, from_=0.0, to=0.5, resolution=0.01, orient="horizontal", variable=self._stick_deadzone).pack(
             side=tk.LEFT, padx=(6, 14)
         )
 
-        tk.Label(row, text="Shape:").pack(side=tk.LEFT)
+        ttk.Label(row, text="Shape:").pack(side=tk.LEFT)
         ttk.Combobox(
             row,
             textvariable=self._stick_deadzone_shape,
@@ -338,7 +544,7 @@ class App(tk.Tk):
             state="readonly",
         ).pack(side=tk.LEFT, padx=(6, 14))
 
-        tk.Label(row, text="Curve:").pack(side=tk.LEFT)
+        ttk.Label(row, text="Curve:").pack(side=tk.LEFT)
         ttk.Combobox(
             row,
             textvariable=self._stick_curve,
@@ -347,31 +553,36 @@ class App(tk.Tk):
             state="readonly",
         ).pack(side=tk.LEFT, padx=(6, 14))
 
-        tk.Label(row, text="Exp:").pack(side=tk.LEFT)
+        ttk.Label(row, text="Exp:").pack(side=tk.LEFT)
         tk.Scale(row, from_=0.5, to=3.0, resolution=0.1, orient="horizontal", variable=self._stick_curve_exp).pack(
             side=tk.LEFT, padx=(6, 0)
         )
 
-        preview = tk.LabelFrame(self.tab_stick, text="Curve preview")
+        preview = ttk.LabelFrame(self.tab_stick, text="Curve preview")
         preview.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
         self.curve_canvas = tk.Canvas(preview, height=220)
         self.curve_canvas.pack(fill=tk.BOTH, expand=True)
+        try:
+            self.curve_canvas.configure(bg=self._colors["panel2"])
+        except Exception:
+            pass
 
         for var in (self._stick_deadzone, self._stick_deadzone_shape, self._stick_curve, self._stick_curve_exp):
             var.trace_add("write", lambda *_a: self._draw_curve_preview())
         self._draw_curve_preview()
 
     def _build_share_tab(self) -> None:
-        tk.Label(self.tab_share, text="Profile share code").pack(anchor="w")
+        ttk.Label(self.tab_share, text="Profile share code").pack(anchor="w")
         self.share_text = ScrolledText(self.tab_share, height=10)
         self.share_text.pack(fill=tk.X)
+        self._theme_scrolled_text(self.share_text)
 
-        btns = tk.Frame(self.tab_share)
+        btns = ttk.Frame(self.tab_share)
         btns.pack(fill=tk.X, pady=(6, 0))
-        tk.Button(btns, text="Export from JSON", command=self._share_export).pack(side=tk.LEFT)
-        tk.Button(btns, text="Import to JSON", command=self._share_import).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Button(btns, text="Export from JSON", command=self._share_export).pack(side=tk.LEFT)
+        ttk.Button(btns, text="Import to JSON", command=self._share_import).pack(side=tk.LEFT, padx=(6, 0))
 
-        tk.Label(
+        ttk.Label(
             self.tab_share,
             text=(
                 "This is offline-only sharing: a compressed+encoded profile string. "
@@ -382,7 +593,7 @@ class App(tk.Tk):
         ).pack(anchor="w", pady=(10, 0))
 
     def _build_overlay_tab(self) -> None:
-        tk.Label(
+        ttk.Label(
             self.tab_overlay,
             text=(
                 "Safe overlay: this is just an always-on-top window. "
@@ -392,32 +603,32 @@ class App(tk.Tk):
             justify="left",
         ).pack(anchor="w")
 
-        btns = tk.Frame(self.tab_overlay)
+        btns = ttk.Frame(self.tab_overlay)
         btns.pack(fill=tk.X, pady=(10, 0))
-        tk.Button(btns, text="Open overlay", command=self._overlay_open).pack(side=tk.LEFT)
-        tk.Button(btns, text="Close overlay", command=self._overlay_close).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Button(btns, text="Open overlay", command=self._overlay_open).pack(side=tk.LEFT)
+        ttk.Button(btns, text="Close overlay", command=self._overlay_close).pack(side=tk.LEFT, padx=(6, 0))
 
     def _build_controller_tab(self) -> None:
         # Connection background banner: left/right/both.
-        self._bt_banner = tk.Frame(self.tab_controller, bg="#111f37")
+        self._bt_banner = tk.Frame(self.tab_controller, bg=self._colors["panel2"])
         self._bt_banner.pack(fill=tk.X, padx=8, pady=(8, 0))
         self._bt_banner_label = tk.Label(
             self._bt_banner,
             textvariable=self._bt_status,
-            bg="#111f37",
-            fg="#e5e7eb",
+            bg=self._colors["panel2"],
+            fg=self._colors["text"],
             padx=10,
             pady=8,
             anchor="w",
         )
         self._bt_banner_label.pack(fill=tk.X)
 
-        box = tk.LabelFrame(self.tab_controller, text="Controller connection")
+        box = ttk.LabelFrame(self.tab_controller, text="Controller connection")
         box.pack(fill=tk.X, padx=8, pady=8)
 
-        row1 = tk.Frame(box)
+        row1 = ttk.Frame(box)
         row1.pack(fill=tk.X, pady=(6, 0), padx=8)
-        tk.Label(row1, text="Preset:").pack(side=tk.LEFT)
+        ttk.Label(row1, text="Preset:").pack(side=tk.LEFT)
         preset = ttk.Combobox(
             row1,
             textvariable=self._bt_target_preset,
@@ -428,19 +639,19 @@ class App(tk.Tk):
         preset.pack(side=tk.LEFT, padx=(8, 12))
         preset.bind("<<ComboboxSelected>>", lambda _e: self._bt_apply_preset())
 
-        tk.Label(row1, text="Target name contains:").pack(side=tk.LEFT)
-        tk.Entry(row1, textvariable=self._bt_target_substr, width=30).pack(side=tk.LEFT, padx=(8, 0))
+        ttk.Label(row1, text="Target name contains:").pack(side=tk.LEFT)
+        ttk.Entry(row1, textvariable=self._bt_target_substr, width=30).pack(side=tk.LEFT, padx=(8, 0))
 
-        row2 = tk.Frame(box)
+        row2 = ttk.Frame(box)
         row2.pack(fill=tk.X, pady=(10, 6), padx=8)
-        tk.Button(row2, text="Connect / Scan", command=self._cmd_bt_connect, width=18).pack(side=tk.LEFT)
+        ttk.Button(row2, text="Connect / Scan", command=self._cmd_bt_connect, width=18).pack(side=tk.LEFT)
         # Status is shown in the banner above.
 
         note = (
             "This sends commands to the ESP32 BT host so you don't need to press buttons on the boards. "
             "Your controller may still need to be put into pairing mode (e.g. Joy-Con sync button)."
         )
-        tk.Label(self.tab_controller, text=note, wraplength=900, justify="left").pack(anchor="w", padx=12, pady=(4, 0))
+        ttk.Label(self.tab_controller, text=note, wraplength=900, justify="left").pack(anchor="w", padx=12, pady=(4, 0))
 
         self._update_bt_background()
 
@@ -449,11 +660,11 @@ class App(tk.Tk):
             return
 
         # Theme-matched colors (see tools/generate_ui_bundle.py for the theme.json tokens)
-        neutral_bg = "#111f37"
-        neutral_fg = "#e5e7eb"
-        left_bg = "#2b63ff"   # accent
-        right_bg = "#22c55e"  # accent2
-        both_bg = "#1f7ab8"   # blend-ish (kept in-family)
+        neutral_bg = self._colors["panel2"]
+        neutral_fg = self._colors["text"]
+        left_bg = self._colors["accent"]
+        right_bg = self._colors["accent2"]
+        both_bg = _blend_hex(left_bg, right_bg, 0.5)
 
         if self._bt_connected_left and self._bt_connected_right:
             bg = both_bg
@@ -484,10 +695,10 @@ class App(tk.Tk):
         if not ports:
             ports = [""]
 
-        menu = self.port_menu["menu"]
-        menu.delete(0, "end")
-        for p in ports:
-            menu.add_command(label=p, command=lambda v=p: self.port_var.set(v))
+        try:
+            self.port_combo["values"] = ports
+        except Exception:
+            pass
 
         if self.port_var.get() not in ports:
             self.port_var.set(ports[0])
@@ -986,7 +1197,7 @@ class App(tk.Tk):
             except Exception:
                 pass
             return
-        self._overlay = OverlayWindow(self)
+        self._overlay = OverlayWindow(self, theme=self._ui_theme)
         try:
             self._overlay.set_slot(int(self.slot_var.get()))
         except Exception:
@@ -1043,9 +1254,12 @@ class App(tk.Tk):
         h = max(c.winfo_height(), 220)
         pad = 20
 
+        axis = self._colors.get("border", "#22314f")
+        curve_col = self._colors.get("accent", "#2b63ff")
+
         # axes
-        c.create_line(pad, h - pad, w - pad, h - pad)
-        c.create_line(pad, h - pad, pad, pad)
+        c.create_line(pad, h - pad, w - pad, h - pad, fill=axis)
+        c.create_line(pad, h - pad, pad, pad, fill=axis)
 
         deadzone = float(self._stick_deadzone.get())
         curve = self._stick_curve.get()
@@ -1077,7 +1291,7 @@ class App(tk.Tk):
             pts.append((px, py))
 
         for i in range(1, len(pts)):
-            c.create_line(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1])
+            c.create_line(pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1], fill=curve_col)
 
     def _log_line(self, text: str) -> None:
         self.log.configure(state="normal")
