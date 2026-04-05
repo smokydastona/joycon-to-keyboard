@@ -21,6 +21,7 @@ Until then, entries are grouped by date.
 
 - **Firmware build: flash size mismatch**: both ESP32 and ESP32-S3 `sdkconfig.defaults` now set `CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y`. The OTA-enabled partition table requires ~3.6 MB, which exceeded the 2 MB default and caused CI build failures.
 - **ESP32-S3 build: missing TinyUSB component**: `tinyusb` was removed from ESP-IDF v5.2 built-in components. Added `idf_component.yml` to pull `espressif/esp_tinyusb` from the component registry, and updated `PRIV_REQUIRES` from `tinyusb` to `esp_tinyusb`.
+- **ESP32-S3 build: `tud_task` implicit declaration**: removed the manual `tud_task()` call from `app_main.c` — `esp_tinyusb` v1.x runs it in its own internal FreeRTOS task after `tinyusb_driver_install()`. Replaced with `vTaskDelay(1)` to yield the main loop.
 
 ### Added
 

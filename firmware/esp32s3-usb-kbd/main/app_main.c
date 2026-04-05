@@ -5,6 +5,8 @@
 #include <string.h>
 
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #include "uart_proto.h"
 #include "keymap.h"
@@ -107,7 +109,8 @@ void app_main(void) {
             }
         }
 
-        // Let TinyUSB run.
-        tud_task();
+        // esp_tinyusb runs tud_task() in its own internal task;
+        // yield briefly so the idle task and USB task can run.
+        vTaskDelay(1);
     }
 }
