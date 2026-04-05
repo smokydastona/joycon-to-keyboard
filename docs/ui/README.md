@@ -50,11 +50,13 @@ Goal: keep the current helper app UX, but make it easy to understand where thing
 ### Controller tab mock
 
 ```
+[ BT banner background changes: Left / Right / Both ]
+
 Controller connection
 
 Preset: [ Either (Joy-Con) v ]   Target name contains: [ Joy-Con ............... ]
 
-[Connect / Scan]   BT: discovering / found / connecting / connected / disconnected
+[Connect / Scan]
 
 Note: board buttons are not required, but your Joy-Con may still need sync/pairing mode.
 ```

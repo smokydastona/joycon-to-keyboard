@@ -134,6 +134,16 @@ class App(tk.Tk):
         self._bt_target_preset = tk.StringVar(value="Either (Joy-Con)")
         self._bt_status = tk.StringVar(value="BT: -")
 
+        # Track which sides are connected so the UI can reflect Left/Right/Both.
+        # Keyed by BDA string when available.
+        self._bt_conn_by_bda: Dict[str, str] = {}
+        self._bt_connected_left = False
+        self._bt_connected_right = False
+
+        # Controller tab background banner widgets.
+        self._bt_banner: Optional[tk.Frame] = None
+        self._bt_banner_label: Optional[tk.Label] = None
+
         self._build_ui()
         self._refresh_ports()
         self.after(50, self._drain_rx)
@@ -388,6 +398,20 @@ class App(tk.Tk):
         tk.Button(btns, text="Close overlay", command=self._overlay_close).pack(side=tk.LEFT, padx=(6, 0))
 
     def _build_controller_tab(self) -> None:
+        # Connection background banner: left/right/both.
+        self._bt_banner = tk.Frame(self.tab_controller, bg="#111f37")
+        self._bt_banner.pack(fill=tk.X, padx=8, pady=(8, 0))
+        self._bt_banner_label = tk.Label(
+            self._bt_banner,
+            textvariable=self._bt_status,
+            bg="#111f37",
+            fg="#e5e7eb",
+            padx=10,
+            pady=8,
+            anchor="w",
+        )
+        self._bt_banner_label.pack(fill=tk.X)
+
         box = tk.LabelFrame(self.tab_controller, text="Controller connection")
         box.pack(fill=tk.X, padx=8, pady=8)
 
@@ -410,13 +434,38 @@ class App(tk.Tk):
         row2 = tk.Frame(box)
         row2.pack(fill=tk.X, pady=(10, 6), padx=8)
         tk.Button(row2, text="Connect / Scan", command=self._cmd_bt_connect, width=18).pack(side=tk.LEFT)
-        tk.Label(row2, textvariable=self._bt_status).pack(side=tk.LEFT, padx=(12, 0))
+        # Status is shown in the banner above.
 
         note = (
             "This sends commands to the ESP32 BT host so you don't need to press buttons on the boards. "
             "Your controller may still need to be put into pairing mode (e.g. Joy-Con sync button)."
         )
         tk.Label(self.tab_controller, text=note, wraplength=900, justify="left").pack(anchor="w", padx=12, pady=(4, 0))
+
+        self._update_bt_background()
+
+    def _update_bt_background(self) -> None:
+        if not self._bt_banner or not self._bt_banner_label:
+            return
+
+        # Theme-matched colors (see docs/ui/bundle-example/theme.json)
+        neutral_bg = "#111f37"
+        neutral_fg = "#e5e7eb"
+        left_bg = "#2b63ff"   # accent
+        right_bg = "#22c55e"  # accent2
+        both_bg = "#1f7ab8"   # blend-ish (kept in-family)
+
+        if self._bt_connected_left and self._bt_connected_right:
+            bg = both_bg
+        elif self._bt_connected_left:
+            bg = left_bg
+        elif self._bt_connected_right:
+            bg = right_bg
+        else:
+            bg = neutral_bg
+
+        self._bt_banner.configure(bg=bg)
+        self._bt_banner_label.configure(bg=bg, fg=neutral_fg)
 
     def _bt_apply_preset(self) -> None:
         p = self._bt_target_preset.get().strip()
@@ -630,6 +679,46 @@ class App(tk.Tk):
             if isinstance(bda, str) and bda:
                 suffix += f"  bda={bda}"
             self._bt_status.set(f"BT: {state}{suffix}")
+
+            # Track side connectivity by BDA to drive the background.
+            def _side_from_name(n: object) -> Optional[str]:
+                if not isinstance(n, str):
+                    return None
+                if "(L)" in n:
+                    return "L"
+                if "(R)" in n:
+                    return "R"
+                return None
+
+            if state == "connected":
+                side = _side_from_name(name)
+                if side is None:
+                    # If we don't know, assume left unless left is already taken.
+                    side = "R" if self._bt_connected_left and not self._bt_connected_right else "L"
+
+                if isinstance(bda, str) and bda:
+                    self._bt_conn_by_bda[bda] = side
+
+                if side == "L":
+                    self._bt_connected_left = True
+                elif side == "R":
+                    self._bt_connected_right = True
+
+            elif state == "disconnected":
+                side = None
+                if isinstance(bda, str) and bda:
+                    side = self._bt_conn_by_bda.pop(bda, None)
+
+                if side == "L":
+                    self._bt_connected_left = False
+                elif side == "R":
+                    self._bt_connected_right = False
+                else:
+                    # Unknown disconnect (no bda): clear both.
+                    self._bt_connected_left = False
+                    self._bt_connected_right = False
+
+            self._update_bt_background()
 
     def _current_profile(self) -> dict:
         return self._validate_profile()
