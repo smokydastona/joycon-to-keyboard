@@ -9,7 +9,7 @@ idf_component_register(
         "keymap.c"
         "tusb_desc.c"
     INCLUDE_DIRS "."
-    PRIV_REQUIRES driver tinyusb nvs_flash json app_update mbedtls
+    PRIV_REQUIRES driver esp_tinyusb nvs_flash json app_update mbedtls
 )
 
 # Pass firmware version to code as FW_VERSION macro.

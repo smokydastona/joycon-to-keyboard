@@ -8,6 +8,7 @@ __pycache__/
 /dist/
 /JoyConBridgeHelper.spec
 firmware/**/build/
+firmware/**/managed_components/
 helper-app/build/
 helper-app/dist/
 helper-app/*.spec
