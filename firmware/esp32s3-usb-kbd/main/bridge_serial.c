@@ -6,6 +6,7 @@
 
 #include "esp_err.h"
 #include "esp_log.h"
+#include "esp_system.h"
 
 #include "nvs.h"
 #include "nvs_flash.h"
@@ -14,8 +15,11 @@
 
 #include "tusb.h"
 
+#include "mbedtls/base64.h"
+
 #include "profile_runtime.h"
 #include "uart_proto.h"
+#include "fw_ota.h"
 
 static const char *TAG = "bridge-serial";
 
@@ -23,6 +27,22 @@ static const char *TAG = "bridge-serial";
 // payload: 0xFE, cmd_id, ...
 #define CTRL_CMD_SET_TARGET_SUBSTR 0x01
 #define CTRL_CMD_START_DISCOVERY   0x02
+
+// OTA control commands relayed to ESP32
+#define CTRL_CMD_OTA_BEGIN   0x10
+#define CTRL_CMD_OTA_DATA    0x11
+#define CTRL_CMD_OTA_END     0x12
+#define CTRL_CMD_OTA_ABORT   0x13
+#define CTRL_CMD_FW_VERSION  0x14
+
+// OTA response IDs received from ESP32 via UART
+#define OTA_RSP_MARKER  0xFB
+#define OTA_RSP_BEGIN   0x01
+#define OTA_RSP_END     0x03
+#define OTA_RSP_VERSION 0x04
+
+// Max raw bytes per UART control frame data (frame payload = 0xFE + cmd_id + data)
+#define OTA_UART_CHUNK  218
 
 #define BRIDGE_PROFILE_NS "profiles"
 #define BRIDGE_ACTIVE_KEY "active"
@@ -37,6 +57,17 @@ static char s_line[BRIDGE_MAX_LINE];
 static size_t s_line_len = 0;
 
 static bool s_host_open = false;
+
+// OTA decode buffer for base64 → raw binary.
+#define OTA_DECODE_MAX 4096
+static uint8_t s_ota_buf[OTA_DECODE_MAX];
+
+// Pending ESP32 OTA response (set by bridge_serial_handle_ota_rsp from main loop).
+static volatile bool s_esp32_ota_rsp_ready = false;
+static volatile uint8_t s_esp32_ota_rsp_id = 0;
+static volatile uint8_t s_esp32_ota_rsp_status = 0;
+static uint8_t s_esp32_ota_rsp_data[64];
+static volatile uint8_t s_esp32_ota_rsp_data_len = 0;
 
 static void cdc_write_line(const char *line) {
     if (!tud_cdc_connected()) return;
@@ -300,6 +331,208 @@ static void handle_bt_connect(cJSON *root) {
     respond_ok_simple("bt_connect");
 }
 
+// ---------------------------------------------------------------------------
+// Firmware version / OTA update commands
+// ---------------------------------------------------------------------------
+
+static bool is_board_esp32(cJSON *root) {
+    cJSON *board = cJSON_GetObjectItemCaseSensitive(root, "board");
+    return cJSON_IsString(board) && strcmp(board->valuestring, "esp32") == 0;
+}
+
+// Wait for an OTA response from ESP32, keeping USB alive.
+// Returns true if a response arrived within timeout_ms.
+static bool wait_esp32_ota_rsp(uint8_t expected_rsp_id, int timeout_ms) {
+    s_esp32_ota_rsp_ready = false;
+
+    TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(timeout_ms);
+    while (xTaskGetTickCount() < deadline) {
+        tud_task();
+
+        // Poll UART for frames; the main loop's frame processing is inlined here.
+        uart_frame_t f;
+        while (uart_proto_poll_frame(&f)) {
+            if (f.type == UART_FRAME_OTA_RSP) {
+                bridge_serial_handle_ota_rsp(f.payload, f.length);
+            }
+            // Ignore other frames during OTA relay.
+        }
+
+        if (s_esp32_ota_rsp_ready && s_esp32_ota_rsp_id == expected_rsp_id) {
+            return true;
+        }
+        vTaskDelay(1);
+    }
+    return false;
+}
+
+static void handle_fw_version(cJSON *root) {
+    if (is_board_esp32(root)) {
+        // Relay to ESP32 via UART and wait for response.
+        uart_proto_send_ctrl(CTRL_CMD_FW_VERSION, NULL, 0);
+
+        if (!wait_esp32_ota_rsp(OTA_RSP_VERSION, 3000)) {
+            respond_error("fw_version", "esp32_timeout");
+            return;
+        }
+
+        // Build version string from response data.
+        char ver[64] = {0};
+        uint8_t n = s_esp32_ota_rsp_data_len;
+        if (n >= sizeof(ver)) n = (uint8_t)(sizeof(ver) - 1);
+        memcpy(ver, s_esp32_ota_rsp_data, n);
+        ver[n] = 0;
+
+        cJSON *rsp = cJSON_CreateObject();
+        if (!rsp) return;
+        cJSON_AddStringToObject(rsp, "rsp", "fw_version");
+        cJSON_AddBoolToObject(rsp, "ok", true);
+        cJSON_AddStringToObject(rsp, "board", "esp32");
+        cJSON_AddStringToObject(rsp, "version", ver);
+        cdc_write_json(rsp);
+        cJSON_Delete(rsp);
+        return;
+    }
+
+    // Local (ESP32-S3) version.
+    cJSON *rsp = cJSON_CreateObject();
+    if (!rsp) return;
+    cJSON_AddStringToObject(rsp, "rsp", "fw_version");
+    cJSON_AddBoolToObject(rsp, "ok", true);
+    cJSON_AddStringToObject(rsp, "board", "esp32s3");
+    cJSON_AddStringToObject(rsp, "version", fw_ota_version());
+    cdc_write_json(rsp);
+    cJSON_Delete(rsp);
+}
+
+static void handle_fw_update_begin(cJSON *root) {
+    cJSON *size_obj = cJSON_GetObjectItemCaseSensitive(root, "size");
+    uint32_t total_size = 0;
+    if (cJSON_IsNumber(size_obj)) {
+        total_size = (uint32_t)size_obj->valuedouble;
+    }
+
+    if (is_board_esp32(root)) {
+        // Relay to ESP32.
+        uint8_t buf[4];
+        buf[0] = (uint8_t)(total_size & 0xFF);
+        buf[1] = (uint8_t)((total_size >> 8) & 0xFF);
+        buf[2] = (uint8_t)((total_size >> 16) & 0xFF);
+        buf[3] = (uint8_t)((total_size >> 24) & 0xFF);
+        uart_proto_send_ctrl(CTRL_CMD_OTA_BEGIN, buf, 4);
+
+        if (!wait_esp32_ota_rsp(OTA_RSP_BEGIN, 10000)) {
+            respond_error("fw_update_begin", "esp32_timeout");
+            return;
+        }
+        if (s_esp32_ota_rsp_status != 0x00) {
+            respond_error("fw_update_begin", "esp32_ota_begin_failed");
+            return;
+        }
+        respond_ok_simple("fw_update_begin");
+        return;
+    }
+
+    // Local OTA begin.
+    esp_err_t err = fw_ota_begin(total_size);
+    if (err != ESP_OK) {
+        respond_error("fw_update_begin", "ota_begin_failed");
+        return;
+    }
+    respond_ok_simple("fw_update_begin");
+}
+
+static void handle_fw_update_data(cJSON *root) {
+    cJSON *data_obj = cJSON_GetObjectItemCaseSensitive(root, "data");
+    if (!cJSON_IsString(data_obj) || !data_obj->valuestring) {
+        respond_error("fw_update_data", "missing_data");
+        return;
+    }
+
+    const char *b64 = data_obj->valuestring;
+    size_t b64_len = strlen(b64);
+    size_t decoded_len = 0;
+
+    int ret = mbedtls_base64_decode(s_ota_buf, sizeof(s_ota_buf), &decoded_len,
+                                    (const unsigned char *)b64, b64_len);
+    if (ret != 0 || decoded_len == 0) {
+        respond_error("fw_update_data", "base64_decode_failed");
+        return;
+    }
+
+    if (is_board_esp32(root)) {
+        // Relay as UART control frames in OTA_UART_CHUNK-sized pieces.
+        size_t offset = 0;
+        while (offset < decoded_len) {
+            size_t chunk = decoded_len - offset;
+            if (chunk > OTA_UART_CHUNK) chunk = OTA_UART_CHUNK;
+            uart_proto_send_ctrl(CTRL_CMD_OTA_DATA, &s_ota_buf[offset], (uint8_t)chunk);
+            offset += chunk;
+        }
+        respond_ok_simple("fw_update_data");
+        return;
+    }
+
+    // Local OTA write.
+    esp_err_t err = fw_ota_write(s_ota_buf, (uint32_t)decoded_len);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "OTA write failed: %s", esp_err_to_name(err));
+        fw_ota_abort();
+        respond_error("fw_update_data", "ota_write_failed");
+        return;
+    }
+
+    cJSON *rsp = cJSON_CreateObject();
+    if (!rsp) return;
+    cJSON_AddStringToObject(rsp, "rsp", "fw_update_data");
+    cJSON_AddBoolToObject(rsp, "ok", true);
+    cJSON_AddNumberToObject(rsp, "written", (double)decoded_len);
+    cdc_write_json(rsp);
+    cJSON_Delete(rsp);
+}
+
+static void handle_fw_update_end(cJSON *root) {
+    if (is_board_esp32(root)) {
+        uart_proto_send_ctrl(CTRL_CMD_OTA_END, NULL, 0);
+
+        if (!wait_esp32_ota_rsp(OTA_RSP_END, 15000)) {
+            respond_error("fw_update_end", "esp32_timeout");
+            return;
+        }
+        if (s_esp32_ota_rsp_status != 0x00) {
+            respond_error("fw_update_end", "esp32_ota_end_failed");
+            return;
+        }
+        respond_ok_simple("fw_update_end");
+        return;
+    }
+
+    // Local OTA finalize.
+    esp_err_t err = fw_ota_end();
+    if (err != ESP_OK) {
+        respond_error("fw_update_end", "ota_end_failed");
+        return;
+    }
+
+    respond_ok_simple("fw_update_end");
+
+    // Reboot after a short delay.
+    ESP_LOGI(TAG, "OTA complete – rebooting in 1 s");
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    esp_restart();
+}
+
+static void handle_fw_update_abort(cJSON *root) {
+    if (is_board_esp32(root)) {
+        uart_proto_send_ctrl(CTRL_CMD_OTA_ABORT, NULL, 0);
+        respond_ok_simple("fw_update_abort");
+        return;
+    }
+
+    fw_ota_abort();
+    respond_ok_simple("fw_update_abort");
+}
+
 static void handle_line(const char *line) {
     cJSON *root = cJSON_Parse(line);
     if (!root) {
@@ -326,6 +559,16 @@ static void handle_line(const char *line) {
         handle_bt_set_target(root);
     } else if (strcmp(cmd->valuestring, "bt_connect") == 0) {
         handle_bt_connect(root);
+    } else if (strcmp(cmd->valuestring, "fw_version") == 0) {
+        handle_fw_version(root);
+    } else if (strcmp(cmd->valuestring, "fw_update_begin") == 0) {
+        handle_fw_update_begin(root);
+    } else if (strcmp(cmd->valuestring, "fw_update_data") == 0) {
+        handle_fw_update_data(root);
+    } else if (strcmp(cmd->valuestring, "fw_update_end") == 0) {
+        handle_fw_update_end(root);
+    } else if (strcmp(cmd->valuestring, "fw_update_abort") == 0) {
+        handle_fw_update_abort(root);
     } else {
         respond_error(cmd->valuestring, "unknown_cmd");
     }
@@ -421,6 +664,22 @@ void bridge_serial_emit_bt_status(const char *state, const char *name, const cha
 
     cdc_write_json(evt);
     cJSON_Delete(evt);
+}
+
+void bridge_serial_handle_ota_rsp(const uint8_t *payload, uint8_t length) {
+    // payload: [0]=0xFB, [1]=rsp_id, [2]=status, [3..]=data
+    if (length < 3) return;
+
+    s_esp32_ota_rsp_id = payload[1];
+    s_esp32_ota_rsp_status = payload[2];
+
+    uint8_t dlen = (length > 3) ? (uint8_t)(length - 3) : 0;
+    if (dlen > sizeof(s_esp32_ota_rsp_data)) dlen = sizeof(s_esp32_ota_rsp_data);
+    if (dlen > 0) {
+        memcpy(s_esp32_ota_rsp_data, &payload[3], dlen);
+    }
+    s_esp32_ota_rsp_data_len = dlen;
+    s_esp32_ota_rsp_ready = true;
 }
 
 // Optional callback fired when the host opens/closes the serial port.

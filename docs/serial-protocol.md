@@ -88,6 +88,36 @@ Current control commands:
 	- payload: optional 1-byte flags
 		- bit 0 (`0x01`): dual-connect mode (try connect both Joy-Con (L) and Joy-Con (R))
 
+### OTA update control commands (ESP32-S3 → ESP32)
+
+These use the same control frame format (`0xFE` + `cmd_id` + payload):
+
+- `cmd_id=0x10` — OTA begin
+	- payload: 4-byte total size (little-endian uint32)
+- `cmd_id=0x11` — OTA data
+	- payload: raw firmware bytes (up to 218 bytes per frame)
+- `cmd_id=0x12` — OTA end (finalize + reboot)
+	- no payload
+- `cmd_id=0x13` — OTA abort
+	- no payload
+- `cmd_id=0x14` — firmware version query
+	- no payload
+
+## OTA response frames (ESP32 → ESP32-S3)
+
+The ESP32 sends OTA responses back via UART using marker `0xFB`:
+
+- `payload[0]`: `0xFB` (OTA response marker)
+- `payload[1]`: response ID
+- `payload[2]`: status (`0x00` = OK, `0x01` = error)
+- `payload[3..]`: optional data
+
+Response IDs:
+
+- `0x01` — OTA begin ACK
+- `0x03` — OTA end ACK
+- `0x04` — firmware version (data = UTF-8 version string)
+
 ## Why this design
 
 - Keeps ESP32 code simple: it only needs to emit key_id up/down.

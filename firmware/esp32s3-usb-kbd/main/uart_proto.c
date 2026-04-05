@@ -15,6 +15,7 @@ static const char* TAG = "uart-proto";
 #define DEBUG_MARKER  0xFF
 #define STATUS_MARKER 0xFD
 #define KEY_EX_MARKER 0xFC
+#define OTA_RSP_MARKER 0xFB
 
 // Keep this comfortably under 255 (len is uint8_t) and large enough for
 // status frames that include an optional device name.
@@ -134,6 +135,8 @@ bool uart_proto_poll_frame(uart_frame_t* out) {
                     out->type = UART_FRAME_KEY_EVENT;
                 } else if (length == 4 && payload[0] == KEY_EX_MARKER) {
                     out->type = UART_FRAME_KEY_EVENT_EX;
+                } else if (payload[0] == OTA_RSP_MARKER) {
+                    out->type = UART_FRAME_OTA_RSP;
                 } else if (payload[0] == DEBUG_MARKER) {
                     out->type = UART_FRAME_DEBUG;
                 } else if (payload[0] == STATUS_MARKER) {

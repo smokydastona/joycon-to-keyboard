@@ -19,6 +19,7 @@ from serial.tools import list_ports
 from .serial_client import SerialClient
 from ._version import __version__
 from . import updater
+from . import fw_updater
 
 log = logging.getLogger("joycon_helper.app")
 
@@ -662,6 +663,21 @@ class App(tk.Tk):
         self._update_status = tk.StringVar(value="")
         self._update_label = ttk.Label(ver_frame, textvariable=self._update_status, style="Muted.TLabel", wraplength=180)
         self._update_label.pack(anchor="w", pady=(2, 0))
+
+        # Firmware update section
+        fw_frame = ttk.LabelFrame(ver_frame, text="Firmware")
+        fw_frame.pack(fill=tk.X, pady=(8, 0))
+        self._fw_s3_ver = tk.StringVar(value="S3: —")
+        self._fw_esp32_ver = tk.StringVar(value="ESP32: —")
+        ttk.Label(fw_frame, textvariable=self._fw_s3_ver, style="Muted.TLabel").pack(anchor="w", padx=4)
+        ttk.Label(fw_frame, textvariable=self._fw_esp32_ver, style="Muted.TLabel").pack(anchor="w", padx=4)
+        self._fw_status = tk.StringVar(value="")
+        ttk.Label(fw_frame, textvariable=self._fw_status, style="Muted.TLabel", wraplength=170).pack(anchor="w", padx=4, pady=(2, 0))
+        self._fw_check_btn = ttk.Button(fw_frame, text="Check firmware versions", command=self._fw_check_versions, width=22)
+        self._fw_check_btn.pack(pady=(4, 4))
+        self._fw_update_btn = ttk.Button(fw_frame, text="Update firmware", command=self._fw_do_update, width=22, state="disabled")
+        self._fw_update_btn.pack(pady=(0, 4))
+        self._pending_fw_update: Optional[Dict[str, Any]] = None
 
     def _build_profile_tab(self) -> None:
         ttk.Label(self.tab_profile, text="Profile JSON").pack(anchor="w")
@@ -1981,6 +1997,140 @@ class App(tk.Tk):
         self._update_btn.configure(state="normal")
         self._update_status.set(f"Update failed: {error}")
         messagebox.showerror("Update failed", error)
+
+    # ------------------------------------------------------------------
+    # Firmware version check & OTA update
+    # ------------------------------------------------------------------
+
+    def _fw_check_versions(self) -> None:
+        """Query firmware versions from both boards over serial."""
+        if not self.serial.is_connected:
+            self._fw_status.set("Not connected.")
+            return
+
+        self._fw_check_btn.configure(state="disabled")
+        self._fw_status.set("Querying…")
+
+        def _worker() -> None:
+            flasher = fw_updater.FirmwareFlasher(self.serial)
+            s3_ver = flasher.get_version(fw_updater.BOARD_S3)
+            esp32_ver = flasher.get_version(fw_updater.BOARD_ESP32)
+            self.after(0, lambda: self._on_fw_versions(s3_ver, esp32_ver))
+
+        import threading
+        threading.Thread(target=_worker, name="fw-version-check", daemon=True).start()
+
+    def _on_fw_versions(self, s3_ver: Optional[str], esp32_ver: Optional[str]) -> None:
+        self._fw_check_btn.configure(state="normal")
+        self._fw_s3_ver.set(f"S3: {s3_ver or '—'}")
+        self._fw_esp32_ver.set(f"ESP32: {esp32_ver or '—'}")
+
+        if not s3_ver and not esp32_ver:
+            self._fw_status.set("Could not read versions.")
+            return
+
+        # Check for updates against GitHub Releases.
+        self._fw_status.set("Checking for updates…")
+
+        def _check() -> None:
+            info = fw_updater.check_firmware_updates(
+                current_s3=s3_ver, current_esp32=esp32_ver
+            )
+            self.after(0, lambda: self._on_fw_update_check(info))
+
+        import threading
+        threading.Thread(target=_check, name="fw-update-check", daemon=True).start()
+
+    def _on_fw_update_check(self, info: Optional[Dict[str, Any]]) -> None:
+        if info is None or not info.get("boards"):
+            self._fw_status.set("Firmware up to date.")
+            self._fw_update_btn.configure(state="disabled")
+            self._pending_fw_update = None
+            return
+
+        boards = info["boards"]
+        parts = []
+        if fw_updater.BOARD_S3 in boards:
+            parts.append("S3")
+        if fw_updater.BOARD_ESP32 in boards:
+            parts.append("ESP32")
+        self._fw_status.set(f"Update available for: {', '.join(parts)} → {info['version']}")
+        self._fw_update_btn.configure(state="normal")
+        self._pending_fw_update = info
+
+    def _fw_do_update(self) -> None:
+        info = self._pending_fw_update
+        if not info or not self.serial.is_connected:
+            return
+
+        boards = info.get("boards", {})
+        board_names = [b for b in [fw_updater.BOARD_S3, fw_updater.BOARD_ESP32] if b in boards]
+        if not board_names:
+            return
+
+        confirm = messagebox.askyesno(
+            "Firmware update",
+            f"Update firmware for {', '.join(board_names)} to v{info['version']}?\n\n"
+            "The device(s) will reboot after flashing.\n"
+            "Do not disconnect during the update.",
+        )
+        if not confirm:
+            return
+
+        self._fw_update_btn.configure(state="disabled")
+        self._fw_check_btn.configure(state="disabled")
+        self._fw_status.set("Downloading…")
+
+        def _run() -> None:
+            try:
+                flasher = fw_updater.FirmwareFlasher(self.serial)
+                for board in board_names:
+                    b_info = boards[board]
+                    self.after(0, lambda b=board: self._fw_status.set(f"Downloading {b}…"))
+
+                    fw_bytes = fw_updater.download_firmware(
+                        b_info["download_url"],
+                        progress_cb=lambda dl, tot, b=board: self.after(
+                            0, lambda: self._fw_status.set(
+                                f"Downloading {b}… {int(dl * 100 / tot)}%"
+                            )
+                        ),
+                    )
+
+                    self.after(0, lambda b=board: self._fw_status.set(f"Flashing {b}…"))
+
+                    flasher.flash(
+                        board, fw_bytes,
+                        progress_cb=lambda done, tot, b=board: self.after(
+                            0, lambda: self._fw_status.set(
+                                f"Flashing {b}… {int(done * 100 / tot)}%"
+                            )
+                        ),
+                    )
+
+                self.after(0, self._on_fw_update_done)
+            except Exception as e:
+                log.error("Firmware update failed: %s", e, exc_info=True)
+                self.after(0, lambda: self._on_fw_update_failed(str(e)))
+
+        import threading
+        threading.Thread(target=_run, name="fw-update", daemon=True).start()
+
+    def _on_fw_update_done(self) -> None:
+        self._fw_check_btn.configure(state="normal")
+        self._fw_status.set("Firmware updated! Device rebooting…")
+        self._pending_fw_update = None
+        messagebox.showinfo(
+            "Firmware updated",
+            "Firmware has been updated successfully.\n\n"
+            "The device will reboot. You may need to reconnect.",
+        )
+
+    def _on_fw_update_failed(self, error: str) -> None:
+        self._fw_check_btn.configure(state="normal")
+        self._fw_update_btn.configure(state="normal")
+        self._fw_status.set(f"Update failed: {error}")
+        messagebox.showerror("Firmware update failed", error)
 
     def _log_line(self, text: str) -> None:
         log.debug("SERIAL: %s", text)

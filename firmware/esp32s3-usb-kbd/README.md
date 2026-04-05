@@ -62,6 +62,14 @@ Configured via `menuconfig`:
 
 On the Arduino Nano ESP32 you’ll likely wire UART to the header pins, then set the matching **GPIO numbers** in menuconfig.
 
+## OTA firmware updates
+
+This firmware uses an **A/B OTA partition layout** (`partitions.csv`). The helper app can flash new firmware over the USB CDC serial link (no need to re-flash manually with `idf.py`).
+
+The same mechanism also relays OTA data to the ESP32 side over UART, so both boards can be updated from a single USB connection.
+
+See `helper-app/protocol.md` (firmware OTA commands) and `docs/serial-protocol.md` (OTA UART frames).
+
 ## Mapping
 
 The key IDs are the same as in `docs/keymap.md`.

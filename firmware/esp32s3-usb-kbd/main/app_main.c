@@ -100,6 +100,11 @@ void app_main(void) {
                 bridge_serial_emit_bt_status(state, name, bda_out);
                 continue;
             }
+
+            if (f.type == UART_FRAME_OTA_RSP) {
+                bridge_serial_handle_ota_rsp(f.payload, f.length);
+                continue;
+            }
         }
 
         // Let TinyUSB run.

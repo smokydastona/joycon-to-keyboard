@@ -47,7 +47,11 @@ idf.py flash monitor
 ```
 
 Tip: during development you’ll typically flash this ESP32 over its own USB. In the final “one custom USB dongle” build, this ESP32 is powered from the ESP32-S3’s USB 5V via `VIN/5V`.
+## OTA firmware updates
 
+This firmware uses an **A/B OTA partition layout** (`partitions.csv`). The helper app can push new firmware to this board via UART (relayed through the ESP32-S3), so both boards can be updated from a single USB connection.
+
+OTA control commands and response frames are documented in `docs/serial-protocol.md`.
 ## UART (default)
 
 - Baud: 115200

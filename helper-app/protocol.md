@@ -119,6 +119,100 @@ Example:
 {"cmd":"bt_connect","both":true}
 ```
 
+## Firmware version & OTA update commands
+
+### Query firmware version
+
+Returns the firmware version of either the ESP32-S3 (default) or the ESP32 BT host.
+
+```json
+{"cmd":"fw_version"}
+```
+
+```json
+{"cmd":"fw_version","board":"esp32"}
+```
+
+Response:
+
+```json
+{"rsp":"fw_version","ok":true,"board":"esp32s3","version":"0.1.42"}
+```
+
+### Begin firmware update
+
+Start an OTA update session. `size` is the total firmware image size in bytes.
+
+```json
+{"cmd":"fw_update_begin","size":524288}
+```
+
+For the ESP32 BT host (relayed via ESP32-S3):
+
+```json
+{"cmd":"fw_update_begin","board":"esp32","size":1048576}
+```
+
+Response:
+
+```json
+{"rsp":"fw_update_begin","ok":true}
+```
+
+### Send firmware data chunk
+
+Send a base64-encoded chunk of firmware binary data. Recommended chunk size: 3072 bytes raw (4096 chars base64).
+
+```json
+{"cmd":"fw_update_data","data":"<base64>"}
+```
+
+For ESP32 relay:
+
+```json
+{"cmd":"fw_update_data","board":"esp32","data":"<base64>"}
+```
+
+Response:
+
+```json
+{"rsp":"fw_update_data","ok":true,"written":3072}
+```
+
+### Finalize firmware update
+
+Validate the image and set the boot partition. The device reboots after responding.
+
+```json
+{"cmd":"fw_update_end"}
+```
+
+For ESP32 relay:
+
+```json
+{"cmd":"fw_update_end","board":"esp32"}
+```
+
+Response:
+
+```json
+{"rsp":"fw_update_end","ok":true}
+```
+
+### Abort firmware update
+
+Cancel an in-progress OTA session.
+
+```json
+{"cmd":"fw_update_abort"}
+```
+
+For ESP32 relay:
+
+```json
+{"cmd":"fw_update_abort","board":"esp32"}
+```
+
 ## Events (device -> PC)
 
 The device may emit events for:

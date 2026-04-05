@@ -102,3 +102,19 @@ void bridge_send_bt_status(uint8_t status_id, const uint8_t* bda6, const char* n
     uint8_t length = (uint8_t)(9 + name_len);
     bridge_send_frame(payload, length);
 }
+
+void bridge_send_ota_rsp(uint8_t rsp_id, uint8_t status, const uint8_t* data, uint8_t data_len) {
+    // OTA response payload: [0]=0xFB, [1]=rsp_id, [2]=status, [3..]=data
+    uint8_t payload[3 + 200];
+    payload[0] = 0xFB;
+    payload[1] = rsp_id;
+    payload[2] = status;
+
+    uint8_t n = data_len;
+    if (n > 200) n = 200;
+    if (n > 0 && data) {
+        memcpy(&payload[3], data, n);
+    }
+
+    bridge_send_frame(payload, (uint8_t)(3 + n));
+}

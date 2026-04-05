@@ -59,6 +59,11 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      - name: Write firmware version
+        shell: bash
+        run: |
+          echo "${{ needs.version-metadata.outputs.source_version }}" > "${{ matrix.project_dir }}/version.txt"
+
       - name: Build firmware
         uses: espressif/esp-idf-ci-action@v1
         with:
@@ -251,10 +256,25 @@ jobs:
           TITLE="Joy-Con Bridge ${TAG}"
           NOTES="Build version: ${{ needs.version-metadata.outputs.build_version }}"
 
-          # Create the release with the exe as a direct download asset.
+          # Prepare firmware binaries for direct OTA download.
+          # The helper app looks for esp32s3-usb-kbd.bin and esp32-hid-host-uart.bin.
+          S3_BIN=$(find release-bundle/firmware/esp32s3-usb-kbd -maxdepth 1 -name '*.bin' ! -name 'bootloader.bin' ! -name 'partition-table.bin' | head -n1)
+          ESP32_BIN=$(find release-bundle/firmware/esp32-hid-host-uart -maxdepth 1 -name '*.bin' ! -name 'bootloader.bin' ! -name 'partition-table.bin' | head -n1)
+
+          ASSETS=()
+          ASSETS+=("release-bundle/helper-app/JoyConBridgeHelper.exe")
+          if [ -n "$S3_BIN" ]; then
+            cp "$S3_BIN" release-bundle/esp32s3-usb-kbd.bin
+            ASSETS+=("release-bundle/esp32s3-usb-kbd.bin")
+          fi
+          if [ -n "$ESP32_BIN" ]; then
+            cp "$ESP32_BIN" release-bundle/esp32-hid-host-uart.bin
+            ASSETS+=("release-bundle/esp32-hid-host-uart.bin")
+          fi
+
           gh release create "${TAG}" \
             --title "${TITLE}" \
             --notes "${NOTES}" \
-            release-bundle/helper-app/JoyConBridgeHelper.exe
+            "${ASSETS[@]}"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
