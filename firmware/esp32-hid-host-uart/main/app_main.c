@@ -6,6 +6,7 @@
 #include "esp_log.h"
 
 #include "joycon_mapper.h"
+#include "joycon_setup.h"
 #include "bt_hid_host.h"
 #include "bridge_ctrl.h"
 #include "fw_ota.h"
@@ -46,6 +47,7 @@ void app_main(void) {
 
     // Idle loop
     while (1) {
-        vTaskDelay(pdMS_TO_TICKS(1000));
+        joycon_setup_check_timeouts();
+        vTaskDelay(pdMS_TO_TICKS(500));
     }
 }

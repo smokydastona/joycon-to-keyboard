@@ -86,6 +86,10 @@ void joycon_setup_update_battery(uint8_t device_id, uint8_t bat_con);
 // Returns true when setup is complete and the controller is ready for input.
 bool joycon_setup_is_ready(uint8_t device_id);
 
+// Check all setup instances for FSM timeouts.  Call periodically from the
+// main loop (e.g. every ~500 ms) so a lost subcmd reply doesn't stall setup.
+void joycon_setup_check_timeouts(void);
+
 // Send an HD Rumble command to the controller.
 // freq_hz: frequency in Hz (40-1253), amp_100: amplitude * 100 (0-100).
 void joycon_setup_send_rumble(uint8_t device_id, uint16_t freq_hz, uint8_t amp_100);

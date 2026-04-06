@@ -1327,17 +1327,62 @@ void profile_runtime_handle_input(bool pressed, uint8_t key_id) {
 
             if (all_pressed && !c->active) {
                 // Chord just completed. Undo individual actions for keys
-                // that were already pressed (simple modes only).
+                // that were already pressed.
                 for (uint8_t ki = 0; ki < c->key_count; ki++) {
                     uint8_t ck = c->keys[ki];
                     if (ck == key_id) continue;  // This key's mapping hasn't fired yet.
                     if (s_chord_suppressed[ck]) continue;
                     map_entry_t *cm = find_layer_override(ck);
                     if (!cm) cm = &s_map[ck];
-                    if (cm->mode == MAP_PASSTHROUGH || cm->mode == MAP_REMAP) {
-                        send_key_id(false, cm->remap_to);
-                    } else if (cm->mode == MAP_REMAP_HID) {
-                        usb_kbd_set_key(cm->hid_mod, cm->hid_keycode, false);
+                    switch (cm->mode) {
+                        case MAP_PASSTHROUGH:
+                        case MAP_REMAP:
+                            send_key_id(false, cm->remap_to);
+                            break;
+                        case MAP_REMAP_HID:
+                            usb_kbd_set_key(cm->hid_mod, cm->hid_keycode, false);
+                            break;
+                        case MAP_TURBO: {
+                            turbo_tracker_t *tt = find_turbo_tracker(ck);
+                            if (tt && tt->active) {
+                                tt->active = false;
+                                esp_timer_stop(tt->timer);
+                                if (tt->key_pressed) {
+                                    usb_kbd_set_key(tt->hid_mod, tt->hid_keycode, false);
+                                    tt->key_pressed = false;
+                                }
+                            }
+                            break;
+                        }
+                        case MAP_STICKY_MOD:
+                            if (s_sticky_state[ck]) {
+                                s_sticky_state[ck] = false;
+                                usb_kbd_set_key(cm->sticky_hid_mod, cm->sticky_hid_keycode, false);
+                            }
+                            break;
+                        case MAP_TAP_HOLD: {
+                            th_tracker_t *th = find_th_tracker(ck);
+                            if (th) {
+                                if (th->state == TH_PRESSED) {
+                                    esp_timer_stop(th->timer);
+                                } else if (th->state == TH_HOLDING) {
+                                    usb_kbd_set_key(th->hold_hid_mod, th->hold_hid_keycode, false);
+                                }
+                                th->state = TH_IDLE;
+                            }
+                            break;
+                        }
+                        case MAP_DOUBLE_TAP: {
+                            dt_tracker_t *dt = find_dt_tracker(ck);
+                            if (dt) {
+                                if (dt->state == DT_ARMED)
+                                    esp_timer_stop(dt->timer);
+                                dt->state = DT_IDLE;
+                            }
+                            break;
+                        }
+                        default:
+                            break;
                     }
                 }
                 // Suppress all chord keys & fire chord action.

@@ -155,13 +155,37 @@ _KEYCODE_NAMES: Dict[int, str] = {
 
 # The built-in default keymap (matches keymap.c on the firmware).
 DEFAULT_KEYMAP: Dict[int, Tuple[int, int]] = {
-    1: (0, 0x1A),  # W
-    2: (0, 0x16),  # S
-    3: (0, 0x04),  # A
-    4: (0, 0x07),  # D
-    5: (0, 0x2C),  # Space
-    6: (MOD_LSHIFT, 0),  # Left Shift
-    7: (MOD_LCTRL, 0),   # Left Ctrl
+    1: (0, 0x1A),            # W
+    2: (0, 0x16),            # S
+    3: (0, 0x04),            # A
+    4: (0, 0x07),            # D
+    5: (0, 0x2C),            # Space
+    6: (MOD_LSHIFT, 0),      # Left Shift
+    7: (MOD_LCTRL, 0),       # Left Ctrl
+    8: (0, 0x08),            # E
+    9: (0, 0x14),            # Q
+    10: (0, 0x15),           # R
+    11: (0, 0x09),           # F
+    12: (0, 0x2B),           # Tab
+    13: (0, 0x28),           # Enter
+    14: (MOD_RALT, 0),       # Right Alt
+    15: (MOD_LALT, 0),       # Left Alt
+    16: (0, 0x29),           # Escape
+    17: (0, 0x35),           # Grave / Tilde
+    # 18: Home capture — unmapped (no keycode)
+    19: (0, 0x0A),           # G
+    20: (MOD_LSHIFT, 0),     # Left Shift (duplicate)
+    21: (0, 0x19),           # V
+    22: (0, 0x52),           # Up Arrow
+    23: (0, 0x51),           # Down Arrow
+    24: (0, 0x50),           # Left Arrow
+    25: (0, 0x4F),           # Right Arrow
+    26: (0, 0x17),           # T
+    27: (0, 0x1E),           # 1
+    28: (0, 0x1F),           # 2
+    29: (0, 0x20),           # 3
+    30: (0, 0x21),           # 4
+    31: (0, 0x1B),           # X
 }
 
 

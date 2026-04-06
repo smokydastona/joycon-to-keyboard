@@ -9,6 +9,13 @@ Until then, entries are grouped by date.
 
 - Capture real controller HID reports and implement evidence-based mapping in the ESP32 host mapper (no guessing report layouts).
 
+### Fixed
+
+- **Chord undo now handles all mapping modes (H2)**: when a chord completes, individual key actions for already-pressed member keys are now properly undone for turbo, sticky-mod, tap-hold, and double-tap modes — not just passthrough/remap/remap-HID. Previously only 3 of 9 modes were undone, leaving phantom key presses or orphaned timers.
+- **FSM timeout recovery (M5)**: the Joy-Con setup FSM now has a periodic timeout check (every 500 ms). If a subcommand reply is lost for longer than 1500 ms, the FSM automatically advances to the next step instead of stalling indefinitely. Uses the already-defined `SETUP_TIMEOUT_MS` constant.
+- **Calibration restore deferred until FSM ready (M6)**: stick calibration from SPI flash is no longer applied on the very first input report (when the setup FSM may still be reading calibration data). Instead, the restore is deferred until `joycon_setup_is_ready()` returns true, ensuring SPI factory calibration is available before falling back to NVS-saved data.
+- **DEFAULT_KEYMAP populated with all 31 entries (M4)**: the helper-app's `DEFAULT_KEYMAP` dictionary in `hid_keycodes.py` now contains all 31 key_id → (modifier, keycode) entries matching `keymap.c` on the firmware. Previously only 7 of 31 entries were defined, causing the profile editor to show missing mappings.
+
 ### Added
 
 - **Turbo (rapid-fire) mapping mode**: new `turbo` profile mapping type auto-repeats a key while held, toggling press/release at a configurable interval (10–500 ms, default 50 ms). Up to 8 concurrent turbo keys.

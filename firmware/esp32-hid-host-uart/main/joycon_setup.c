@@ -827,6 +827,23 @@ bool joycon_setup_is_ready(uint8_t device_id) {
     return get_inst(device_id)->state == SETUP_READY;
 }
 
+void joycon_setup_check_timeouts(void) {
+    int64_t now = esp_timer_get_time();
+    for (int i = 0; i < 2; i++) {
+        setup_instance_t *inst = &s_inst[i];
+        if (inst->state <= SETUP_IDLE || inst->state >= SETUP_READY)
+            continue;
+        if (inst->last_send_us == 0)
+            continue;
+        int64_t elapsed_ms = (now - inst->last_send_us) / 1000;
+        if (elapsed_ms >= SETUP_TIMEOUT_MS) {
+            ESP_LOGW(TAG, "[%d] FSM timeout in state %d after %lld ms, advancing",
+                     inst->device_id, inst->state, (long long)elapsed_ms);
+            fsm_next(inst);
+        }
+    }
+}
+
 void joycon_setup_send_rumble(uint8_t device_id, uint16_t freq_hz, uint8_t amp_100) {
     setup_instance_t *inst = get_inst(device_id);
     if (inst->state != SETUP_READY) return;
