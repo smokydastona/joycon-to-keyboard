@@ -47,6 +47,19 @@ void joycon_mapper_set_stick_curve(uint8_t curve, uint8_t exp_x100) {
     ESP_LOGI("joycon-mapper", "Stick curve=%d exp=%.2f", (int)s_curve, (double)s_exp);
 }
 
+static void emit_if_changed_ex(uint8_t device_id, uint8_t key_id, bool now_pressed, bool* prev_pressed) {
+    if (now_pressed == *prev_pressed) return;
+
+    if (device_id == 0) {
+        bridge_send_key_event(key_id, now_pressed);
+    } else {
+        bridge_send_key_event_ex(device_id, key_id, now_pressed);
+    }
+    *prev_pressed = now_pressed;
+}
+
+#if CONFIG_JOYCON_HOST_NINTENDO_0X30_EMIT_KEYS
+
 // Apply selected curve to a normalized stick value (-4096..+4096).
 // Returns a value in the same range with the curve applied.
 static int apply_stick_curve(int val) {
@@ -74,18 +87,6 @@ static int apply_stick_curve(int val) {
     return (int)(sign * result * 4096.0f);
 }
 
-static void emit_if_changed_ex(uint8_t device_id, uint8_t key_id, bool now_pressed, bool* prev_pressed) {
-    if (now_pressed == *prev_pressed) return;
-
-    if (device_id == 0) {
-        bridge_send_key_event(key_id, now_pressed);
-    } else {
-        bridge_send_key_event_ex(device_id, key_id, now_pressed);
-    }
-    *prev_pressed = now_pressed;
-}
-
-#if CONFIG_JOYCON_HOST_NINTENDO_0X30_EMIT_KEYS
 // --- Stick auto-calibration ---
 // Tracks min/center/max per axis and maps raw values to a normalized
 // -1.0..+1.0 range. Inspired by GamepadPhoenix's StickCal approach.
@@ -265,6 +266,12 @@ static motion_state_t s_motion = {0};
 static int64_t get_time_ms(void) {
     return (int64_t)(esp_timer_get_time() / 1000);
 }
+#else /* !CONFIG_JOYCON_HOST_NINTENDO_0X30_EMIT_KEYS */
+
+/* Stubs so bridge_ctrl.c links even when the feature is disabled. */
+void joycon_mapper_save_calibration(void)  { /* no-op */ }
+void joycon_mapper_clear_calibration(void) { /* no-op */ }
+
 #endif /* CONFIG_JOYCON_HOST_NINTENDO_0X30_EMIT_KEYS */
 
 void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16_t len) {
