@@ -100,6 +100,44 @@ Notes:
 | `remap_hid` | **Bypasses keymap.c entirely.** Sends an arbitrary HID modifier+keycode. `mod` is a bitmask (0x01=LCtrl, 0x02=LShift, 0x04=LAlt, 0x08=LGUI). `keycode` is a USB HID usage code (e.g. 0x04=A, 0x1A=W, 0x2C=Space). |
 | `tap_hold` | Differentiates tap (quick press) from hold (long press). Contains `tap` and `hold` sub-mappings plus a `hold_ms` threshold. See below. |
 | `double_tap` | Single-tap sends one key, quick double-tap sends another. Contains `single_mod`/`single_keycode`, `double_mod`/`double_keycode`, and `timeout_ms`. See below. |
+| `turbo` | Rapid-fire (auto-repeat) key while held. Contains `mod`, `keycode`, and `delay_ms` (repeat interval). See below. |
+| `sticky` | Toggle modifier: first press activates, second press deactivates. Contains `mod` and `keycode`. See below. |
+
+### Turbo mapping
+
+The `turbo` type auto-repeats a key while held, toggling press/release at a fixed interval:
+
+```json
+{
+	"type": "turbo",
+	"mod": 0,
+	"keycode": 44,
+	"delay_ms": 50
+}
+```
+
+| field | type | description |
+|-------|------|-------------|
+| `mod` | int | HID modifier bitmask for the repeated key. |
+| `keycode` | int | HID keycode for the repeated key. |
+| `delay_ms` | int | Interval in milliseconds between toggles. Default 50. Range: 10–500. |
+
+### Sticky mapping
+
+The `sticky` type makes a key toggle on/off. First press sends key-down, second press sends key-up:
+
+```json
+{
+	"type": "sticky",
+	"mod": 2,
+	"keycode": 0
+}
+```
+
+| field | type | description |
+|-------|------|-------------|
+| `mod` | int | HID modifier bitmask to toggle. |
+| `keycode` | int | HID keycode to toggle. 0 if modifier-only. |
 
 ### Tap-hold mapping
 

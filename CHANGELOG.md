@@ -11,6 +11,10 @@ Until then, entries are grouped by date.
 
 ### Added
 
+- **Turbo (rapid-fire) mapping mode**: new `turbo` profile mapping type auto-repeats a key while held, toggling press/release at a configurable interval (10–500 ms, default 50 ms). Up to 8 concurrent turbo keys.
+- **Sticky modifier mapping mode**: new `sticky` profile mapping type toggles a key on/off — first press activates, second press deactivates. Useful for held modifiers (Shift, Ctrl, Alt) that should stay active without physically holding.
+- **Tap-hold mapping mode**: new `tap_hold` profile mapping type differentiates a quick tap from a long hold. Tap fires one action (press + release), hold fires a different action after a configurable threshold (50–2000 ms, default 300 ms). Up to 8 concurrent tap-hold keys.
+- **Chord (combo) detection**: new top-level `chords` array in profiles defines multi-button combos (2–4 keys). When all chord keys are pressed simultaneously, a single chord action fires and the individual key mappings are suppressed. Up to 8 concurrent chords. Individual key actions for already-pressed chord members are undone (for simple modes) when a chord completes.
 - **SHA-256 firmware integrity verification**: downloaded firmware binaries are hashed and verified against `sha256sums.txt` (when published as a GitHub release asset). Hash mismatch aborts the update immediately.
 - **Download retry with backoff**: firmware downloads automatically retry up to 3 times with exponential backoff (1 s, 2 s, 4 s) on network failures.
 - **Release notes in update dialog**: the firmware update confirmation dialog now shows the GitHub release notes (truncated to 600 chars) so users know what changed before updating.

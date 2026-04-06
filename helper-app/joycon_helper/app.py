@@ -5306,6 +5306,46 @@ class App(tk.Tk):
         ])
 
         # ══════════════════════════════════════════════════════════════
+        # 8b. ADVANCED MAPPING MODES
+        # ══════════════════════════════════════════════════════════════
+        _add("\U0001f3ae  Advanced Mapping Modes", [
+            "Beyond simple key remapping, profiles support these advanced modes.",
+            "All produce real USB HID keyboard output (anti-cheat safe).",
+            "",
+            "## Turbo (rapid-fire)",
+            "Auto-repeats a key while held at a configurable interval.",
+            "  JSON type: \"turbo\"",
+            "  Fields: mod, keycode, delay_ms (10\u2013500, default 50)",
+            "  Up to 8 turbo keys per profile.",
+            "",
+            "## Sticky (toggle modifier)",
+            "First press activates the key/modifier, second press deactivates.",
+            "  JSON type: \"sticky\"",
+            "  Fields: mod, keycode",
+            "  Useful for held modifiers (Shift, Ctrl, Alt) without physical holding.",
+            "",
+            "## Tap-Hold",
+            "Quick tap fires one action, long hold fires a different action.",
+            "  JSON type: \"tap_hold\"",
+            "  Fields: tap (sub-mapping), hold (sub-mapping), hold_ms (50\u20132000, default 300)",
+            "  Up to 8 tap-hold keys per profile.",
+            "",
+            "## Double-Tap",
+            "Single tap sends one key, quick double-tap sends another.",
+            "  JSON type: \"double_tap\"",
+            "  Fields: single (mod+keycode), double (mod+keycode), timeout_ms (100\u20131000, default 300)",
+            "  Up to 8 double-tap keys per profile.",
+            "",
+            "## Chords (combos)",
+            "Press 2\u20134 buttons simultaneously to trigger a single action.",
+            "  Top-level \"chords\" array in the profile JSON.",
+            "  Individual key mappings are suppressed while a chord is active.",
+            "  Up to 8 chords per profile.",
+            "",
+            "See helper-app/protocol.md for full JSON schema.",
+        ])
+
+        # ══════════════════════════════════════════════════════════════
         # 9. SERIAL PROTOCOL (summary)
         # ══════════════════════════════════════════════════════════════
         _add("\U0001f4e1  Serial Protocol (Reference)", [

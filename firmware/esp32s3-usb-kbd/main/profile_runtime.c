@@ -65,6 +65,9 @@ typedef enum {
     MAP_MACRO = 3,
     MAP_REMAP_HID = 4,
     MAP_DOUBLE_TAP = 5,
+    MAP_TURBO = 6,
+    MAP_STICKY_MOD = 7,
+    MAP_TAP_HOLD = 8,
 } map_mode_t;
 
 typedef struct {
@@ -79,6 +82,19 @@ typedef struct {
     uint8_t dt_double_mod;
     uint8_t dt_double_keycode;
     uint16_t dt_timeout_ms;    // default 300
+    // Turbo fields (MAP_TURBO)
+    uint8_t turbo_hid_mod;
+    uint8_t turbo_hid_keycode;
+    uint16_t turbo_delay_ms;   // default 50
+    // Sticky modifier fields (MAP_STICKY_MOD)
+    uint8_t sticky_hid_mod;
+    uint8_t sticky_hid_keycode;
+    // Tap-hold fields (MAP_TAP_HOLD)
+    uint8_t th_tap_hid_mod;
+    uint8_t th_tap_hid_keycode;
+    uint8_t th_hold_hid_mod;
+    uint8_t th_hold_hid_keycode;
+    uint16_t th_hold_ms;       // default 300
 } map_entry_t;
 
 // --- Layer system ---
@@ -181,6 +197,138 @@ static void register_dt_tracker(uint8_t key_id) {
     s_dt_count++;
 }
 
+// --- Turbo (rapid-fire) system ---
+
+#define MAX_TURBO_KEYS 8
+
+typedef struct {
+    uint8_t key_id;
+    bool active;
+    bool key_pressed;  // toggle state
+    uint8_t hid_mod;
+    uint8_t hid_keycode;
+    esp_timer_handle_t timer;
+} turbo_tracker_t;
+
+static turbo_tracker_t s_turbo_trackers[MAX_TURBO_KEYS];
+static size_t s_turbo_count = 0;
+
+static turbo_tracker_t *find_turbo_tracker(uint8_t key_id) {
+    for (size_t i = 0; i < s_turbo_count; i++) {
+        if (s_turbo_trackers[i].key_id == key_id) return &s_turbo_trackers[i];
+    }
+    return NULL;
+}
+
+static void turbo_timer_cb(void *arg) {
+    turbo_tracker_t *tt = (turbo_tracker_t *)arg;
+    if (!tt->active) return;
+    tt->key_pressed = !tt->key_pressed;
+    usb_kbd_set_key(tt->hid_mod, tt->hid_keycode, tt->key_pressed);
+}
+
+static void register_turbo_tracker(uint8_t key_id) {
+    if (find_turbo_tracker(key_id)) return;
+    if (s_turbo_count >= MAX_TURBO_KEYS) {
+        ESP_LOGW(TAG, "Max turbo keys reached (%d)", MAX_TURBO_KEYS);
+        return;
+    }
+    turbo_tracker_t *tt = &s_turbo_trackers[s_turbo_count];
+    memset(tt, 0, sizeof(*tt));
+    tt->key_id = key_id;
+    esp_timer_create_args_t args = {
+        .callback = turbo_timer_cb,
+        .arg = tt,
+        .name = "turbo",
+    };
+    if (esp_timer_create(&args, &tt->timer) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create turbo timer for key %u", key_id);
+        return;
+    }
+    s_turbo_count++;
+}
+
+// --- Sticky modifier state ---
+
+static bool s_sticky_state[INPUT_KEY_ID_MAX];
+
+// --- Tap-hold state machine ---
+
+#define MAX_TAP_HOLD_KEYS 8
+
+typedef enum {
+    TH_IDLE = 0,
+    TH_PRESSED,   // key pressed, waiting for hold threshold
+    TH_HOLDING,   // hold threshold exceeded, hold action active
+} th_state_t;
+
+typedef struct {
+    uint8_t key_id;
+    th_state_t state;
+    esp_timer_handle_t timer;
+    uint8_t tap_hid_mod;
+    uint8_t tap_hid_keycode;
+    uint8_t hold_hid_mod;
+    uint8_t hold_hid_keycode;
+} th_tracker_t;
+
+static th_tracker_t s_th_trackers[MAX_TAP_HOLD_KEYS];
+static size_t s_th_count = 0;
+
+static th_tracker_t *find_th_tracker(uint8_t key_id) {
+    for (size_t i = 0; i < s_th_count; i++) {
+        if (s_th_trackers[i].key_id == key_id) return &s_th_trackers[i];
+    }
+    return NULL;
+}
+
+static void th_timeout_cb(void *arg) {
+    th_tracker_t *th = (th_tracker_t *)arg;
+    if (th->state != TH_PRESSED) return;
+    // Hold threshold reached: fire hold action.
+    th->state = TH_HOLDING;
+    usb_kbd_set_key(th->hold_hid_mod, th->hold_hid_keycode, true);
+}
+
+static void register_th_tracker(uint8_t key_id) {
+    if (find_th_tracker(key_id)) return;
+    if (s_th_count >= MAX_TAP_HOLD_KEYS) {
+        ESP_LOGW(TAG, "Max tap-hold keys reached (%d)", MAX_TAP_HOLD_KEYS);
+        return;
+    }
+    th_tracker_t *th = &s_th_trackers[s_th_count];
+    memset(th, 0, sizeof(*th));
+    th->key_id = key_id;
+    th->state = TH_IDLE;
+    esp_timer_create_args_t args = {
+        .callback = th_timeout_cb,
+        .arg = th,
+        .name = "th",
+    };
+    if (esp_timer_create(&args, &th->timer) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create tap-hold timer for key %u", key_id);
+        return;
+    }
+    s_th_count++;
+}
+
+// --- Chord (combo) system ---
+
+#define MAX_CHORDS 8
+#define MAX_CHORD_KEYS 4
+
+typedef struct {
+    uint8_t keys[MAX_CHORD_KEYS];
+    uint8_t key_count;
+    map_entry_t action;
+    bool active;  // Is this chord currently firing?
+} chord_t;
+
+static chord_t s_chords[MAX_CHORDS];
+static size_t s_chord_count = 0;
+static bool s_key_pressed[INPUT_KEY_ID_MAX];
+static bool s_chord_suppressed[INPUT_KEY_ID_MAX];
+
 static void free_profile(void) {
     // Clean up double-tap timers.
     for (size_t i = 0; i < s_dt_count; i++) {
@@ -191,6 +339,33 @@ static void free_profile(void) {
     }
     memset(s_dt_trackers, 0, sizeof(s_dt_trackers));
     s_dt_count = 0;
+
+    // Clean up turbo timers.
+    for (size_t i = 0; i < s_turbo_count; i++) {
+        if (s_turbo_trackers[i].timer) {
+            esp_timer_stop(s_turbo_trackers[i].timer);
+            esp_timer_delete(s_turbo_trackers[i].timer);
+        }
+    }
+    memset(s_turbo_trackers, 0, sizeof(s_turbo_trackers));
+    s_turbo_count = 0;
+
+    // Clean up tap-hold timers.
+    for (size_t i = 0; i < s_th_count; i++) {
+        if (s_th_trackers[i].timer) {
+            esp_timer_stop(s_th_trackers[i].timer);
+            esp_timer_delete(s_th_trackers[i].timer);
+        }
+    }
+    memset(s_th_trackers, 0, sizeof(s_th_trackers));
+    s_th_count = 0;
+
+    // Reset sticky, chord, and key-pressed state.
+    memset(s_sticky_state, 0, sizeof(s_sticky_state));
+    memset(s_chords, 0, sizeof(s_chords));
+    s_chord_count = 0;
+    memset(s_key_pressed, 0, sizeof(s_key_pressed));
+    memset(s_chord_suppressed, 0, sizeof(s_chord_suppressed));
 
     for (size_t i = 0; i < s_macro_count; i++) {
         free(s_macros[i].steps);
@@ -439,6 +614,91 @@ static void parse_mappings(cJSON *root) {
             register_dt_tracker((uint8_t)key_id);
             continue;
         }
+
+        if (strcmp(type->valuestring, "turbo") == 0) {
+            cJSON *mod_j = cJSON_GetObjectItemCaseSensitive(entry, "mod");
+            cJSON *kc_j = cJSON_GetObjectItemCaseSensitive(entry, "keycode");
+            cJSON *delay_j = cJSON_GetObjectItemCaseSensitive(entry, "delay_ms");
+            if (!cJSON_IsNumber(mod_j) || !cJSON_IsNumber(kc_j)) continue;
+            s_map[key_id].mode = MAP_TURBO;
+            s_map[key_id].turbo_hid_mod = (uint8_t)mod_j->valueint;
+            s_map[key_id].turbo_hid_keycode = (uint8_t)kc_j->valueint;
+            s_map[key_id].turbo_delay_ms = 50;
+            if (cJSON_IsNumber(delay_j) && delay_j->valueint >= 10 && delay_j->valueint <= 500) {
+                s_map[key_id].turbo_delay_ms = (uint16_t)delay_j->valueint;
+            }
+            register_turbo_tracker((uint8_t)key_id);
+            continue;
+        }
+
+        if (strcmp(type->valuestring, "sticky") == 0) {
+            cJSON *mod_j = cJSON_GetObjectItemCaseSensitive(entry, "mod");
+            cJSON *kc_j = cJSON_GetObjectItemCaseSensitive(entry, "keycode");
+            if (!cJSON_IsNumber(mod_j) || !cJSON_IsNumber(kc_j)) continue;
+            s_map[key_id].mode = MAP_STICKY_MOD;
+            s_map[key_id].sticky_hid_mod = (uint8_t)mod_j->valueint;
+            s_map[key_id].sticky_hid_keycode = (uint8_t)kc_j->valueint;
+            continue;
+        }
+
+        if (strcmp(type->valuestring, "tap_hold") == 0) {
+            cJSON *tap_j = cJSON_GetObjectItemCaseSensitive(entry, "tap");
+            cJSON *hold_j = cJSON_GetObjectItemCaseSensitive(entry, "hold");
+            cJSON *hold_ms_j = cJSON_GetObjectItemCaseSensitive(entry, "hold_ms");
+            if (!cJSON_IsObject(tap_j) || !cJSON_IsObject(hold_j)) continue;
+
+            // Resolve tap action to HID mod+keycode.
+            uint8_t tap_mod = 0, tap_kc = 0;
+            cJSON *tap_type = cJSON_GetObjectItemCaseSensitive(tap_j, "type");
+            if (cJSON_IsString(tap_type) && tap_type->valuestring) {
+                if (strcmp(tap_type->valuestring, "remap_hid") == 0) {
+                    cJSON *m = cJSON_GetObjectItemCaseSensitive(tap_j, "mod");
+                    cJSON *k = cJSON_GetObjectItemCaseSensitive(tap_j, "keycode");
+                    if (cJSON_IsNumber(m)) tap_mod = (uint8_t)m->valueint;
+                    if (cJSON_IsNumber(k)) tap_kc = (uint8_t)k->valueint;
+                } else if (strcmp(tap_type->valuestring, "passthrough") == 0) {
+                    uint8_t base = (key_id < 128) ? (uint8_t)key_id : (uint8_t)(key_id - 128);
+                    keymap_lookup(base, &tap_mod, &tap_kc);
+                } else if (strcmp(tap_type->valuestring, "remap") == 0) {
+                    cJSON *to = cJSON_GetObjectItemCaseSensitive(tap_j, "to");
+                    if (cJSON_IsNumber(to) && to->valueint >= 0 && to->valueint <= 127) {
+                        keymap_lookup((uint8_t)to->valueint, &tap_mod, &tap_kc);
+                    }
+                }
+            }
+
+            // Resolve hold action to HID mod+keycode.
+            uint8_t hold_mod = 0, hold_kc = 0;
+            cJSON *hold_type = cJSON_GetObjectItemCaseSensitive(hold_j, "type");
+            if (cJSON_IsString(hold_type) && hold_type->valuestring) {
+                if (strcmp(hold_type->valuestring, "remap_hid") == 0) {
+                    cJSON *m = cJSON_GetObjectItemCaseSensitive(hold_j, "mod");
+                    cJSON *k = cJSON_GetObjectItemCaseSensitive(hold_j, "keycode");
+                    if (cJSON_IsNumber(m)) hold_mod = (uint8_t)m->valueint;
+                    if (cJSON_IsNumber(k)) hold_kc = (uint8_t)k->valueint;
+                } else if (strcmp(hold_type->valuestring, "passthrough") == 0) {
+                    uint8_t base = (key_id < 128) ? (uint8_t)key_id : (uint8_t)(key_id - 128);
+                    keymap_lookup(base, &hold_mod, &hold_kc);
+                } else if (strcmp(hold_type->valuestring, "remap") == 0) {
+                    cJSON *to = cJSON_GetObjectItemCaseSensitive(hold_j, "to");
+                    if (cJSON_IsNumber(to) && to->valueint >= 0 && to->valueint <= 127) {
+                        keymap_lookup((uint8_t)to->valueint, &hold_mod, &hold_kc);
+                    }
+                }
+            }
+
+            s_map[key_id].mode = MAP_TAP_HOLD;
+            s_map[key_id].th_tap_hid_mod = tap_mod;
+            s_map[key_id].th_tap_hid_keycode = tap_kc;
+            s_map[key_id].th_hold_hid_mod = hold_mod;
+            s_map[key_id].th_hold_hid_keycode = hold_kc;
+            s_map[key_id].th_hold_ms = 300;
+            if (cJSON_IsNumber(hold_ms_j) && hold_ms_j->valueint >= 50 && hold_ms_j->valueint <= 2000) {
+                s_map[key_id].th_hold_ms = (uint16_t)hold_ms_j->valueint;
+            }
+            register_th_tracker((uint8_t)key_id);
+            continue;
+        }
     }
 }
 
@@ -505,6 +765,75 @@ static void parse_layer_mappings(cJSON *mappings_obj, layer_t *layer) {
                 ov->entry.dt_timeout_ms = (uint16_t)timeout->valueint;
             }
             register_dt_tracker((uint8_t)key_id);
+        } else if (strcmp(type->valuestring, "turbo") == 0) {
+            cJSON *mod_j = cJSON_GetObjectItemCaseSensitive(entry, "mod");
+            cJSON *kc_j = cJSON_GetObjectItemCaseSensitive(entry, "keycode");
+            cJSON *delay_j = cJSON_GetObjectItemCaseSensitive(entry, "delay_ms");
+            if (!cJSON_IsNumber(mod_j) || !cJSON_IsNumber(kc_j)) continue;
+            ov->entry.mode = MAP_TURBO;
+            ov->entry.turbo_hid_mod = (uint8_t)mod_j->valueint;
+            ov->entry.turbo_hid_keycode = (uint8_t)kc_j->valueint;
+            ov->entry.turbo_delay_ms = 50;
+            if (cJSON_IsNumber(delay_j) && delay_j->valueint >= 10 && delay_j->valueint <= 500) {
+                ov->entry.turbo_delay_ms = (uint16_t)delay_j->valueint;
+            }
+            register_turbo_tracker((uint8_t)key_id);
+        } else if (strcmp(type->valuestring, "sticky") == 0) {
+            cJSON *mod_j = cJSON_GetObjectItemCaseSensitive(entry, "mod");
+            cJSON *kc_j = cJSON_GetObjectItemCaseSensitive(entry, "keycode");
+            if (!cJSON_IsNumber(mod_j) || !cJSON_IsNumber(kc_j)) continue;
+            ov->entry.mode = MAP_STICKY_MOD;
+            ov->entry.sticky_hid_mod = (uint8_t)mod_j->valueint;
+            ov->entry.sticky_hid_keycode = (uint8_t)kc_j->valueint;
+        } else if (strcmp(type->valuestring, "tap_hold") == 0) {
+            cJSON *tap_j = cJSON_GetObjectItemCaseSensitive(entry, "tap");
+            cJSON *hold_j = cJSON_GetObjectItemCaseSensitive(entry, "hold");
+            cJSON *hold_ms_j = cJSON_GetObjectItemCaseSensitive(entry, "hold_ms");
+            if (!cJSON_IsObject(tap_j) || !cJSON_IsObject(hold_j)) continue;
+            uint8_t tap_mod = 0, tap_kc = 0;
+            cJSON *tap_type = cJSON_GetObjectItemCaseSensitive(tap_j, "type");
+            if (cJSON_IsString(tap_type) && tap_type->valuestring) {
+                if (strcmp(tap_type->valuestring, "remap_hid") == 0) {
+                    cJSON *m = cJSON_GetObjectItemCaseSensitive(tap_j, "mod");
+                    cJSON *k = cJSON_GetObjectItemCaseSensitive(tap_j, "keycode");
+                    if (cJSON_IsNumber(m)) tap_mod = (uint8_t)m->valueint;
+                    if (cJSON_IsNumber(k)) tap_kc = (uint8_t)k->valueint;
+                } else if (strcmp(tap_type->valuestring, "passthrough") == 0) {
+                    uint8_t base = (key_id < 128) ? (uint8_t)key_id : (uint8_t)(key_id - 128);
+                    keymap_lookup(base, &tap_mod, &tap_kc);
+                } else if (strcmp(tap_type->valuestring, "remap") == 0) {
+                    cJSON *to = cJSON_GetObjectItemCaseSensitive(tap_j, "to");
+                    if (cJSON_IsNumber(to) && to->valueint >= 0 && to->valueint <= 127)
+                        keymap_lookup((uint8_t)to->valueint, &tap_mod, &tap_kc);
+                }
+            }
+            uint8_t hold_mod = 0, hold_kc = 0;
+            cJSON *hold_type = cJSON_GetObjectItemCaseSensitive(hold_j, "type");
+            if (cJSON_IsString(hold_type) && hold_type->valuestring) {
+                if (strcmp(hold_type->valuestring, "remap_hid") == 0) {
+                    cJSON *m = cJSON_GetObjectItemCaseSensitive(hold_j, "mod");
+                    cJSON *k = cJSON_GetObjectItemCaseSensitive(hold_j, "keycode");
+                    if (cJSON_IsNumber(m)) hold_mod = (uint8_t)m->valueint;
+                    if (cJSON_IsNumber(k)) hold_kc = (uint8_t)k->valueint;
+                } else if (strcmp(hold_type->valuestring, "passthrough") == 0) {
+                    uint8_t base = (key_id < 128) ? (uint8_t)key_id : (uint8_t)(key_id - 128);
+                    keymap_lookup(base, &hold_mod, &hold_kc);
+                } else if (strcmp(hold_type->valuestring, "remap") == 0) {
+                    cJSON *to = cJSON_GetObjectItemCaseSensitive(hold_j, "to");
+                    if (cJSON_IsNumber(to) && to->valueint >= 0 && to->valueint <= 127)
+                        keymap_lookup((uint8_t)to->valueint, &hold_mod, &hold_kc);
+                }
+            }
+            ov->entry.mode = MAP_TAP_HOLD;
+            ov->entry.th_tap_hid_mod = tap_mod;
+            ov->entry.th_tap_hid_keycode = tap_kc;
+            ov->entry.th_hold_hid_mod = hold_mod;
+            ov->entry.th_hold_hid_keycode = hold_kc;
+            ov->entry.th_hold_ms = 300;
+            if (cJSON_IsNumber(hold_ms_j) && hold_ms_j->valueint >= 50 && hold_ms_j->valueint <= 2000) {
+                ov->entry.th_hold_ms = (uint16_t)hold_ms_j->valueint;
+            }
+            register_th_tracker((uint8_t)key_id);
         } else {
             continue;
         }
@@ -566,6 +895,75 @@ static void parse_layers(cJSON *root) {
     s_layer_count = count;
 }
 
+static void parse_chords(cJSON *root) {
+    cJSON *chords = cJSON_GetObjectItemCaseSensitive(root, "chords");
+    if (!cJSON_IsArray(chords)) return;
+
+    size_t count = 0;
+    cJSON *chord_obj;
+    cJSON_ArrayForEach(chord_obj, chords) {
+        if (!cJSON_IsObject(chord_obj)) continue;
+        if (count >= MAX_CHORDS) break;
+
+        cJSON *keys = cJSON_GetObjectItemCaseSensitive(chord_obj, "keys");
+        cJSON *action = cJSON_GetObjectItemCaseSensitive(chord_obj, "action");
+        if (!cJSON_IsArray(keys) || !cJSON_IsObject(action)) continue;
+
+        chord_t *c = &s_chords[count];
+        memset(c, 0, sizeof(*c));
+
+        int kc = 0;
+        cJSON *k;
+        cJSON_ArrayForEach(k, keys) {
+            if (kc >= MAX_CHORD_KEYS) break;
+            if (!cJSON_IsNumber(k)) continue;
+            if (k->valueint < 0 || k->valueint >= INPUT_KEY_ID_MAX) continue;
+            c->keys[kc++] = (uint8_t)k->valueint;
+        }
+        if (kc < 2) continue;  // Need at least 2 keys for a chord.
+        c->key_count = (uint8_t)kc;
+
+        // Parse chord action (support common mapping types).
+        cJSON *type = cJSON_GetObjectItemCaseSensitive(action, "type");
+        if (!cJSON_IsString(type) || !type->valuestring) continue;
+
+        c->action.mode = MAP_PASSTHROUGH;
+        c->action.macro_index = -1;
+
+        if (strcmp(type->valuestring, "remap_hid") == 0) {
+            cJSON *mod_j = cJSON_GetObjectItemCaseSensitive(action, "mod");
+            cJSON *kc_j = cJSON_GetObjectItemCaseSensitive(action, "keycode");
+            if (!cJSON_IsNumber(mod_j) || !cJSON_IsNumber(kc_j)) continue;
+            c->action.mode = MAP_REMAP_HID;
+            c->action.hid_mod = (uint8_t)mod_j->valueint;
+            c->action.hid_keycode = (uint8_t)kc_j->valueint;
+        } else if (strcmp(type->valuestring, "remap") == 0) {
+            cJSON *to = cJSON_GetObjectItemCaseSensitive(action, "to");
+            if (!cJSON_IsNumber(to) || to->valueint < 0 || to->valueint > 127) continue;
+            c->action.mode = MAP_REMAP;
+            c->action.remap_to = (uint8_t)to->valueint;
+        } else if (strcmp(type->valuestring, "macro") == 0) {
+            cJSON *id = cJSON_GetObjectItemCaseSensitive(action, "id");
+            if (!cJSON_IsString(id) || !id->valuestring) continue;
+            int8_t idx = find_macro_index(id->valuestring);
+            if (idx < 0) continue;
+            c->action.mode = MAP_MACRO;
+            c->action.macro_index = idx;
+        } else if (strcmp(type->valuestring, "disable") == 0) {
+            c->action.mode = MAP_DISABLED;
+        } else {
+            continue;
+        }
+
+        c->active = false;
+        ESP_LOGI(TAG, "Chord %u: %u keys, action=%d", (unsigned)count,
+                 (unsigned)c->key_count, c->action.mode);
+        count++;
+    }
+
+    s_chord_count = count;
+}
+
 static void load_profile_json(const char *json) {
     cJSON *root = cJSON_Parse(json);
     if (!root) {
@@ -582,6 +980,7 @@ static void load_profile_json(const char *json) {
     parse_macros(root);
     parse_mappings(root);
     parse_layers(root);
+    parse_chords(root);
 
     // --- Forward stick settings to ESP32 BT host ---
     cJSON *stick = cJSON_GetObjectItemCaseSensitive(root, "stick");
@@ -810,6 +1209,80 @@ static void dispatch_mapping(map_entry_t *m, bool pressed, uint8_t key_id) {
             return;
         }
 
+        case MAP_TURBO: {
+            turbo_tracker_t *tt = find_turbo_tracker(key_id);
+            if (!tt) {
+                // Fallback: simple press/release.
+                usb_kbd_set_key(m->turbo_hid_mod, m->turbo_hid_keycode, pressed);
+                return;
+            }
+            if (pressed) {
+                tt->active = true;
+                tt->key_pressed = true;
+                tt->hid_mod = m->turbo_hid_mod;
+                tt->hid_keycode = m->turbo_hid_keycode;
+                usb_kbd_set_key(tt->hid_mod, tt->hid_keycode, true);
+                esp_timer_start_periodic(tt->timer,
+                                         (uint64_t)m->turbo_delay_ms * 1000);
+            } else {
+                tt->active = false;
+                esp_timer_stop(tt->timer);
+                if (tt->key_pressed) {
+                    usb_kbd_set_key(tt->hid_mod, tt->hid_keycode, false);
+                    tt->key_pressed = false;
+                }
+            }
+            return;
+        }
+
+        case MAP_STICKY_MOD:
+            if (pressed) {
+                s_sticky_state[key_id] = !s_sticky_state[key_id];
+                usb_kbd_set_key(m->sticky_hid_mod, m->sticky_hid_keycode,
+                                s_sticky_state[key_id]);
+            }
+            // Release events are ignored for sticky keys.
+            return;
+
+        case MAP_TAP_HOLD: {
+            th_tracker_t *th = find_th_tracker(key_id);
+            if (!th) {
+                // Fallback: fire tap action directly.
+                usb_kbd_set_key(m->th_tap_hid_mod, m->th_tap_hid_keycode, pressed);
+                return;
+            }
+            switch (th->state) {
+                case TH_IDLE:
+                    if (pressed) {
+                        th->state = TH_PRESSED;
+                        th->tap_hid_mod = m->th_tap_hid_mod;
+                        th->tap_hid_keycode = m->th_tap_hid_keycode;
+                        th->hold_hid_mod = m->th_hold_hid_mod;
+                        th->hold_hid_keycode = m->th_hold_hid_keycode;
+                        esp_timer_start_once(th->timer,
+                                             (uint64_t)m->th_hold_ms * 1000);
+                    }
+                    break;
+                case TH_PRESSED:
+                    if (!pressed) {
+                        // Released before hold threshold: fire tap.
+                        esp_timer_stop(th->timer);
+                        usb_kbd_set_key(th->tap_hid_mod, th->tap_hid_keycode, true);
+                        usb_kbd_set_key(th->tap_hid_mod, th->tap_hid_keycode, false);
+                        th->state = TH_IDLE;
+                    }
+                    break;
+                case TH_HOLDING:
+                    if (!pressed) {
+                        // Release hold action.
+                        usb_kbd_set_key(th->hold_hid_mod, th->hold_hid_keycode, false);
+                        th->state = TH_IDLE;
+                    }
+                    break;
+            }
+            return;
+        }
+
         case MAP_PASSTHROUGH:
         default:
             send_key_id(pressed, m->remap_to);
@@ -818,6 +1291,11 @@ static void dispatch_mapping(map_entry_t *m, bool pressed, uint8_t key_id) {
 }
 
 void profile_runtime_handle_input(bool pressed, uint8_t key_id) {
+    // Update global pressed state for chord detection.
+    if (key_id < INPUT_KEY_ID_MAX) {
+        s_key_pressed[key_id] = pressed;
+    }
+
     // Check if this key_id activates a layer.
     for (size_t l = 0; l < s_layer_count; l++) {
         if (s_layers[l].activation_key_id == key_id) {
@@ -829,6 +1307,74 @@ void profile_runtime_handle_input(bool pressed, uint8_t key_id) {
             bridge_serial_emit_layer_state(s_layers[l].name, s_layers[l].active);
             return;  // Consumed by layer activation.
         }
+    }
+
+    // --- Chord evaluation (before individual mappings) ---
+    if (s_chord_count > 0) {
+        for (size_t ci = 0; ci < s_chord_count; ci++) {
+            chord_t *c = &s_chords[ci];
+            bool is_member = false;
+            for (uint8_t ki = 0; ki < c->key_count; ki++) {
+                if (c->keys[ki] == key_id) { is_member = true; break; }
+            }
+            if (!is_member) continue;
+
+            // Check if all chord keys are now pressed.
+            bool all_pressed = true;
+            for (uint8_t ki = 0; ki < c->key_count; ki++) {
+                if (!s_key_pressed[c->keys[ki]]) { all_pressed = false; break; }
+            }
+
+            if (all_pressed && !c->active) {
+                // Chord just completed. Undo individual actions for keys
+                // that were already pressed (simple modes only).
+                for (uint8_t ki = 0; ki < c->key_count; ki++) {
+                    uint8_t ck = c->keys[ki];
+                    if (ck == key_id) continue;  // This key's mapping hasn't fired yet.
+                    if (s_chord_suppressed[ck]) continue;
+                    map_entry_t *cm = find_layer_override(ck);
+                    if (!cm) cm = &s_map[ck];
+                    if (cm->mode == MAP_PASSTHROUGH || cm->mode == MAP_REMAP) {
+                        send_key_id(false, cm->remap_to);
+                    } else if (cm->mode == MAP_REMAP_HID) {
+                        usb_kbd_set_key(cm->hid_mod, cm->hid_keycode, false);
+                    }
+                }
+                // Suppress all chord keys & fire chord action.
+                for (uint8_t ki = 0; ki < c->key_count; ki++) {
+                    s_chord_suppressed[c->keys[ki]] = true;
+                }
+                c->active = true;
+                dispatch_mapping(&c->action, true, key_id);
+                return;
+            }
+
+            if (!all_pressed && c->active) {
+                // A chord key was released: deactivate chord.
+                c->active = false;
+                dispatch_mapping(&c->action, false, key_id);
+                // Unsuppress keys no longer part of any active chord.
+                for (uint8_t ki = 0; ki < c->key_count; ki++) {
+                    uint8_t ck = c->keys[ki];
+                    bool still_suppressed = false;
+                    for (size_t cj = 0; cj < s_chord_count; cj++) {
+                        if (!s_chords[cj].active) continue;
+                        for (uint8_t kj = 0; kj < s_chords[cj].key_count; kj++) {
+                            if (s_chords[cj].keys[kj] == ck) {
+                                still_suppressed = true;
+                                break;
+                            }
+                        }
+                        if (still_suppressed) break;
+                    }
+                    if (!still_suppressed) s_chord_suppressed[ck] = false;
+                }
+                return;
+            }
+        }
+
+        // If this key is currently suppressed by an active chord, eat the event.
+        if (s_chord_suppressed[key_id]) return;
     }
 
     // Look for a layer override, then fall back to the base mapping.

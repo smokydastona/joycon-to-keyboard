@@ -96,7 +96,16 @@ The profile system supports these mapping modes:
 - **remap_hid** — bypasses `keymap.c` entirely, sending an arbitrary USB HID modifier + keycode
 - **macro** — triggers a macro sequence
 - **disable** — silently drops the input
+- **double_tap** — single tap sends one key, quick double-tap sends another
+- **turbo** — rapid-fire auto-repeat while held (configurable interval)
+- **sticky** — toggle key: first press activates, second press deactivates
+- **tap_hold** — different actions for quick tap vs long hold
+- **chords** — multi-button combos that fire a single action when pressed simultaneously
 
 ### Layers
 
 Profiles may include up to 4 **overlay layers**. Each layer is activated by a controller button (hold or toggle mode). While active, a layer's sparse mapping overrides replace the base mappings for the listed key_ids; unlisted keys fall through to the base. See `helper-app/protocol.md` for the JSON schema.
+
+### Chords
+
+Profiles may include up to 8 **chord combos**. Each chord defines 2–4 keys that, when pressed simultaneously, fire a single action (and suppress the individual key mappings). Chords are evaluated before individual mappings. See `helper-app/protocol.md` for the JSON schema.
