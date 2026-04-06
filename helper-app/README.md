@@ -81,6 +81,15 @@ Current UI tabs:
 - **Razer** (Basilisk X HyperSpeed): configure Razer mice over USB HID Feature Reports — **dominant device canvas** with compact toolbar and **popup panels** for DPI stages (5 levels, X/Y independent), button remapping, polling rate, idle timeout, and loadouts.
 - **Help**: comprehensive setup & usage guide with 14 collapsible sections — project overview, hardware requirements, wiring diagrams, pinout image (scrollable `pinouts.png`), firmware installation walkthrough, first end-to-end test procedure, app usage guide (all tabs), default key mapping reference, serial protocol summary, mouse configuration guide, OTA firmware updates, troubleshooting, app install/update instructions, and a quick reference card. Includes a search bar that filters sections by keyword.
 
+### First-time firmware flashing (no ESP-IDF needed)
+
+The app includes a built-in **esptool** integration for flashing brand-new/blank boards:
+
+- **"Download & flash latest"**: auto-detects the connected chip (ESP32 or ESP32-S3), downloads the latest firmware from GitHub Releases, erases flash, and writes everything in one click.
+- **"Flash files…"**: pick local `.bin` file(s) — the app auto-classifies bootloader, partition table, and app binary by filename.
+- Boards must be in **download mode** (hold BOOT + press RESET, then release BOOT) for initial flashing. Some boards auto-enter download mode via USB.
+- After first-time flash, future updates can use the **OTA** path (no download mode needed).
+
 The Controller tab keymap artwork switches between four Joy-Con states based on BT status: disconnected (`joycons-none.png`), left only, right only, and both connected. The Mouse tab displays an M913 overlay that switches between connected (`m913.png`) and disconnected (`m913-none.png`) states based on device scan results.
 
 The app displays a **full-window background image** (`background.png` / `background-dark.png`) behind all content, automatically selected based on the active theme (light/dark). The image scales to cover the window on resize using Pillow.

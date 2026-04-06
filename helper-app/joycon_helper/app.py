@@ -34,6 +34,7 @@ from .serial_client import SerialClient
 from ._version import __version__
 from . import updater
 from . import fw_updater
+from . import initial_flash
 from . import hid_keycodes
 from . import m913_device
 from . import razer_device
@@ -1364,6 +1365,16 @@ class App(tk.Tk):
         self._fw_flash_file_btn = ttk.Button(fw_frame, text="Flash from file\u2026", command=self._fw_flash_from_file, width=22)
         self._fw_flash_file_btn.pack(pady=(0, 4))
         self._pending_fw_update: Optional[Dict[str, Any]] = None
+
+        # Initial flash section (esptool — for blank boards)
+        init_frame = ttk.LabelFrame(ver_frame, text="Initial Flash (new boards)")
+        init_frame.pack(fill=tk.X, pady=(8, 0))
+        self._init_flash_status = tk.StringVar(value="For boards without firmware yet.")
+        ttk.Label(init_frame, textvariable=self._init_flash_status, style="Muted.TLabel", wraplength=170).pack(anchor="w", padx=4, pady=(2, 0))
+        self._init_flash_auto_btn = ttk.Button(init_frame, text="Download \u0026 flash latest", command=self._init_flash_auto, width=22)
+        self._init_flash_auto_btn.pack(pady=(4, 2))
+        self._init_flash_file_btn = ttk.Button(init_frame, text="Flash files\u2026", command=self._init_flash_from_files, width=22)
+        self._init_flash_file_btn.pack(pady=(2, 4))
 
         # ── Bottom status bar (mode indicator — always visible) ──
         status_bar = tk.Frame(self, bg=self._colors.get("panel2", "#e2d0a8"), relief="sunken", bd=1)
@@ -5137,6 +5148,19 @@ class App(tk.Tk):
             "2) Connect the wiring (see Wiring section above).",
             "3) Plug only the ESP32-S3 into the PC.",
             "4) The ESP32 boots from the ESP32-S3\u2019s power.",
+            "",
+            "## Alternative: Flash from the helper app (no ESP-IDF needed!)",
+            "The helper app can flash brand-new boards using the built-in esptool.",
+            "",
+            "1) Connect the board to your PC via USB.",
+            "2) Put it in download mode: hold BOOT, press RESET, release BOOT.",
+            "   (Some boards auto-enter download mode via USB \u2014 try without the button dance first.)",
+            "3) Select the board\u2019s COM port in the dropdown at the top of the app.",
+            "4) In the 'Initial Flash (new boards)' section at the bottom-right:",
+            "   \u2022 'Download & flash latest' \u2014 fetches the latest release from GitHub and flashes.",
+            "   \u2022 'Flash files\u2026' \u2014 pick local .bin file(s) (bootloader + partition table + app, or app-only).",
+            "5) The chip type is auto-detected. The entire flash is erased before writing.",
+            "6) After flashing, press RESET or re-plug USB. Flash each board separately.",
         ])
 
         # ══════════════════════════════════════════════════════════════
@@ -8737,6 +8761,163 @@ class App(tk.Tk):
         self._fw_flash_file_btn.configure(state="normal")
         self._fw_status.set(f"Flash failed: {error}")
         messagebox.showerror("Flash failed", error)
+
+    # ------------------------------------------------------------------
+    # Initial flash (esptool — for blank / new boards)
+    # ------------------------------------------------------------------
+
+    def _init_flash_auto(self) -> None:
+        """Download the latest release and flash a blank board via esptool."""
+        port = self.port_var.get()
+        if not port:
+            messagebox.showerror("No port", "Select a COM port first.")
+            return
+
+        confirm = messagebox.askyesno(
+            "Initial Flash",
+            f"This will ERASE the entire flash of the board on {port} "
+            "and write the latest firmware from GitHub.\n\n"
+            "The board must be in download mode:\n"
+            "  \u2022 Hold BOOT, press RESET, release BOOT\n"
+            "  \u2022 (Some boards enter download mode automatically via USB)\n\n"
+            "Continue?",
+        )
+        if not confirm:
+            return
+
+        self._init_flash_auto_btn.configure(state="disabled")
+        self._init_flash_file_btn.configure(state="disabled")
+        self._init_flash_status.set("Starting\u2026")
+
+        def _run() -> None:
+            try:
+                initial_flash.download_and_flash_initial(
+                    port,
+                    progress_cb=lambda msg: self.after(
+                        0, lambda: self._init_flash_status.set(msg)
+                    ),
+                )
+                self.after(0, self._on_init_flash_done)
+            except Exception as e:
+                log.error("Initial flash failed: %s", e, exc_info=True)
+                self.after(0, lambda: self._on_init_flash_failed(str(e)))
+
+        import threading
+        threading.Thread(target=_run, name="init-flash-auto", daemon=True).start()
+
+    def _init_flash_from_files(self) -> None:
+        """Let the user pick firmware files and flash a blank board via esptool."""
+        from tkinter import filedialog
+
+        port = self.port_var.get()
+        if not port:
+            messagebox.showerror("No port", "Select a COM port first.")
+            return
+
+        # Let user pick files.
+        files = filedialog.askopenfilenames(
+            title="Select firmware file(s)",
+            filetypes=[("Firmware binary", "*.bin"), ("All files", "*.*")],
+        )
+        if not files:
+            return
+
+        # Classify files by name.
+        from pathlib import Path as P
+        app_bin: Optional[str] = None
+        bl_bin: Optional[str] = None
+        pt_bin: Optional[str] = None
+        merged_bin: Optional[str] = None
+
+        for f in files:
+            name = P(f).name.lower()
+            if "bootloader" in name:
+                bl_bin = f
+            elif "partition" in name:
+                pt_bin = f
+            elif "merged" in name:
+                merged_bin = f
+            else:
+                app_bin = f
+
+        if not app_bin and not merged_bin:
+            messagebox.showerror(
+                "No app binary",
+                "Select at least an app firmware binary (e.g. esp32s3-usb-kbd.bin).\n\n"
+                "Optionally also select bootloader + partition-table files.",
+            )
+            return
+
+        # Summarize what will be flashed.
+        parts = []
+        if merged_bin:
+            parts.append(f"Merged: {P(merged_bin).name}")
+        else:
+            if bl_bin:
+                parts.append(f"Bootloader: {P(bl_bin).name}")
+            if pt_bin:
+                parts.append(f"Partition table: {P(pt_bin).name}")
+            if app_bin:
+                parts.append(f"App: {P(app_bin).name}")
+
+        confirm = messagebox.askyesno(
+            "Initial Flash from files",
+            f"Flash to {port}:\n" + "\n".join(f"  \u2022 {p}" for p in parts) + "\n\n"
+            "The board must be in download mode.\n"
+            "The entire flash will be erased first.\n\n"
+            "Continue?",
+        )
+        if not confirm:
+            return
+
+        self._init_flash_auto_btn.configure(state="disabled")
+        self._init_flash_file_btn.configure(state="disabled")
+        self._init_flash_status.set("Flashing\u2026")
+
+        def _run() -> None:
+            try:
+                initial_flash.flash_firmware(
+                    port,
+                    app_bin=app_bin,
+                    bootloader_bin=bl_bin,
+                    partition_table_bin=pt_bin,
+                    merged_bin=merged_bin,
+                    erase_all=True,
+                    progress_cb=lambda msg: self.after(
+                        0, lambda: self._init_flash_status.set(msg)
+                    ),
+                )
+                self.after(0, self._on_init_flash_done)
+            except Exception as e:
+                log.error("Initial flash from files failed: %s", e, exc_info=True)
+                self.after(0, lambda: self._on_init_flash_failed(str(e)))
+
+        import threading
+        threading.Thread(target=_run, name="init-flash-file", daemon=True).start()
+
+    def _on_init_flash_done(self) -> None:
+        self._init_flash_auto_btn.configure(state="normal")
+        self._init_flash_file_btn.configure(state="normal")
+        self._init_flash_status.set("Flash complete! Reset the board.")
+        messagebox.showinfo(
+            "Initial flash complete",
+            "Firmware has been flashed successfully.\n\n"
+            "Reset the board (press RESET or re-plug USB).\n"
+            "After booting, it should appear as a USB keyboard + COM port.",
+        )
+
+    def _on_init_flash_failed(self, error: str) -> None:
+        self._init_flash_auto_btn.configure(state="normal")
+        self._init_flash_file_btn.configure(state="normal")
+        self._init_flash_status.set(f"Flash failed.")
+        messagebox.showerror(
+            "Initial flash failed",
+            f"{error}\n\n"
+            "Make sure:\n"
+            "\u2022 The board is in download mode (BOOT + RESET)\n"
+            "\u2022 No other app is using the COM port\n"
+            "\u2022 The correct COM port is selected",
+        )
 
     def _on_fw_update_done(self) -> None:
         self._fw_check_btn.configure(state="normal")
