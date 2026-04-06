@@ -2017,6 +2017,53 @@ class App(tk.Tk):
             command=self._keymap_clear_selected, width=18,
         ).pack(fill=tk.X)
 
+        # ── Inline Trick Builder (hidden until toggled) ──
+        self._trick_builder_frame = tk.Frame(self._heist_card_frame, bg=bg)
+        # Not packed yet — shown by _heist_assign_trick
+
+        tk.Frame(self._trick_builder_frame, height=2, bg=border).pack(fill=tk.X, padx=0)
+        tk.Label(
+            self._trick_builder_frame, text="\U0001f9ea Trick Builder",
+            bg=bg, fg=fg,
+            font=(font_family, 10, "bold"),
+            anchor="w", padx=4, pady=(6, 4),
+        ).pack(fill=tk.X)
+
+        # -- Pick or create trick --
+        pick_row = tk.Frame(self._trick_builder_frame, bg=bg)
+        pick_row.pack(fill=tk.X, padx=4, pady=(0, 4))
+        self._trick_pick_var = tk.StringVar(value="")
+        self._trick_pick_combo = ttk.Combobox(
+            pick_row, textvariable=self._trick_pick_var,
+            values=[], width=14, state="readonly",
+        )
+        self._trick_pick_combo.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._trick_pick_combo.bind("<<ComboboxSelected>>", lambda _e: self._trick_builder_refresh_steps())
+        ttk.Button(pick_row, text="+", width=2, command=self._trick_builder_new).pack(side=tk.LEFT, padx=(4, 0))
+
+        # -- Steps list --
+        self._trick_step_listbox = tk.Listbox(
+            self._trick_builder_frame, height=5, width=20,
+            font=(font_family, 8),
+        )
+        self._trick_step_listbox.pack(fill=tk.BOTH, expand=True, padx=4, pady=(0, 4))
+        self._theme_listbox(self._trick_step_listbox)
+
+        # -- Step buttons --
+        step_btns = tk.Frame(self._trick_builder_frame, bg=bg)
+        step_btns.pack(fill=tk.X, padx=4, pady=(0, 4))
+        ttk.Button(step_btns, text="+ Key", width=6, command=self._trick_builder_add_key).pack(side=tk.LEFT)
+        ttk.Button(step_btns, text="+ Delay", width=6, command=self._trick_builder_add_delay).pack(side=tk.LEFT, padx=(4, 0))
+        ttk.Button(step_btns, text="\u2716", width=2, command=self._trick_builder_del_step).pack(side=tk.LEFT, padx=(4, 0))
+
+        # -- Assign button --
+        ttk.Button(
+            self._trick_builder_frame, text="\u2705 Assign to button",
+            command=self._trick_builder_assign, width=18,
+        ).pack(fill=tk.X, padx=4, pady=(0, 6))
+
+        self._trick_builder_visible = False
+
         # ── Masks / Disguises section (always visible at bottom of panel) ──
         mask_section = tk.Frame(panel, bg=bg)
         mask_section.pack(side=tk.BOTTOM, fill=tk.X, padx=0, pady=0)
@@ -2038,6 +2085,11 @@ class App(tk.Tk):
         """Update the right-panel Heist Tools card for the selected hotspot."""
         if not hasattr(self, "_heist_card_frame"):
             return
+
+        # Collapse inline trick builder on any hotspot change
+        if hasattr(self, "_trick_builder_frame") and self._trick_builder_visible:
+            self._trick_builder_frame.pack_forget()
+            self._trick_builder_visible = False
 
         if hotspot_name is None:
             # Show default state
@@ -2107,10 +2159,180 @@ class App(tk.Tk):
             self._mapping_popup.show()
 
     def _heist_assign_trick(self) -> None:
-        """Assign a trick (macro) to the selected hotspot."""
-        if self._keymap_selected_name:
-            self._mapping_type.set("macro")
-            self._mapping_popup.show()
+        """Toggle the inline Trick Builder in the Heist Tools panel."""
+        if not self._keymap_selected_name:
+            return
+        if not hasattr(self, "_trick_builder_frame"):
+            return
+        if self._trick_builder_visible:
+            self._trick_builder_frame.pack_forget()
+            self._trick_builder_visible = False
+        else:
+            self._trick_builder_reload_list()
+            self._trick_builder_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=(0, 4))
+            self._trick_builder_visible = True
+
+    def _trick_builder_reload_list(self) -> None:
+        """Refresh the trick picker combo with current profile macros."""
+        try:
+            macros = self._macros()
+        except Exception:
+            macros = []
+        ids = [m.get("id", "") for m in macros if isinstance(m, dict) and m.get("id")]
+        self._trick_pick_combo["values"] = ids
+        cur = self._trick_pick_var.get()
+        if ids and cur not in ids:
+            self._trick_pick_var.set(ids[0])
+        self._trick_builder_refresh_steps()
+
+    def _trick_builder_selected_macro(self) -> Optional[Dict[str, Any]]:
+        """Return the macro dict selected in the trick picker, or None."""
+        mid = self._trick_pick_var.get().strip()
+        if not mid:
+            return None
+        try:
+            macros = self._macros()
+        except Exception:
+            return None
+        for m in macros:
+            if isinstance(m, dict) and m.get("id") == mid:
+                return m
+        return None
+
+    def _trick_builder_refresh_steps(self) -> None:
+        """Refresh the inline step listbox for the selected trick."""
+        if not hasattr(self, "_trick_step_listbox"):
+            return
+        self._trick_step_listbox.delete(0, "end")
+        macro = self._trick_builder_selected_macro()
+        if macro is None:
+            return
+        for st in macro.get("steps", []):
+            if not isinstance(st, dict):
+                continue
+            t = st.get("type")
+            if t == "delay":
+                self._trick_step_listbox.insert("end", f"  \u23f1 {st.get('ms', 0)}ms")
+            elif t == "key":
+                arrow = "\u2b07" if st.get("pressed") else "\u2b06"
+                self._trick_step_listbox.insert("end", f"  {arrow} key_id {st.get('key_id')}")
+            else:
+                self._trick_step_listbox.insert("end", f"  ? {st}")
+
+    def _trick_builder_new(self) -> None:
+        """Create a new trick from the inline builder."""
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return
+        new_id = f"macro{int(time.time())}"
+        prof["macros"].append({"id": new_id, "steps": []})
+        self._set_profile_obj(prof)
+        self._trick_builder_reload_list()
+        self._trick_pick_var.set(new_id)
+        self._trick_builder_refresh_steps()
+        # Keep the Tricks tab list in sync
+        self._refresh_macro_list()
+
+    def _trick_builder_add_key(self) -> None:
+        """Add a key press+release step to the selected trick."""
+        macro = self._trick_builder_selected_macro()
+        if macro is None:
+            return
+        key_id_str = simpledialog.askstring("Key step", "Enter key_id (integer):", parent=self)
+        if not key_id_str:
+            return
+        try:
+            key_id = int(key_id_str.strip())
+        except ValueError:
+            messagebox.showerror("Bad key_id", "key_id must be an integer")
+            return
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return
+        mid = macro["id"]
+        for m in prof["macros"]:
+            if m.get("id") == mid:
+                m.setdefault("steps", []).append({"type": "key", "key_id": key_id, "pressed": True})
+                m["steps"].append({"type": "key", "key_id": key_id, "pressed": False})
+                break
+        self._set_profile_obj(prof)
+        self._trick_builder_refresh_steps()
+        self._refresh_macro_steps()
+
+    def _trick_builder_add_delay(self) -> None:
+        """Add a delay step to the selected trick."""
+        macro = self._trick_builder_selected_macro()
+        if macro is None:
+            return
+        ms = simpledialog.askinteger("Delay", "Delay in ms:", initialvalue=50, minvalue=0, maxvalue=5000, parent=self)
+        if ms is None:
+            return
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return
+        mid = macro["id"]
+        for m in prof["macros"]:
+            if m.get("id") == mid:
+                m.setdefault("steps", []).append({"type": "delay", "ms": int(ms)})
+                break
+        self._set_profile_obj(prof)
+        self._trick_builder_refresh_steps()
+        self._refresh_macro_steps()
+
+    def _trick_builder_del_step(self) -> None:
+        """Delete the selected step from the inline trick builder."""
+        macro = self._trick_builder_selected_macro()
+        if macro is None:
+            return
+        sel = self._trick_step_listbox.curselection()
+        if not sel:
+            return
+        sidx = int(sel[0])
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return
+        mid = macro["id"]
+        for m in prof["macros"]:
+            if m.get("id") == mid:
+                steps = m.get("steps", [])
+                if isinstance(steps, list) and sidx < len(steps):
+                    del steps[sidx]
+                    m["steps"] = steps
+                break
+        self._set_profile_obj(prof)
+        self._trick_builder_refresh_steps()
+        self._refresh_macro_steps()
+
+    def _trick_builder_assign(self) -> None:
+        """Assign the selected trick to the currently selected hotspot."""
+        mid = self._trick_pick_var.get().strip()
+        if not mid:
+            messagebox.showerror("No trick", "Select or create a trick first")
+            return
+        hs_name = self._keymap_selected_name
+        if not hs_name:
+            return
+        hs = self._keymap_hotspots()
+        key_id = hs.get(hs_name)
+        if key_id is None:
+            messagebox.showerror("No key_id", "Use Case first to learn this button")
+            return
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return
+        mappings = prof.setdefault("mappings", {})
+        if not isinstance(mappings, dict):
+            mappings = {}
+            prof["mappings"] = mappings
+        mappings[str(key_id)] = {"type": "macro", "id": mid}
+        self._set_profile_obj(prof)
+        self._keymap_redraw()
+        self._update_heist_tools(hs_name)
 
     def _heist_mask_shift(self) -> None:
         """Open mask/layer config for the selected hotspot."""
@@ -4847,7 +5069,7 @@ class App(tk.Tk):
             "updates instantly to show the selected button\u2019s name, current mapping, and action buttons:",
             "\u2022 \U0001f3b9 Keyboard \u2014 press a key to steal (remap to that key).",
             "\u2022 \U0001f5b1\ufe0f Mouse Click \u2014 map to any mouse button / HID keycode.",
-            "\u2022 \U0001f9ea Trick \u2014 trigger a recorded trick (macro).",
+            "\u2022 \U0001f9ea Trick \u2014 opens the inline Trick Builder to pick/create a trick, edit steps, and assign it.",
             "\u2022 \U0001f3ad Mask Shift \u2014 open mask/layer configuration.",
             "\u2022 \u2716 CLEAR \u2014 remove the mapping entirely.",
             "",

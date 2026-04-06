@@ -65,6 +65,7 @@ Current UI tabs:
   - **Steal overlay + ink stamp**: a floating card shows during press-to-steal, and an expanding ring with STOLEN confirms a successful steal
   - **Visual mask stack**: badges below the mask selector showing each mask's name, mode, and heist plan count
   - **Mask tab bar**: visible sketch-style tabs below the controller diagram for quick mask switching
+  - **Inline Trick Builder**: the Heist Tools panel includes a toggleable trick editor — pick or create tricks, add/remove key and delay steps, and assign directly to the selected hotspot without leaving the Controller tab
   - **Explain heist plan**: right-click → full input→output chain dialog showing conflicts and mask overrides
   - **Lock critical inputs**: prevent accidental unstealing with a right-click lock; locked buttons require confirmation
   - **Restore last config**: revert to the last loadout successfully written to the device if something goes wrong
