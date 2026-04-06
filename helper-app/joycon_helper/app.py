@@ -2579,7 +2579,7 @@ class App(tk.Tk):
         conflict_hotspots = self._conflict_hotspot_cache or set()
 
         # Update conflict label and fix button (only on full rebuild to avoid flicker)
-        if need_full:
+        if need_full and hasattr(self, "_conflict_var"):
             if conflicts:
                 parts = [f"{key}: {', '.join(names)}" for key, names in conflicts.items()]
                 self._conflict_var.set("Conflicts: " + "; ".join(parts))
