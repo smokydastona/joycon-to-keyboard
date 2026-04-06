@@ -758,6 +758,14 @@ class App(tk.Tk):
         # Press-to-bind state
         self._bind_mode = False  # True = waiting for a keyboard key press
         self._bind_hotspot: Optional[str] = None  # hotspot name being bound
+        self._bind_overlay_items: List[int] = []  # canvas item ids for visual bind overlay
+
+        # Ink-stamp animation state (quick flash after binding completes)
+        self._ink_stamp_anim: Optional[Dict[str, Any]] = None  # {"cx","cy","phase","label","after_id"}
+
+        # Hover glow state
+        self._hover_glow_name: Optional[str] = None  # hotspot name with glow ring
+        self._hover_glow_items: List[int] = []  # canvas item ids for glow ring
 
         # Live input state: set of currently-pressed key_ids
         self._active_key_ids: set[int] = set()
@@ -768,6 +776,9 @@ class App(tk.Tk):
         # Pulse animation state for active hotspot highlighting
         self._pulse_phase: float = 0.0
         self._pulse_growing: bool = True
+
+        # Last-known-good profile snapshot (auto-saved on successful device write)
+        self._last_good_profile: Optional[str] = None  # JSON string
 
         # Chord definitions (profile-level, list of {"keys": [int,...], "action": {...}})
         self._chord_entries: List[Dict[str, Any]] = []
@@ -2375,6 +2386,7 @@ class App(tk.Tk):
         self._bind_btn.pack(side=tk.LEFT, padx=2)
         ttk.Button(toolbar, text="Clear", command=self._keymap_clear_selected).pack(side=tk.LEFT, padx=2)
         ttk.Button(toolbar, text="Reset", command=self._keymap_reset_selected).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Restore\u2026", command=self._restore_last_good_profile).pack(side=tk.LEFT, padx=2)
 
         # Right side: search + sandbox
         ttk.Checkbutton(
@@ -2409,7 +2421,13 @@ class App(tk.Tk):
         self._set_keymap_image_state()
         self._keymap_redraw()
 
-        # ── Conflict bar (compact, below canvas) ──
+        # ── Visible layer tab bar (sketch-style, below canvas) ──
+        self._layer_tab_bar = tk.Frame(parent, bg=self._colors.get("panel2", "#e2d0a8"))
+        self._layer_tab_bar.pack(fill=tk.X, padx=8, pady=(0, 2))
+        self._layer_tab_buttons: List[tk.Label] = []
+        self._build_layer_tab_bar()
+
+        # ── Conflict bar (compact, below layer tabs) ──
         self._conflict_var = tk.StringVar(value="")
         conflict_bar = ttk.Frame(parent)
         conflict_bar.pack(fill=tk.X, padx=8, pady=(0, 4))
@@ -2859,8 +2877,10 @@ class App(tk.Tk):
     _hover_ghost_name: Optional[str] = None
 
     def _keymap_on_motion(self, e: tk.Event) -> None:
-        """Show a ghost tooltip near the hovered hotspot."""
+        """Show a ghost tooltip and hover glow near the hovered hotspot."""
         name = self._keymap_pick_hotspot(float(getattr(e, "x", 0)), float(getattr(e, "y", 0)))
+        # Update hover glow ring (always, even if ghost name unchanged)
+        self._update_hover_glow(name)
         if name == self._hover_ghost_name:
             return
         self._hover_ghost_name = name
@@ -2926,6 +2946,7 @@ class App(tk.Tk):
             self._keymap_status.set(
                 f"[{name}] Press a keyboard key to bind → key_id={bound}  (Escape to cancel, right-click for more)"
             )
+            self._show_bind_overlay(name, int(bound))
 
         self._keymap_redraw()
 
@@ -3012,6 +3033,7 @@ class App(tk.Tk):
         self._bind_hotspot = name
         self._mapping_key_id.set(str(key_id))
         self._keymap_status.set(f"[{name}] Press a keyboard key to bind… (Escape to cancel)")
+        self._show_bind_overlay(name, int(key_id))
 
     def _keymap_context_reset(self, name: str) -> None:
         if not self._check_lock_before_unbind(name, "reset to passthrough"):
@@ -3174,6 +3196,7 @@ class App(tk.Tk):
         self._bind_mode = True
         self._bind_hotspot = self._keymap_selected_name
         self._keymap_status.set(f"Press a keyboard key to bind to {self._keymap_selected_name}… (Escape to cancel)")
+        self._show_bind_overlay(self._keymap_selected_name, int(bound_key_id))
 
     def _on_keypress_bind(self, event: tk.Event) -> None:
         """Handle keyboard key press for press-to-bind mode."""
@@ -3184,6 +3207,7 @@ class App(tk.Tk):
         if keysym == "Escape":
             self._bind_mode = False
             self._bind_hotspot = None
+            self._hide_bind_overlay()
             self._keymap_status.set("Bind cancelled.")
             return
 
@@ -3196,6 +3220,7 @@ class App(tk.Tk):
         hotspot = self._bind_hotspot
         self._bind_mode = False
         self._bind_hotspot = None
+        self._hide_bind_overlay()
 
         if not hotspot:
             return
@@ -3227,6 +3252,7 @@ class App(tk.Tk):
         self._keymap_redraw()
         self._kbd_redraw()
         self._play_sound("bind")
+        self._start_ink_stamp(hotspot, key_name)
 
     def _keymap_reset_selected(self) -> None:
         """Remove the mapping for the currently selected hotspot (revert to passthrough)."""
@@ -3516,6 +3542,85 @@ class App(tk.Tk):
             lbl = ttk.Label(frame, text=txt, relief="groove", padding=(6, 2))
             lbl.pack(side=tk.LEFT, padx=(0, 4))
             self._layer_stack_labels.append(lbl)
+
+        # Also refresh the visible layer tab bar below the canvas
+        self._build_layer_tab_bar()
+
+    def _build_layer_tab_bar(self) -> None:
+        """Build visible sketch-style layer tab buttons below the controller canvas."""
+        bar = getattr(self, "_layer_tab_bar", None)
+        if bar is None:
+            return
+
+        # Clear old tabs
+        for btn in self._layer_tab_buttons:
+            btn.destroy()
+        self._layer_tab_buttons.clear()
+
+        colors = self._colors
+        typo = self._typo
+        font_fam = typo.get("font_family", "Segoe Print")
+        active_idx = self._layer_edit_index.get()
+
+        try:
+            prof = self._current_profile()
+        except Exception:
+            prof = {}
+        layers = prof.get("layers", [])
+        if not isinstance(layers, list):
+            layers = []
+        base_count = len(prof.get("mappings", {}))
+
+        def _make_click(idx: int):
+            def _on_click(_e: Any = None) -> None:
+                self._layer_edit_index.set(idx)
+                self._build_layer_tab_bar()
+                self._keymap_redraw()
+            return _on_click
+
+        # Base layer tab
+        is_active = (active_idx == -1)
+        base_bg = colors.get("accent", "#4a6480") if is_active else colors.get("panel", "#f2e8d0")
+        base_fg = "#fff6e1" if is_active else colors.get("text", "#2a1f0e")
+        base_lbl = tk.Label(
+            bar, text=f"  Base ({base_count})  ",
+            font=(font_fam, 9, "bold" if is_active else ""),
+            bg=base_bg, fg=base_fg, cursor="hand2",
+            relief="flat", padx=6, pady=2,
+        )
+        base_lbl.pack(side=tk.LEFT, padx=(0, 2), pady=2)
+        base_lbl.bind("<Button-1>", _make_click(-1))
+        self._layer_tab_buttons.append(base_lbl)
+
+        # Layer tabs
+        for i, layer in enumerate(layers):
+            name = layer.get("name", f"Layer {i + 1}")
+            mode = layer.get("mode", "hold")
+            cnt = len(layer.get("mappings", {}))
+            is_active = (active_idx == i)
+            tab_bg = colors.get("accent", "#4a6480") if is_active else colors.get("panel", "#f2e8d0")
+            tab_fg = "#fff6e1" if is_active else colors.get("text", "#2a1f0e")
+            tab_lbl = tk.Label(
+                bar, text=f"  {name} ({mode}, {cnt})  ",
+                font=(font_fam, 9, "bold" if is_active else ""),
+                bg=tab_bg, fg=tab_fg, cursor="hand2",
+                relief="flat", padx=6, pady=2,
+            )
+            tab_lbl.pack(side=tk.LEFT, padx=(0, 2), pady=2)
+            tab_lbl.bind("<Button-1>", _make_click(i))
+            self._layer_tab_buttons.append(tab_lbl)
+
+        # "+" button to open layers popup for adding/config
+        plus_lbl = tk.Label(
+            bar, text=" + ",
+            font=(font_fam, 9, "bold"), cursor="hand2",
+            bg=colors.get("panel", "#f2e8d0"),
+            fg=colors.get("muted", "#6b5d48"),
+            relief="flat", padx=4, pady=2,
+        )
+        plus_lbl.pack(side=tk.LEFT, padx=(2, 0), pady=2)
+        plus_lbl.bind("<Button-1>", lambda _e: self._layers_popup.toggle())
+        self._layer_tab_buttons.append(plus_lbl)
 
     def _build_input_test_tab(self) -> None:
         """Build the Input Test tab: live event log + visual timeline + active key summary."""
@@ -4321,6 +4426,22 @@ class App(tk.Tk):
             "\u2022 Tap/Hold \u2014 different action for short tap vs long press.",
             "\u2022 Chord \u2014 multi-button combo (press two buttons together for a different action).",
             "",
+            "## Visual feedback",
+            "\u2022 Hover glow \u2014 A hand-drawn ink ring highlights buttons as you move the mouse.",
+            "\u2022 Bind overlay \u2014 A floating card appears during press-to-bind showing which button you\u2019re binding.",
+            "\u2022 Ink stamp \u2014 An expanding ring + checkmark animation confirms a successful bind.",
+            "",
+            "## Layers",
+            "Layers let you have multiple sets of bindings and switch between them.",
+            "\u2022 Layer tabs are shown below the controller diagram.",
+            "\u2022 Click a tab to switch the editor to that layer.",
+            "\u2022 Click the + button to add a new layer.",
+            "\u2022 Base layer is always present and cannot be removed.",
+            "",
+            "## Safety",
+            "\u2022 Restore \u2014 The toolbar has a Restore\u2026 button that reverts to the last config that was",
+            "  successfully written to the device. Useful if you make changes you want to undo.",
+            "",
             "The keyboard preview shows which physical keys are currently mapped.",
         ])
 
@@ -4521,6 +4642,13 @@ class App(tk.Tk):
             "",
             "## Helper app",
             "  python -m joycon_helper",
+            "",
+            "## Controller tab shortcuts",
+            "  Click hotspot        \u2014  Select + start press-to-bind",
+            "  Right-click hotspot  \u2014  Context menu (bind, learn, reset\u2026)",
+            "  Escape during bind   \u2014  Cancel press-to-bind",
+            "  Restore\u2026 button     \u2014  Revert to last written config",
+            "  Layer tabs (below diagram)  \u2014  Switch active editing layer",
             "",
             "## Key docs",
             "  docs/wiring.md            \u2014 detailed wiring guide",
@@ -5838,6 +5966,210 @@ class App(tk.Tk):
         freq, dur = freq_map.get(kind, (600, 60))
         threading.Thread(target=winsound.Beep, args=(freq, dur), daemon=True).start()
 
+    # ── Visual bind overlay on canvas ──
+
+    def _show_bind_overlay(self, hotspot_name: str, key_id: int) -> None:
+        """Draw a floating 'Press a key...' card on the controller canvas."""
+        c = self._keymap_canvas
+        if not c:
+            return
+        self._hide_bind_overlay()
+        colors = self._colors
+        typo = self._typo
+        font_fam = typo.get("font_family", "Segoe Print")
+
+        w = max(c.winfo_width(), 1)
+        h = max(c.winfo_height(), 1)
+        cx, cy = w // 2, h // 2
+
+        # Position near the hotspot if visible
+        pos = self._keymap_hotspot_px.get(hotspot_name)
+        if pos:
+            cx = int(pos[0])
+            cy = max(60, int(pos[1]) - 50)
+
+        card_w, card_h = 260, 72
+        x1, y1 = cx - card_w // 2, cy - card_h // 2
+        x2, y2 = cx + card_w // 2, cy + card_h // 2
+
+        # Clamp to canvas bounds
+        if x1 < 4:
+            x1, x2 = 4, 4 + card_w
+        if x2 > w - 4:
+            x1, x2 = w - 4 - card_w, w - 4
+        if y1 < 4:
+            y1, y2 = 4, 4 + card_h
+        if y2 > h - 4:
+            y1, y2 = h - 4 - card_h, h - 4
+
+        tag = "bind_overlay"
+        # Shadow
+        self._bind_overlay_items.append(
+            c.create_rectangle(x1 + 3, y1 + 3, x2 + 3, y2 + 3,
+                               fill="#00000030", outline="", tags=tag))
+        # Card background
+        bg = colors.get("panel", "#f2e8d0")
+        border = colors.get("accent", "#4a6480")
+        self._bind_overlay_items.append(
+            c.create_rectangle(x1, y1, x2, y2, fill=bg, outline=border, width=2, tags=tag))
+        # Title
+        self._bind_overlay_items.append(
+            c.create_text((x1 + x2) // 2, y1 + 18,
+                          text=f"\u2328  Press a key to bind {hotspot_name}",
+                          fill=colors.get("text", "#2a1f0e"),
+                          font=(font_fam, 10, "bold"), tags=tag))
+        # Subtitle
+        self._bind_overlay_items.append(
+            c.create_text((x1 + x2) // 2, y1 + 40,
+                          text=f"key_id={key_id}  \u00b7  Escape to cancel",
+                          fill=colors.get("muted", "#6b5d48"),
+                          font=(font_fam, 8), tags=tag))
+        # Decorative ink dash line
+        self._bind_overlay_items.append(
+            c.create_line(x1 + 12, y1 + 56, x2 - 12, y1 + 56,
+                          fill=colors.get("border", "#b09878"), dash=(6, 4), tags=tag))
+
+    def _hide_bind_overlay(self) -> None:
+        """Remove the bind overlay from the canvas."""
+        c = self._keymap_canvas
+        if c:
+            c.delete("bind_overlay")
+        self._bind_overlay_items.clear()
+
+    # ── Ink-stamp animation on bind complete ──
+
+    def _start_ink_stamp(self, hotspot_name: str, label: str) -> None:
+        """Start a brief ink-stamp animation at the given hotspot."""
+        pos = self._keymap_hotspot_px.get(hotspot_name)
+        if not pos:
+            return
+        cx, cy = int(pos[0]), int(pos[1])
+        self._ink_stamp_anim = {
+            "cx": cx, "cy": cy, "phase": 0, "label": label,
+            "max_phase": 8, "after_id": None,
+        }
+        self._ink_stamp_tick()
+
+    def _ink_stamp_tick(self) -> None:
+        """Animate one frame of the ink-stamp effect."""
+        anim = self._ink_stamp_anim
+        if anim is None:
+            return
+        c = self._keymap_canvas
+        if not c:
+            self._ink_stamp_anim = None
+            return
+
+        c.delete("ink_stamp")
+        phase = anim["phase"]
+        max_phase = anim["max_phase"]
+
+        if phase > max_phase:
+            c.delete("ink_stamp")
+            self._ink_stamp_anim = None
+            return
+
+        cx, cy = anim["cx"], anim["cy"]
+        t = phase / max_phase  # 0..1
+
+        # Expanding ring that fades out
+        radius = int(14 + 30 * t)
+        alpha_approx = max(0.0, 1.0 - t * 1.2)
+        ring_col = _blend_hex(self._colors.get("accent2", "#3a8a5c"), self._colors.get("bg", "#e8d8b8"), 1.0 - alpha_approx)
+        c.create_oval(
+            cx - radius, cy - radius, cx + radius, cy + radius,
+            outline=ring_col, width=max(1, int(3 * (1 - t))), dash=(4, 2), tags="ink_stamp",
+        )
+
+        # "Stamp" label floats upward and fades
+        label_y = cy - 30 - int(20 * t)
+        text_col = _blend_hex(self._colors.get("accent2", "#3a8a5c"), self._colors.get("bg", "#e8d8b8"), t * 0.8)
+        c.create_text(
+            cx, label_y, text=f"\u2714 {anim['label']}",
+            fill=text_col,
+            font=(self._typo.get("font_family", "Segoe Print"), 9, "bold"),
+            tags="ink_stamp",
+        )
+
+        anim["phase"] = phase + 1
+        anim["after_id"] = self.after(50, self._ink_stamp_tick)
+
+    # ── Hover glow effect on hotspots ──
+
+    def _update_hover_glow(self, name: Optional[str]) -> None:
+        """Draw or clear the hover glow ring around a hotspot."""
+        if name == self._hover_glow_name:
+            return
+        self._hover_glow_name = name
+        c = self._keymap_canvas
+        if not c:
+            return
+
+        # Clear previous glow
+        c.delete("hover_glow")
+        self._hover_glow_items.clear()
+
+        if name is None:
+            return
+        pos = self._keymap_hotspot_px.get(name)
+        if not pos:
+            return
+        px, py = pos
+        colors = self._colors
+        radius = max(14, int(min(
+            getattr(self, "_keymap_overlay_w", 400),
+            getattr(self, "_keymap_overlay_h", 300),
+        ) * 0.02))
+
+        # Outer glow ring (soft, larger)
+        glow_r = radius + 8
+        glow_col = _blend_hex(colors.get("accent", "#4a7cc8"), colors.get("bg", "#e8d8b8"), 0.4)
+        self._hover_glow_items.append(
+            c.create_oval(
+                px - glow_r, py - glow_r, px + glow_r, py + glow_r,
+                outline=glow_col, width=3, dash=(3, 3), tags="hover_glow",
+            ))
+        # Inner highlight ring
+        inner_r = radius + 3
+        inner_col = colors.get("accent", "#4a7cc8")
+        self._hover_glow_items.append(
+            c.create_oval(
+                px - inner_r, py - inner_r, px + inner_r, py + inner_r,
+                outline=inner_col, width=2, tags="hover_glow",
+            ))
+
+    # ── Last-known-good profile (safety) ──
+
+    def _save_last_good_profile(self) -> None:
+        """Snapshot the current profile as the last-known-good state."""
+        try:
+            raw = self.profile_text.get("1.0", "end").strip()
+            if raw:
+                self._last_good_profile = raw
+        except Exception:
+            pass
+
+    def _restore_last_good_profile(self) -> None:
+        """Restore the last-known-good profile snapshot."""
+        if not self._last_good_profile:
+            messagebox.showinfo("No backup", "No last-known-good profile saved yet.\n\n"
+                                "A snapshot is saved automatically each time the profile\n"
+                                "is successfully written to the device.")
+            return
+        if not messagebox.askyesno("Restore",
+                                   "Restore the last profile that was successfully written to the device?\n\n"
+                                   "Current profile will be replaced (undo is available)."):
+            return
+        try:
+            obj = json.loads(self._last_good_profile)
+            self._set_profile_obj(obj, undo_label="restore last good")
+            self._keymap_redraw()
+            self._kbd_redraw()
+            self._keymap_status.set("Restored last-known-good profile.")
+            self._play_sound("undo")
+        except Exception as e:
+            messagebox.showerror("Restore failed", str(e))
+
     def _keymap_bind_selected(self, key_id: int) -> None:
         if not self._keymap_learn_name:
             return
@@ -6088,6 +6420,7 @@ class App(tk.Tk):
         except Exception:
             return
         self._send_cmd({"cmd": "write_profile", "slot": int(self.slot_var.get()), "profile": profile})
+        self._save_last_good_profile()
 
     def _cmd_read_profile(self) -> None:
         self._send_cmd({"cmd": "read_profile", "slot": int(self.slot_var.get())})

@@ -60,9 +60,13 @@ Current UI tabs:
   - **Smart Search**: filter hotspots by name, output, or mapping type with highlighted matches on the diagram
   - **Sandbox mode**: temporary playground mode — try changes without saving, then keep or discard
   - **Ghost labels**: hover over the diagram to see faint tooltips with hotspot name and current mapping
+  - **Hover glow**: a hand-drawn ink ring highlights hotspots as you move the mouse over the diagram
+  - **Bind overlay + ink stamp**: a floating card shows during press-to-bind, and an expanding ring + checkmark animation confirms a successful bind
   - **Visual layer stack**: badges below the layer selector showing each layer's name, mode, and mapping count
+  - **Layer tab bar**: visible sketch-style tabs below the controller diagram for quick layer switching
   - **Explain mapping**: right-click → full input→output chain dialog showing conflicts and layer overrides
   - **Lock critical inputs**: prevent accidental unbinding with a right-click lock; locked buttons require confirmation
+  - **Restore last config**: revert to the last profile successfully written to the device if something goes wrong
   - **Feedback sounds**: optional Windows beep on bind/unbind/undo for tactile feedback
   - **Adaptive UI**: toggle between Simple and Advanced modes; Simple hides layers, chords, macros tabs
   - **Mode indicator**: always-visible status bar showing slot, layer, mode, sandbox, and undo depth

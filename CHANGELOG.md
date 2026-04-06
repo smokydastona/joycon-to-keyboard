@@ -25,6 +25,12 @@ Until then, entries are grouped by date.
 - **IncediusMod mouse overlay support**: M913 Mouse tab now uses layout-specific overlay images — Stock M913 (`m913.png` / `m913-none.png`) or IncediusMod (`m913_Incedius.png` / `m913_Incedius-none.png`) — selected automatically when the user switches layout mode. Switching layout mode live reloads the overlay instantly.
 - **Dark mode overlay images**: both M913 and Joy-Con overlay finders now select dark-variant PNGs when dark mode is active, matching the background theme.
 
+- **Hover glow on hotspots**: moving the mouse over controller diagram hotspots now draws a dual-ring hand-drawn glow (outer dashed, inner solid) in the accent colour.
+- **Bind overlay card**: entering press-to-bind mode now shows a floating card on the canvas with the hotspot name and current binding, styled to match the sketch theme.
+- **Ink stamp animation**: a successful bind triggers an expanding dashed ring + floating checkmark animation (8 frames, 50 ms each) as visual confirmation.
+- **Visible layer tab bar**: sketch-styled layer tabs are now displayed below the controller diagram, letting you click to switch the active editing layer without opening the layer popup.
+- **Restore last config**: a "Restore…" toolbar button reverts the profile to the last state successfully written to the device. The snapshot is taken automatically after each successful device write.
+
 ### Removed
 
 - **Dead SVG files**: removed 6 SVGs (`background.svg`, `background-dark.svg`, `components.svg`, `components-dark.svg`, `icons.svg`, `icons-dark.svg`) that were never rendered at runtime (Tkinter has no SVG support).
