@@ -301,6 +301,9 @@ JOYCONS_IMAGE_STATE_NAMES = ("none", "left", "right", "both")
 
 M913_IMAGE_STATE_NAMES = ("none", "connected")
 
+KEYBOARD_IMAGE_W = 1536
+KEYBOARD_IMAGE_H = 1024
+
 # Normalized hotspot positions over joycons.png.
 # These are intentionally approximate: the recommended flow is to use Learn
 # to bind each physical control to its observed input key_id.
@@ -322,6 +325,171 @@ KEYMAP_HOTSPOTS: List[Tuple[str, float, float]] = [
     ("Y", 1190 / JOYCONS_IMAGE_W, 460 / JOYCONS_IMAGE_H),
     ("RSTK", 1260 / JOYCONS_IMAGE_W, 605 / JOYCONS_IMAGE_H),
 ]
+
+# Keyboard key hotspot positions (normalized to KEYBOARD_IMAGE_W × KEYBOARD_IMAGE_H).
+# Each entry is (key_label, norm_x, norm_y).  key_label corresponds to the
+# short name shown in the overlay (matches hid_keycodes._KEYCODE_NAMES where
+# possible).  Positions map onto the keyboard PNG shipped in docs/ui/*/misc/.
+KBD_HOTSPOTS: List[Tuple[str, float, float]] = [
+    # ── Function row ──
+    ("Esc",   97 / KEYBOARD_IMAGE_W,  155 / KEYBOARD_IMAGE_H),
+    ("F1",   207 / KEYBOARD_IMAGE_W,  155 / KEYBOARD_IMAGE_H),
+    ("F2",   267 / KEYBOARD_IMAGE_W,  155 / KEYBOARD_IMAGE_H),
+    ("F3",   327 / KEYBOARD_IMAGE_W,  155 / KEYBOARD_IMAGE_H),
+    ("F4",   387 / KEYBOARD_IMAGE_W,  155 / KEYBOARD_IMAGE_H),
+    ("F5",   477 / KEYBOARD_IMAGE_W,  155 / KEYBOARD_IMAGE_H),
+    ("F6",   537 / KEYBOARD_IMAGE_W,  155 / KEYBOARD_IMAGE_H),
+    ("F7",   597 / KEYBOARD_IMAGE_W,  155 / KEYBOARD_IMAGE_H),
+    ("F8",   657 / KEYBOARD_IMAGE_W,  155 / KEYBOARD_IMAGE_H),
+    ("F9",   747 / KEYBOARD_IMAGE_W,  155 / KEYBOARD_IMAGE_H),
+    ("F10",  807 / KEYBOARD_IMAGE_W,  155 / KEYBOARD_IMAGE_H),
+    ("F11",  867 / KEYBOARD_IMAGE_W,  155 / KEYBOARD_IMAGE_H),
+    ("F12",  927 / KEYBOARD_IMAGE_W,  155 / KEYBOARD_IMAGE_H),
+    # ── Top-right cluster ──
+    ("PrtSc", 1007 / KEYBOARD_IMAGE_W, 155 / KEYBOARD_IMAGE_H),
+    ("ScrLk", 1067 / KEYBOARD_IMAGE_W, 155 / KEYBOARD_IMAGE_H),
+    ("Pause", 1127 / KEYBOARD_IMAGE_W, 155 / KEYBOARD_IMAGE_H),
+    # ── Number row ──
+    ("`",     97 / KEYBOARD_IMAGE_W,  275 / KEYBOARD_IMAGE_H),
+    ("1",    157 / KEYBOARD_IMAGE_W,  275 / KEYBOARD_IMAGE_H),
+    ("2",    217 / KEYBOARD_IMAGE_W,  275 / KEYBOARD_IMAGE_H),
+    ("3",    277 / KEYBOARD_IMAGE_W,  275 / KEYBOARD_IMAGE_H),
+    ("4",    337 / KEYBOARD_IMAGE_W,  275 / KEYBOARD_IMAGE_H),
+    ("5",    397 / KEYBOARD_IMAGE_W,  275 / KEYBOARD_IMAGE_H),
+    ("6",    457 / KEYBOARD_IMAGE_W,  275 / KEYBOARD_IMAGE_H),
+    ("7",    517 / KEYBOARD_IMAGE_W,  275 / KEYBOARD_IMAGE_H),
+    ("8",    577 / KEYBOARD_IMAGE_W,  275 / KEYBOARD_IMAGE_H),
+    ("9",    637 / KEYBOARD_IMAGE_W,  275 / KEYBOARD_IMAGE_H),
+    ("0",    697 / KEYBOARD_IMAGE_W,  275 / KEYBOARD_IMAGE_H),
+    ("-",    757 / KEYBOARD_IMAGE_W,  275 / KEYBOARD_IMAGE_H),
+    ("=",    817 / KEYBOARD_IMAGE_W,  275 / KEYBOARD_IMAGE_H),
+    ("Bksp", 907 / KEYBOARD_IMAGE_W,  275 / KEYBOARD_IMAGE_H),
+    # ── Nav cluster row 1 ──
+    ("Ins",  1007 / KEYBOARD_IMAGE_W, 275 / KEYBOARD_IMAGE_H),
+    ("Home", 1067 / KEYBOARD_IMAGE_W, 275 / KEYBOARD_IMAGE_H),
+    ("PgUp", 1127 / KEYBOARD_IMAGE_W, 275 / KEYBOARD_IMAGE_H),
+    # ── Numpad row 1 ──
+    ("NumLk", 1217 / KEYBOARD_IMAGE_W, 275 / KEYBOARD_IMAGE_H),
+    ("KP/",   1277 / KEYBOARD_IMAGE_W, 275 / KEYBOARD_IMAGE_H),
+    ("KP*",   1337 / KEYBOARD_IMAGE_W, 275 / KEYBOARD_IMAGE_H),
+    ("KP-",   1397 / KEYBOARD_IMAGE_W, 275 / KEYBOARD_IMAGE_H),
+    # ── QWERTY row ──
+    ("Tab",  117 / KEYBOARD_IMAGE_W,  350 / KEYBOARD_IMAGE_H),
+    ("Q",    187 / KEYBOARD_IMAGE_W,  350 / KEYBOARD_IMAGE_H),
+    ("W",    247 / KEYBOARD_IMAGE_W,  350 / KEYBOARD_IMAGE_H),
+    ("E",    307 / KEYBOARD_IMAGE_W,  350 / KEYBOARD_IMAGE_H),
+    ("R",    367 / KEYBOARD_IMAGE_W,  350 / KEYBOARD_IMAGE_H),
+    ("T",    427 / KEYBOARD_IMAGE_W,  350 / KEYBOARD_IMAGE_H),
+    ("Y",    487 / KEYBOARD_IMAGE_W,  350 / KEYBOARD_IMAGE_H),
+    ("U",    547 / KEYBOARD_IMAGE_W,  350 / KEYBOARD_IMAGE_H),
+    ("I",    607 / KEYBOARD_IMAGE_W,  350 / KEYBOARD_IMAGE_H),
+    ("O",    667 / KEYBOARD_IMAGE_W,  350 / KEYBOARD_IMAGE_H),
+    ("P",    727 / KEYBOARD_IMAGE_W,  350 / KEYBOARD_IMAGE_H),
+    ("[",    787 / KEYBOARD_IMAGE_W,  350 / KEYBOARD_IMAGE_H),
+    ("]",    847 / KEYBOARD_IMAGE_W,  350 / KEYBOARD_IMAGE_H),
+    ("\\",   917 / KEYBOARD_IMAGE_W,  350 / KEYBOARD_IMAGE_H),
+    # ── Nav cluster row 2 ──
+    ("Del",  1007 / KEYBOARD_IMAGE_W, 350 / KEYBOARD_IMAGE_H),
+    ("End",  1067 / KEYBOARD_IMAGE_W, 350 / KEYBOARD_IMAGE_H),
+    ("PgDn", 1127 / KEYBOARD_IMAGE_W, 350 / KEYBOARD_IMAGE_H),
+    # ── Numpad row 2 ──
+    ("KP7", 1217 / KEYBOARD_IMAGE_W,  350 / KEYBOARD_IMAGE_H),
+    ("KP8", 1277 / KEYBOARD_IMAGE_W,  350 / KEYBOARD_IMAGE_H),
+    ("KP9", 1337 / KEYBOARD_IMAGE_W,  350 / KEYBOARD_IMAGE_H),
+    ("KP+", 1397 / KEYBOARD_IMAGE_W,  390 / KEYBOARD_IMAGE_H),
+    # ── Home row ──
+    ("CapsLk", 127 / KEYBOARD_IMAGE_W, 430 / KEYBOARD_IMAGE_H),
+    ("A",    207 / KEYBOARD_IMAGE_W,  430 / KEYBOARD_IMAGE_H),
+    ("S",    267 / KEYBOARD_IMAGE_W,  430 / KEYBOARD_IMAGE_H),
+    ("D",    327 / KEYBOARD_IMAGE_W,  430 / KEYBOARD_IMAGE_H),
+    ("F",    387 / KEYBOARD_IMAGE_W,  430 / KEYBOARD_IMAGE_H),
+    ("G",    447 / KEYBOARD_IMAGE_W,  430 / KEYBOARD_IMAGE_H),
+    ("H",    507 / KEYBOARD_IMAGE_W,  430 / KEYBOARD_IMAGE_H),
+    ("J",    567 / KEYBOARD_IMAGE_W,  430 / KEYBOARD_IMAGE_H),
+    ("K",    627 / KEYBOARD_IMAGE_W,  430 / KEYBOARD_IMAGE_H),
+    ("L",    687 / KEYBOARD_IMAGE_W,  430 / KEYBOARD_IMAGE_H),
+    (";",    747 / KEYBOARD_IMAGE_W,  430 / KEYBOARD_IMAGE_H),
+    ("'",    807 / KEYBOARD_IMAGE_W,  430 / KEYBOARD_IMAGE_H),
+    ("Enter", 897 / KEYBOARD_IMAGE_W, 430 / KEYBOARD_IMAGE_H),
+    # ── Numpad row 3 ──
+    ("KP4", 1217 / KEYBOARD_IMAGE_W,  430 / KEYBOARD_IMAGE_H),
+    ("KP5", 1277 / KEYBOARD_IMAGE_W,  430 / KEYBOARD_IMAGE_H),
+    ("KP6", 1337 / KEYBOARD_IMAGE_W,  430 / KEYBOARD_IMAGE_H),
+    # ── Shift row ──
+    ("LShift", 137 / KEYBOARD_IMAGE_W, 510 / KEYBOARD_IMAGE_H),
+    ("Z",    247 / KEYBOARD_IMAGE_W,  510 / KEYBOARD_IMAGE_H),
+    ("X",    307 / KEYBOARD_IMAGE_W,  510 / KEYBOARD_IMAGE_H),
+    ("C",    367 / KEYBOARD_IMAGE_W,  510 / KEYBOARD_IMAGE_H),
+    ("V",    427 / KEYBOARD_IMAGE_W,  510 / KEYBOARD_IMAGE_H),
+    ("B",    487 / KEYBOARD_IMAGE_W,  510 / KEYBOARD_IMAGE_H),
+    ("N",    547 / KEYBOARD_IMAGE_W,  510 / KEYBOARD_IMAGE_H),
+    ("M",    607 / KEYBOARD_IMAGE_W,  510 / KEYBOARD_IMAGE_H),
+    (",",    667 / KEYBOARD_IMAGE_W,  510 / KEYBOARD_IMAGE_H),
+    (".",    727 / KEYBOARD_IMAGE_W,  510 / KEYBOARD_IMAGE_H),
+    ("/",    787 / KEYBOARD_IMAGE_W,  510 / KEYBOARD_IMAGE_H),
+    ("RShift", 887 / KEYBOARD_IMAGE_W, 510 / KEYBOARD_IMAGE_H),
+    # ── Arrow up ──
+    ("Up",  1067 / KEYBOARD_IMAGE_W,  510 / KEYBOARD_IMAGE_H),
+    # ── Numpad row 4 ──
+    ("KP1", 1217 / KEYBOARD_IMAGE_W,  510 / KEYBOARD_IMAGE_H),
+    ("KP2", 1277 / KEYBOARD_IMAGE_W,  510 / KEYBOARD_IMAGE_H),
+    ("KP3", 1337 / KEYBOARD_IMAGE_W,  510 / KEYBOARD_IMAGE_H),
+    ("KPEnt", 1397 / KEYBOARD_IMAGE_W, 545 / KEYBOARD_IMAGE_H),
+    # ── Bottom row ──
+    ("LCtrl", 117 / KEYBOARD_IMAGE_W, 590 / KEYBOARD_IMAGE_H),
+    ("Win",  187 / KEYBOARD_IMAGE_W,  590 / KEYBOARD_IMAGE_H),
+    ("LAlt", 247 / KEYBOARD_IMAGE_W,  590 / KEYBOARD_IMAGE_H),
+    ("Space", 487 / KEYBOARD_IMAGE_W, 590 / KEYBOARD_IMAGE_H),
+    ("RAlt", 667 / KEYBOARD_IMAGE_W,  590 / KEYBOARD_IMAGE_H),
+    ("Fn",   727 / KEYBOARD_IMAGE_W,  590 / KEYBOARD_IMAGE_H),
+    ("RCtrl", 847 / KEYBOARD_IMAGE_W, 590 / KEYBOARD_IMAGE_H),
+    # ── Arrow keys ──
+    ("Left", 1007 / KEYBOARD_IMAGE_W, 590 / KEYBOARD_IMAGE_H),
+    ("Down", 1067 / KEYBOARD_IMAGE_W, 590 / KEYBOARD_IMAGE_H),
+    ("Right", 1127 / KEYBOARD_IMAGE_W, 590 / KEYBOARD_IMAGE_H),
+    # ── Numpad bottom ──
+    ("KP0", 1247 / KEYBOARD_IMAGE_W,  590 / KEYBOARD_IMAGE_H),
+    ("KP.", 1337 / KEYBOARD_IMAGE_W,  590 / KEYBOARD_IMAGE_H),
+]
+
+# Mapping from KBD_HOTSPOTS label → HID keycode (from hid_keycodes._KEYCODE_NAMES).
+# This lets the keyboard canvas highlight which key each controller hotspot maps to.
+KBD_LABEL_TO_KEYCODE: Dict[str, int] = {
+    "Esc": 0x29, "F1": 0x3A, "F2": 0x3B, "F3": 0x3C, "F4": 0x3D,
+    "F5": 0x3E, "F6": 0x3F, "F7": 0x40, "F8": 0x41,
+    "F9": 0x42, "F10": 0x43, "F11": 0x44, "F12": 0x45,
+    "PrtSc": 0x46, "ScrLk": 0x47, "Pause": 0x48,
+    "`": 0x35, "1": 0x1E, "2": 0x1F, "3": 0x20, "4": 0x21,
+    "5": 0x22, "6": 0x23, "7": 0x24, "8": 0x25, "9": 0x26, "0": 0x27,
+    "-": 0x2D, "=": 0x2E, "Bksp": 0x2A,
+    "Ins": 0x49, "Home": 0x4A, "PgUp": 0x4B,
+    "NumLk": 0x53, "KP/": 0x54, "KP*": 0x55, "KP-": 0x56,
+    "Tab": 0x2B, "Q": 0x14, "W": 0x1A, "E": 0x08, "R": 0x15,
+    "T": 0x17, "Y": 0x1C, "U": 0x18, "I": 0x0C, "O": 0x12,
+    "P": 0x13, "[": 0x2F, "]": 0x30, "\\": 0x31,
+    "Del": 0x4C, "End": 0x4D, "PgDn": 0x4E,
+    "KP7": 0x5F, "KP8": 0x60, "KP9": 0x61, "KP+": 0x57,
+    "CapsLk": 0x39, "A": 0x04, "S": 0x16, "D": 0x07, "F": 0x09,
+    "G": 0x0A, "H": 0x0B, "J": 0x0D, "K": 0x0E, "L": 0x0F,
+    ";": 0x33, "'": 0x34, "Enter": 0x28,
+    "KP4": 0x5C, "KP5": 0x5D, "KP6": 0x5E,
+    "LShift": -0x02, "Z": 0x1D, "X": 0x1B, "C": 0x06, "V": 0x19,
+    "B": 0x05, "N": 0x11, "M": 0x10, ",": 0x36, ".": 0x37, "/": 0x38,
+    "RShift": -0x20, "Up": 0x52,
+    "KP1": 0x59, "KP2": 0x5A, "KP3": 0x5B, "KPEnt": 0x28,
+    "LCtrl": -0x01, "Win": -0x08, "LAlt": -0x04,
+    "Space": 0x2C, "RAlt": -0x40, "RCtrl": -0x10,
+    "Left": 0x50, "Down": 0x51, "Right": 0x4F,
+    "KP0": 0x62, "KP.": 0x63,
+}
+
+# Reverse lookup: HID keycode → keyboard label (positive = keycode, negative = modifier bit)
+_KEYCODE_TO_KBD_LABEL: Dict[int, str] = {v: k for k, v in KBD_LABEL_TO_KEYCODE.items()}
+# Also build a modifier-bit → label map for negative entries
+_MODBITS_TO_KBD_LABELS: Dict[int, List[str]] = {}
+for _lbl, _code in KBD_LABEL_TO_KEYCODE.items():
+    if _code < 0:
+        _MODBITS_TO_KBD_LABELS.setdefault(-_code, []).append(_lbl)
 
 
 def _profile_to_share_code(profile: dict) -> str:
@@ -481,6 +649,17 @@ class App(tk.Tk):
         self._m913_img_scaled = None  # tk.PhotoImage or ImageTk.PhotoImage
         self._m913_pil_base = None  # PIL Image for Pillow composite path
         self._m913_is_composite = False  # True when using pre-baked composited PNG
+
+        # Keyboard preview canvas (Controller tab — shows mapped PC keys)
+        self._kbd_canvas: Optional[tk.Canvas] = None
+        self._kbd_pil_base = None  # PIL Image for the keyboard overlay
+        self._kbd_img_scaled = None  # tk.PhotoImage or ImageTk.PhotoImage
+        self._kbd_img_path: Optional[Path] = None
+        self._kbd_hotspot_px: Dict[str, Tuple[float, float]] = {}
+        self._kbd_overlay_ox: int = 0
+        self._kbd_overlay_oy: int = 0
+        self._kbd_overlay_w: int = 0
+        self._kbd_overlay_h: int = 0
 
         # Press-to-bind state
         self._bind_mode = False  # True = waiting for a keyboard key press
@@ -1674,6 +1853,184 @@ class App(tk.Tk):
         c.create_image(ox, oy, image=self._m913_img_scaled, anchor="nw")
 
     # ------------------------------------------------------------------
+    # Keyboard preview image helpers (Controller tab)
+    # ------------------------------------------------------------------
+
+    def _find_keyboard_png(self) -> Optional[Path]:
+        """Locate the themed keyboard image (keyboard.png or keyboard-dark.png)."""
+        prefer_dark = self._detect_dark_preference()
+        if prefer_dark:
+            name = "keyboard-dark.png"
+            theme = "dark"
+        else:
+            name = "keyboard.png"
+            theme = "default"
+
+        here = Path(__file__).resolve()
+        repo = here.parents[3]
+        search_roots: List[Path] = []
+        try:
+            search_roots.append(Path.cwd() / "docs" / "ui" / theme / "misc")
+        except Exception:
+            pass
+        search_roots.append(repo / "docs" / "ui" / theme / "misc")
+
+        # Also check .ui-bundle locations
+        for root in _joycons_search_roots(theme):
+            search_roots.append(root)
+
+        for root in _dedupe_paths(search_roots):
+            candidate = root / name
+            try:
+                if candidate.is_file():
+                    return candidate
+            except Exception:
+                continue
+        return None
+
+    def _load_keyboard_image(self) -> None:
+        """Load the keyboard PNG for the current theme."""
+        path = self._find_keyboard_png()
+        if path == self._kbd_img_path and self._kbd_pil_base is not None:
+            return  # Already loaded
+
+        self._kbd_img_path = path
+        self._kbd_pil_base = None
+        self._kbd_img_scaled = None
+
+        if path and _HAS_PIL:
+            try:
+                self._kbd_pil_base = PILImage.open(str(path)).convert("RGBA")
+            except Exception:
+                log.debug("Failed to load keyboard image %s", path, exc_info=True)
+                self._kbd_pil_base = None
+
+    def _kbd_mapped_keycodes(self) -> set:
+        """Return the set of HID keycodes and modifier bits currently mapped by the profile."""
+        mapped: set = set()
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return mapped
+
+        mappings = prof.get("mappings", {})
+        if not isinstance(mappings, dict):
+            return mapped
+
+        for _kid, entry in mappings.items():
+            if not isinstance(entry, dict):
+                continue
+            et = entry.get("type", "")
+            if et == "remap_hid":
+                kc = entry.get("keycode", 0)
+                mod = entry.get("mod", 0)
+                if kc:
+                    mapped.add(kc)
+                if mod:
+                    # Add negative modifier bits to match KBD_LABEL_TO_KEYCODE convention
+                    for bit in [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80]:
+                        if mod & bit:
+                            mapped.add(-bit)
+            elif et == "remap":
+                to = entry.get("to")
+                if isinstance(to, int):
+                    dk = hid_keycodes.DEFAULT_KEYMAP.get(to)
+                    if dk:
+                        kc = dk[1]
+                        mod = dk[0]
+                        if kc:
+                            mapped.add(kc)
+                        if mod:
+                            for bit in [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80]:
+                                if mod & bit:
+                                    mapped.add(-bit)
+            elif et == "passthrough" or et is None:
+                # Check default keymap
+                try:
+                    kid = int(_kid)
+                    dk = hid_keycodes.DEFAULT_KEYMAP.get(kid)
+                    if dk:
+                        kc = dk[1]
+                        mod = dk[0]
+                        if kc:
+                            mapped.add(kc)
+                        if mod:
+                            for bit in [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80]:
+                                if mod & bit:
+                                    mapped.add(-bit)
+                except (ValueError, TypeError):
+                    pass
+        return mapped
+
+    def _kbd_redraw(self) -> None:
+        """Redraw the keyboard preview canvas, highlighting mapped keys."""
+        c = self._kbd_canvas
+        if not c:
+            return
+
+        c.delete("all")
+
+        w = max(c.winfo_width(), 1)
+        h = max(c.winfo_height(), 1)
+
+        if not self._kbd_pil_base:
+            c.create_text(
+                w // 2, h // 2,
+                text="Keyboard image not found",
+                fill=self._colors.get("muted", "#666"),
+            )
+            return
+
+        # Composite keyboard onto background
+        photo, ox, oy, img_w, img_h = self._composite_bg_overlay(
+            self._kbd_pil_base, w, h,
+        )
+        self._kbd_img_scaled = photo  # prevent GC
+        c.create_image(0, 0, image=photo, anchor="nw")
+        self._kbd_overlay_ox = ox
+        self._kbd_overlay_oy = oy
+        self._kbd_overlay_w = img_w
+        self._kbd_overlay_h = img_h
+
+        # Build hotspot pixel positions
+        self._kbd_hotspot_px = {}
+        for name, nx, ny in KBD_HOTSPOTS:
+            px = ox + nx * img_w
+            py = oy + ny * img_h
+            self._kbd_hotspot_px[name] = (px, py)
+
+        # Determine which keycodes are mapped
+        mapped = self._kbd_mapped_keycodes()
+
+        radius = max(10, int(min(img_w, img_h) * 0.015))
+
+        for name, nx, ny in KBD_HOTSPOTS:
+            px, py = self._kbd_hotspot_px[name]
+            hid_code = KBD_LABEL_TO_KEYCODE.get(name)
+            is_mapped = hid_code is not None and hid_code in mapped
+
+            if is_mapped:
+                fill = self._colors.get("accent2", "#3a8a5c")
+                outline = fill
+                text_col = _contrast_on(fill)
+            else:
+                fill = ""  # transparent
+                outline = self._colors.get("border", "#333")
+                text_col = self._colors.get("muted", "#666")
+
+            if is_mapped:
+                c.create_oval(
+                    px - radius, py - radius, px + radius, py + radius,
+                    outline=outline, width=2, fill=fill,
+                )
+                c.create_text(
+                    px, py, text=name,
+                    fill=text_col,
+                    font=(self._typo.get("font_family", "Segoe UI"), max(7, radius - 2)),
+                )
+            # Only draw labels for mapped keys to keep the view clean
+
+    # ------------------------------------------------------------------
     # Pulse animation for active hotspot highlighting
     # ------------------------------------------------------------------
 
@@ -1729,6 +2086,7 @@ class App(tk.Tk):
         # Force full rebuild by clearing canvas items cache
         self._keymap_canvas_items = {}
         self._keymap_redraw()
+        self._kbd_redraw()
 
     def _mapping_load_from_profile(self, in_id: int) -> None:
         try:
@@ -1824,6 +2182,22 @@ class App(tk.Tk):
         self._set_keymap_image_state()
 
         self._keymap_redraw()
+
+        # ── Keyboard preview (shows which PC keys are mapped) ──
+        kbd_label = ttk.Label(box, text="Keyboard output preview", style="Muted.TLabel")
+        kbd_label.pack(anchor="w", padx=8, pady=(4, 0))
+        self._kbd_canvas = tk.Canvas(box, height=200, highlightthickness=1)
+        self._kbd_canvas.pack(fill=tk.BOTH, padx=8, pady=(0, 4))
+        try:
+            self._kbd_canvas.configure(
+                bg=self._colors["panel2"],
+                highlightbackground=self._colors["border"],
+            )
+        except Exception:
+            pass
+        self._kbd_canvas.bind("<Configure>", lambda _e: self._kbd_redraw())
+        self._load_keyboard_image()
+        self._kbd_redraw()
 
         # Layer selector
         layer_box = ttk.LabelFrame(box, text="Layer")
@@ -2599,6 +2973,7 @@ class App(tk.Tk):
         self._mapping_key_id.set(str(key_id))
         self._mapping_type.set("remap_hid")
         self._keymap_redraw()
+        self._kbd_redraw()
         self._play_sound("bind")
 
     def _keymap_reset_selected(self) -> None:
@@ -4885,6 +5260,7 @@ class App(tk.Tk):
 
         self._set_profile_obj(prof, undo_label="apply mapping")
         self._keymap_redraw()
+        self._kbd_redraw()
         self._rebuild_layer_stack()
         self._play_sound("bind")
 
