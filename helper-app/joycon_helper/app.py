@@ -36,6 +36,7 @@ from . import updater
 from . import fw_updater
 from . import hid_keycodes
 from . import m913_device
+from . import razer_device
 
 log = logging.getLogger("joycon_helper.app")
 
@@ -1146,6 +1147,7 @@ class App(tk.Tk):
         self.tab_controller = ttk.Frame(self.tabs)
         self.tab_input_test = ttk.Frame(self.tabs)
         self.tab_mouse = ttk.Frame(self.tabs)
+        self.tab_razer = ttk.Frame(self.tabs)
         self.tab_help = ttk.Frame(self.tabs)
 
         self.tabs.add(self.tab_profile, text="Profile")
@@ -1156,6 +1158,7 @@ class App(tk.Tk):
         self.tabs.add(self.tab_controller, text="Controller")
         self.tabs.add(self.tab_input_test, text="Input Test")
         self.tabs.add(self.tab_mouse, text="Mouse")
+        self.tabs.add(self.tab_razer, text="Razer")
         self.tabs.add(self.tab_help, text="Help")
 
         # Build critical tabs eagerly; defer the rest until first selected.
@@ -1265,6 +1268,7 @@ class App(tk.Tk):
             "Overlay": self._build_overlay_tab,
             "Input Test": self._build_input_test_tab,
             "Mouse": self._build_mouse_tab,
+            "Razer": self._build_razer_tab,
             "Help": self._build_help_tab,
         }
         builder = builders.get(tab_name)
@@ -3874,6 +3878,346 @@ class App(tk.Tk):
         if messagebox.askyesno("Confirm Delete", f"Delete M913 profile '{name}'?"):
             m913_device.delete_profile(name)
             self._m913_status_var.set(f"Deleted profile '{name}'")
+
+    # ------------------------------------------------------------------
+    # Razer Mouse Tab
+    # ------------------------------------------------------------------
+
+    def _build_razer_tab(self) -> None:
+        """Build the Razer tab: device selection, battery, DPI, buttons, profiles."""
+        parent = self.tab_razer
+
+        # ── Instance state ──
+        self._razer_devices: List[razer_device.RazerDeviceInfo] = []
+        self._razer_open_dev: Optional[razer_device.RazerDevice] = None
+        self._razer_profile = razer_device.RazerProfile()
+        self._razer_button_vars: Dict[str, tk.StringVar] = {}
+        self._razer_dpi_stage_x_vars: List[tk.IntVar] = []
+        self._razer_dpi_stage_y_vars: List[tk.IntVar] = []
+        self._razer_state: Optional[razer_device.RazerDeviceState] = None
+        self._razer_registry = razer_device.load_device_registry()
+
+        # ── Top bar: device selector + scan ──
+        dev_frame = ttk.LabelFrame(parent, text="Razer Device")
+        dev_frame.pack(fill=tk.X, padx=6, pady=(6, 3))
+
+        row = ttk.Frame(dev_frame)
+        row.pack(fill=tk.X, padx=6, pady=4)
+
+        ttk.Label(row, text="Device:").pack(side=tk.LEFT)
+        self._razer_dev_var = tk.StringVar()
+        self._razer_dev_combo = ttk.Combobox(row, textvariable=self._razer_dev_var,
+                                             state="readonly", width=36)
+        self._razer_dev_combo.pack(side=tk.LEFT, padx=(4, 6))
+        self._razer_dev_combo.bind("<<ComboboxSelected>>",
+                                   lambda _: self._razer_on_device_selected())
+
+        ttk.Button(row, text="Scan", command=self._razer_scan_devices).pack(side=tk.LEFT, padx=2)
+        ttk.Button(row, text="Read State", command=self._razer_read_state).pack(side=tk.LEFT, padx=2)
+        ttk.Button(row, text="Apply", command=self._razer_apply_config).pack(side=tk.LEFT, padx=2)
+
+        if not razer_device.HID_AVAILABLE:
+            ttk.Label(dev_frame, text="⚠ hidapi not installed — install with: pip install hidapi",
+                      foreground=self._colors.get("danger", "red")).pack(padx=6, pady=2)
+
+        # ── Device info / battery row ──
+        info_frame = ttk.LabelFrame(parent, text="Device Info")
+        info_frame.pack(fill=tk.X, padx=6, pady=(3, 3))
+
+        info_row = ttk.Frame(info_frame)
+        info_row.pack(fill=tk.X, padx=6, pady=4)
+
+        ttk.Label(info_row, text="Firmware:").pack(side=tk.LEFT)
+        self._razer_fw_var = tk.StringVar(value="—")
+        ttk.Label(info_row, textvariable=self._razer_fw_var, width=10).pack(side=tk.LEFT, padx=(2, 12))
+
+        ttk.Label(info_row, text="Serial:").pack(side=tk.LEFT)
+        self._razer_serial_var = tk.StringVar(value="—")
+        ttk.Label(info_row, textvariable=self._razer_serial_var, width=18).pack(side=tk.LEFT, padx=(2, 12))
+
+        ttk.Label(info_row, text="Battery:").pack(side=tk.LEFT)
+        self._razer_battery_var = tk.StringVar(value="—")
+        ttk.Label(info_row, textvariable=self._razer_battery_var, width=12).pack(side=tk.LEFT, padx=2)
+
+        # ── Scrollable content ──
+        canvas_wrap = ttk.Frame(parent)
+        canvas_wrap.pack(fill=tk.BOTH, expand=True, padx=6, pady=3)
+
+        r_canvas = tk.Canvas(canvas_wrap, highlightthickness=0,
+                             bg=self._colors.get("panel", "#f2e8d0"))
+        r_scroll = ttk.Scrollbar(canvas_wrap, orient=tk.VERTICAL, command=r_canvas.yview)
+        r_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        r_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        r_canvas.configure(yscrollcommand=r_scroll.set)
+
+        inner = ttk.Frame(r_canvas)
+        r_canvas.create_window((0, 0), window=inner, anchor="nw")
+        inner.bind("<Configure>", lambda e: r_canvas.configure(scrollregion=r_canvas.bbox("all")))
+        r_canvas.bind_all("<MouseWheel>",
+                          lambda e: r_canvas.yview_scroll(-e.delta // 120, "units"))
+
+        # ── DPI stages ──
+        dpi_frame = ttk.LabelFrame(inner, text="DPI Stages (5 levels)")
+        dpi_frame.pack(fill=tk.X, padx=4, pady=(4, 2))
+
+        self._razer_dpi_stage_x_vars = []
+        self._razer_dpi_stage_y_vars = []
+        self._razer_dpi_active_var = tk.IntVar(value=self._razer_profile.active_dpi_stage)
+        for i in range(5):
+            r = ttk.Frame(dpi_frame)
+            r.pack(fill=tk.X, padx=4, pady=1)
+            dx, dy = self._razer_profile.dpi_stages[i] if i < len(self._razer_profile.dpi_stages) else (800, 800)
+            ttk.Radiobutton(r, text=f"Stage {i + 1}:", value=i + 1,
+                            variable=self._razer_dpi_active_var).pack(side=tk.LEFT)
+            ttk.Label(r, text="X:").pack(side=tk.LEFT, padx=(6, 0))
+            xvar = tk.IntVar(value=dx)
+            self._razer_dpi_stage_x_vars.append(xvar)
+            ttk.Spinbox(r, from_=100, to=26000, increment=100,
+                        textvariable=xvar, width=7).pack(side=tk.LEFT, padx=2)
+            ttk.Label(r, text="Y:").pack(side=tk.LEFT, padx=(4, 0))
+            yvar = tk.IntVar(value=dy)
+            self._razer_dpi_stage_y_vars.append(yvar)
+            ttk.Spinbox(r, from_=100, to=26000, increment=100,
+                        textvariable=yvar, width=7).pack(side=tk.LEFT, padx=2)
+
+        # ── Polling rate ──
+        poll_frame = ttk.LabelFrame(inner, text="Polling Rate")
+        poll_frame.pack(fill=tk.X, padx=4, pady=2)
+
+        pr = ttk.Frame(poll_frame)
+        pr.pack(fill=tk.X, padx=4, pady=2)
+        self._razer_poll_var = tk.IntVar(value=self._razer_profile.poll_rate)
+        for hz in (125, 500, 1000):
+            ttk.Radiobutton(pr, text=f"{hz} Hz", value=hz,
+                            variable=self._razer_poll_var).pack(side=tk.LEFT, padx=6)
+
+        # ── Idle / sleep timeout ──
+        idle_frame = ttk.LabelFrame(inner, text="Idle Timeout (60–900 sec)")
+        idle_frame.pack(fill=tk.X, padx=4, pady=2)
+
+        idle_row = ttk.Frame(idle_frame)
+        idle_row.pack(fill=tk.X, padx=4, pady=2)
+        ttk.Label(idle_row, text="Seconds:").pack(side=tk.LEFT)
+        self._razer_idle_var = tk.IntVar(value=self._razer_profile.idle_time)
+        ttk.Spinbox(idle_row, from_=60, to=900, increment=30,
+                    textvariable=self._razer_idle_var, width=7).pack(side=tk.LEFT, padx=4)
+
+        # ── Button remapping ──
+        btn_frame = ttk.LabelFrame(inner, text="Button Remapping (on-device memory)")
+        btn_frame.pack(fill=tk.X, padx=4, pady=2)
+
+        action_choices = razer_device.REMAP_ACTIONS
+
+        for name in razer_device.BUTTON_ORDER:
+            r = ttk.Frame(btn_frame)
+            r.pack(fill=tk.X, padx=4, pady=1)
+            display = razer_device.BUTTON_DISPLAY_NAMES.get(name, name)
+            ttk.Label(r, text=f"{display}:", width=16, anchor="w").pack(side=tk.LEFT)
+            var = tk.StringVar(value=self._razer_profile.button_bindings.get(name, "default"))
+            self._razer_button_vars[name] = var
+            cb = ttk.Combobox(r, textvariable=var, values=action_choices, width=20)
+            cb.pack(side=tk.LEFT, padx=4)
+
+        # ── Profile save/load ──
+        prof_frame = ttk.LabelFrame(inner, text="Razer Profile")
+        prof_frame.pack(fill=tk.X, padx=4, pady=(2, 6))
+
+        pfr = ttk.Frame(prof_frame)
+        pfr.pack(fill=tk.X, padx=4, pady=4)
+        ttk.Label(pfr, text="Name:").pack(side=tk.LEFT)
+        self._razer_prof_name_var = tk.StringVar(value=self._razer_profile.name)
+        ttk.Entry(pfr, textvariable=self._razer_prof_name_var, width=20).pack(side=tk.LEFT, padx=4)
+
+        ttk.Button(pfr, text="Save", command=self._razer_save_profile).pack(side=tk.LEFT, padx=2)
+        ttk.Button(pfr, text="Load", command=self._razer_load_profile).pack(side=tk.LEFT, padx=2)
+        ttk.Button(pfr, text="Delete", command=self._razer_delete_profile).pack(side=tk.LEFT, padx=2)
+
+        # ── Status ──
+        self._razer_status_var = tk.StringVar(value="Ready — click Scan to detect Razer devices")
+        ttk.Label(parent, textvariable=self._razer_status_var).pack(anchor="w", padx=6, pady=(0, 6))
+
+        # Auto-scan on tab open
+        self.after(200, self._razer_scan_devices)
+
+    # ── Razer helpers ────────────────────────────────────────────
+
+    def _razer_scan_devices(self) -> None:
+        """Scan for connected Razer mice."""
+        self._razer_devices = razer_device.RazerDevice.enumerate()
+        names = [d.display_name for d in self._razer_devices]
+        self._razer_dev_combo["values"] = names
+        if names:
+            self._razer_dev_combo.current(0)
+            self._razer_status_var.set(f"Found {len(names)} Razer device(s)")
+        else:
+            self._razer_dev_var.set("")
+            self._razer_status_var.set("No supported Razer devices found")
+
+    def _razer_on_device_selected(self) -> None:
+        """Load saved profile when a device is selected."""
+        idx = self._razer_dev_combo.current()
+        if idx < 0 or idx >= len(self._razer_devices):
+            return
+        dev_info = self._razer_devices[idx]
+        dev_id = dev_info.device_id
+        reg = self._razer_registry.get(dev_id, {})
+        linked_profile = reg.get("profile")
+        if linked_profile:
+            try:
+                self._razer_profile = razer_device.load_profile(linked_profile)
+                self._razer_ui_from_profile()
+                self._razer_status_var.set(f"Loaded profile '{linked_profile}' for {dev_info.display_name}")
+                return
+            except Exception:
+                pass
+        self._razer_status_var.set(f"Selected {dev_info.display_name} (no saved profile)")
+
+    def _razer_read_state(self) -> None:
+        """Read live state from selected device and update UI."""
+        idx = self._razer_dev_combo.current()
+        if idx < 0 or idx >= len(self._razer_devices):
+            self._razer_status_var.set("No device selected")
+            return
+        dev_info = self._razer_devices[idx]
+        dev = razer_device.RazerDevice()
+        try:
+            dev.open(dev_info)
+            state = dev.read_full_state()
+            self._razer_state = state
+            # Populate info fields
+            self._razer_fw_var.set(state.firmware_version or "—")
+            self._razer_serial_var.set(state.serial or "—")
+            if state.battery_level >= 0:
+                charge = " ⚡" if state.battery_charging else ""
+                self._razer_battery_var.set(f"{state.battery_level}%{charge}")
+            else:
+                self._razer_battery_var.set("N/A")
+            # Populate profile from live state
+            if state.dpi_stages:
+                self._razer_profile.dpi_stages = list(state.dpi_stages)
+                self._razer_profile.active_dpi_stage = state.active_dpi_stage
+            if state.poll_rate:
+                self._razer_profile.poll_rate = state.poll_rate
+            if state.idle_time:
+                self._razer_profile.idle_time = state.idle_time
+            if state.button_bindings:
+                for name, action in state.button_bindings.items():
+                    self._razer_profile.button_bindings[name] = action
+            self._razer_ui_from_profile()
+            self._razer_status_var.set(f"Read state from {dev_info.display_name}")
+            self._log_append(f"[Razer] State read: FW={state.firmware_version}, "
+                             f"DPI={state.dpi_x}x{state.dpi_y}, "
+                             f"Poll={state.poll_rate}Hz, Battery={state.battery_level}%")
+        except Exception as e:
+            self._razer_status_var.set(f"Read error: {e}")
+            self._log_append(f"[Razer] Read error: {e}")
+        finally:
+            dev.close()
+
+    def _razer_ui_to_profile(self) -> None:
+        """Sync UI values into the profile dataclass."""
+        self._razer_profile.name = self._razer_prof_name_var.get().strip() or "Default"
+        self._razer_profile.active_dpi_stage = self._razer_dpi_active_var.get()
+        stages = []
+        for i in range(5):
+            x = self._razer_dpi_stage_x_vars[i].get()
+            y = self._razer_dpi_stage_y_vars[i].get()
+            stages.append((x, y))
+        self._razer_profile.dpi_stages = stages
+        self._razer_profile.poll_rate = self._razer_poll_var.get()
+        self._razer_profile.idle_time = self._razer_idle_var.get()
+        for name, var in self._razer_button_vars.items():
+            self._razer_profile.button_bindings[name] = var.get()
+
+    def _razer_ui_from_profile(self) -> None:
+        """Sync profile values into UI widgets."""
+        self._razer_prof_name_var.set(self._razer_profile.name)
+        self._razer_dpi_active_var.set(self._razer_profile.active_dpi_stage)
+        for i in range(5):
+            if i < len(self._razer_profile.dpi_stages):
+                dx, dy = self._razer_profile.dpi_stages[i]
+            else:
+                dx, dy = 800, 800
+            self._razer_dpi_stage_x_vars[i].set(dx)
+            self._razer_dpi_stage_y_vars[i].set(dy)
+        self._razer_poll_var.set(self._razer_profile.poll_rate)
+        self._razer_idle_var.set(self._razer_profile.idle_time)
+        for name, var in self._razer_button_vars.items():
+            var.set(self._razer_profile.button_bindings.get(name, "default"))
+
+    def _razer_apply_config(self) -> None:
+        """Apply current UI settings to the selected Razer mouse."""
+        idx = self._razer_dev_combo.current()
+        if idx < 0 or idx >= len(self._razer_devices):
+            self._razer_status_var.set("No device selected")
+            return
+        dev_info = self._razer_devices[idx]
+        self._razer_ui_to_profile()
+
+        dev = razer_device.RazerDevice()
+        try:
+            dev.open(dev_info)
+            ok, errors = dev.apply_profile(self._razer_profile)
+            if errors:
+                self._razer_status_var.set(f"Applied with {errors} error(s) — {ok} commands ok")
+            else:
+                self._razer_status_var.set(f"Applied successfully — {ok} commands sent to {dev_info.display_name}")
+            self._log_append(f"[Razer] Config applied to {dev_info.display_name}: {ok} ok, {errors} errors")
+        except Exception as e:
+            self._razer_status_var.set(f"Error: {e}")
+            self._log_append(f"[Razer] Apply error: {e}")
+        finally:
+            dev.close()
+
+    def _razer_save_profile(self) -> None:
+        """Save current settings as a Razer profile."""
+        self._razer_ui_to_profile()
+        if not self._razer_profile.name.strip():
+            self._razer_profile.name = "Default"
+        try:
+            razer_device.save_profile(self._razer_profile)
+            idx = self._razer_dev_combo.current()
+            if 0 <= idx < len(self._razer_devices):
+                dev_id = self._razer_devices[idx].device_id
+                self._razer_registry[dev_id] = {"profile": self._razer_profile.name}
+                razer_device.save_device_registry(self._razer_registry)
+            self._razer_status_var.set(f"Saved profile '{self._razer_profile.name}'")
+            self._log_append(f"[Razer] Profile saved: {self._razer_profile.name}")
+        except Exception as e:
+            self._razer_status_var.set(f"Save error: {e}")
+
+    def _razer_load_profile(self) -> None:
+        """Show a dialog to load a saved Razer profile."""
+        saved = razer_device.list_saved_profiles()
+        if not saved:
+            self._razer_status_var.set("No saved Razer profiles found")
+            return
+        name = simpledialog.askstring("Load Razer Profile",
+                                      f"Enter profile name:\nAvailable: {', '.join(saved)}",
+                                      parent=self)
+        if not name or name not in saved:
+            return
+        try:
+            self._razer_profile = razer_device.load_profile(name)
+            self._razer_ui_from_profile()
+            self._razer_status_var.set(f"Loaded profile '{name}'")
+        except Exception as e:
+            self._razer_status_var.set(f"Load error: {e}")
+
+    def _razer_delete_profile(self) -> None:
+        """Delete a saved Razer profile."""
+        saved = razer_device.list_saved_profiles()
+        if not saved:
+            self._razer_status_var.set("No saved profiles to delete")
+            return
+        name = simpledialog.askstring("Delete Razer Profile",
+                                      f"Enter profile name to delete:\nAvailable: {', '.join(saved)}",
+                                      parent=self)
+        if not name or name not in saved:
+            return
+        if messagebox.askyesno("Confirm Delete", f"Delete Razer profile '{name}'?"):
+            razer_device.delete_profile(name)
+            self._razer_status_var.set(f"Deleted profile '{name}'")
 
     # ------------------------------------------------------------------
     # Undo / Redo

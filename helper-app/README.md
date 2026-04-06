@@ -6,6 +6,7 @@ Bind Bandit is a standalone desktop app for configuring gaming peripherals. **No
 |---|---|---|
 | **Joy-Con → keyboard bridge** | ESP32 + ESP32-S3 boards (flashed) | Profile, Controller, Macros, Stick, Overlay, Input Test |
 | **M913 mouse configuration** | Redragon M913 mouse (USB) | Mouse |
+| **Razer mouse configuration** | Razer Basilisk X HyperSpeed (USB) | Razer |
 | **Both** | All of the above | All tabs |
 
 ### Joy-Con bridge features (requires ESP32-S3 serial connection)
@@ -21,6 +22,19 @@ The bridge talks over a **serial (COM) port** provided by the **ESP32-S3 USB key
 ### M913 mouse features (no serial connection needed)
 
 The Mouse tab communicates directly with Redragon M913 mice over USB HID (`hidapi`). No ESP32 hardware or COM port is needed — just plug in the mouse.
+
+### Razer mouse features (no serial connection needed)
+
+The Razer tab communicates directly with Razer Basilisk X HyperSpeed mice (and other supported Razer mice) over USB HID Feature Reports. No ESP32 hardware, no Razer Synapse required — just plug in the mouse's USB dongle.
+
+- **Battery level**: live readback with charging indicator
+- **DPI stages**: read/write up to 5 DPI stages (X/Y independent), active stage selector
+- **Polling rate**: 125 / 500 / 1000 Hz
+- **Idle/sleep timeout**: 60–900 seconds
+- **Button remapping**: remap all 7 buttons (left, right, middle, back, forward, scroll up/down) to keyboard keys, other mouse buttons, DPI cycle, or disable — **all stored on the mouse's onboard memory** (anti-cheat safe)
+- **Firmware version** and **serial number** readback
+- **Profile system**: save/load/delete named profiles, auto-link profiles to specific devices
+- Requires `hidapi` (`pip install hidapi`)
 
 Current UI tabs:
 
@@ -54,6 +68,7 @@ Current UI tabs:
   - **Mode indicator**: always-visible status bar showing slot, layer, mode, sandbox, and undo depth
 - **Input Test**: live event log showing controller button presses/releases with timestamps, a summary of currently active keys, a **visual event timeline** showing the last 5 seconds of input events as colored marks, and an optional **latency profiling** display (toggle checkbox) showing real-time redraw and input processing stats
 - **Mouse** (M913 Impact Elite): configure Redragon M913 mice over USB HID — button remapping (16 buttons), DPI (5 slots, 100–16000), LED modes, polling rate. Supports **multiple mice** simultaneously with independent profiles. **Sister profiles** link M913 configs to Joy-Con slots so mouse and controller settings travel together. All settings are written to the mouse's onboard memory (anti-cheat safe). **Layout mode** selector lets users switch between "Stock M913" (Side 1–12) and "IncediusMod" (Thumb 1–6 / Finger 1–6) button labels for the [Incedius M913 physical mod](https://www.printables.com/model/1191307-red-dragon-m913-mod). Because each IncediusMod rewiring is unique, the **"Edit Map…"** button lets users reassign which M913 side button corresponds to each Thumb/Finger position (saved per-profile, with duplicate detection). The tab displays a sketchbook-ink M913 overlay image that switches between connected and disconnected states (matching the Joy-Con overlay style). Requires `hidapi` (`pip install hidapi`).
+- **Razer** (Basilisk X HyperSpeed): configure Razer mice over USB HID Feature Reports — battery readback, DPI stages (5 levels, X/Y independent), polling rate, idle timeout, and **on-device button remapping** (7 buttons → keyboard keys, mouse buttons, DPI cycle, or disable). All settings are written to the mouse's **onboard memory** via standard USB HID — no Synapse, no drivers, **anti-cheat safe**. Read State pulls live configuration from the device. Profile save/load/delete with per-device auto-linking. Requires `hidapi` (`pip install hidapi`).
 - **Help**: scrollable board pinout reference diagram (`pinouts.png`) for the Arduino Nano ESP32-S3 and NodeMCU ESP32-WROOM-32.
 
 The Controller tab keymap artwork switches between four Joy-Con states based on BT status: disconnected (`joycons-none.png`), left only, right only, and both connected. The Mouse tab displays an M913 overlay that switches between connected (`m913.png`) and disconnected (`m913-none.png`) states based on device scan results.

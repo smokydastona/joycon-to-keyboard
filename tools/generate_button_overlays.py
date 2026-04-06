@@ -248,19 +248,19 @@ KBD_WIDE = {
 
 # ── Generic Mouse (7 buttons — future-proof placeholder) ─────────────────
 # Positions centered on a 1536×1024 canvas assuming a standard top-down
-# mouse silhouette.  These will be refined once a dedicated mouse image is
-# created.
+# mouse silhouette (Razer Basilisk X HyperSpeed layout).
+# Labels match razer_device.BUTTON_SLOTS keys for overlay integration.
 MOUSE_HOTSPOTS: list[tuple[str, int, int]] = [
-    ("Left",      700,  310),
-    ("Right",     850,  310),
-    ("Middle",    775,  280),
-    ("ScrollUp",  775,  240),
-    ("ScrollDn",  775,  330),
-    ("Back",      660,  420),
-    ("Forward",   660,  370),
+    ("left",        700,  310),
+    ("right",       850,  310),
+    ("middle",      775,  260),
+    ("scroll_up",   775,  220),
+    ("scroll_down", 775,  310),
+    ("back",        645,  430),
+    ("forward",     645,  380),
 ]
 
-MOUSE_WIDE = {"Left", "Right"}
+MOUSE_WIDE = {"left", "right"}
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Device registry

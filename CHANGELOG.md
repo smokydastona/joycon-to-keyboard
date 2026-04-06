@@ -11,6 +11,9 @@ Until then, entries are grouped by date.
 
 ### Added
 
+- **Razer mouse support**: new `razer_device.py` module and **Razer** tab in Bind Bandit for configuring Razer Basilisk X HyperSpeed mice (and other supported models) over USB HID Feature Reports. Supports battery readback, DPI stages (5 levels, X/Y independent), polling rate, idle timeout, and **on-device button remapping** (7 buttons → keyboard keys, mouse buttons, DPI cycle, or disable). All settings are written to the mouse's onboard memory — no Synapse, no drivers, anti-cheat safe. Includes profile save/load/delete with per-device auto-linking, and Read State to pull live configuration from the device. Protocol based on the 90-byte Razer USB HID specification reverse-engineered by the OpenSnek project.
+- **Mouse overlay hotspots**: updated `MOUSE_HOTSPOTS` labels to match `razer_device.BUTTON_SLOTS` naming (lowercase with underscores) for overlay integration.
+
 - **Composited device backgrounds**: the Controller and Mouse tab canvases now fuse the device overlay PNG onto the app background image at runtime using Pillow alpha-compositing. Instead of a floating overlay on a solid-colour canvas, each tab shows a seamless background with the device baked in — tooltips and hotspot controls now line up with the device image. Falls back to the previous overlay-only rendering when Pillow is unavailable.
 
 - **IncediusMod mouse overlay support**: M913 Mouse tab now uses layout-specific overlay images — Stock M913 (`m913.png` / `m913-none.png`) or IncediusMod (`m913_Incedius.png` / `m913_Incedius-none.png`) — selected automatically when the user switches layout mode. Switching layout mode live reloads the overlay instantly.
