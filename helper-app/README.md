@@ -43,7 +43,7 @@ Current UI tabs:
 - **Stick**: stores deadzone/curve settings into the loadout JSON (not applied by firmware yet unless analog data exists)
 - **Share**: offline-only export/import of a compressed "loadout code" string
 - **Overlay**: a safe always-on-top status window (no hooking/injection)
-- **Controller**: set target name substring and trigger BT scan/connect via the device (requires return UART wiring); includes a keymap editor with a **dominant device canvas** (the Joy-Con diagram fills the tab) and **popup panels** for heist planning, masks, chords, and keyboard preview — opened via compact toolbar buttons:
+- **Controller**: 3-panel "Heist Table" layout — **Heist Library** (left, 4 loadout cards for one-click slot switching + Import/Export), **Controller Canvas** (center, dominant device diagram with hotspots), and **Heist Tools** (right, context-sensitive panel with current mapping + action buttons + Disguises mask quick-switch). Set target name substring and trigger BT scan/connect via the device (requires return UART wiring); includes a keymap editor with a **dominant device canvas** (the Joy-Con diagram fills the center panel) and **popup panels** for heist planning, masks, chords, and keyboard preview — opened via compact toolbar buttons:
   - **Unified click-to-steal**: click a controller hotspot to instantly enter case mode (if unbound) or steal mode (if bound) — press a key and you're done
   - **Right-click context menu**: Case, Steal, Reset to passthrough, Clear steal, or Disable on any hotspot
   - **Live input visualization**: hotspots light up green and pulse when the corresponding controller button is physically pressed

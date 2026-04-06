@@ -673,7 +673,7 @@ class App(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
         self.title("Bind Bandit")
-        self.geometry("980x720")
+        self.geometry("1280x760")
 
         # Window icon — look next to the exe (frozen), otherwise next to this file.
         _icon_path = self._find_icon()
@@ -1729,8 +1729,40 @@ class App(tk.Tk):
         ttk.Button(btns, text="Close overlay", command=self._overlay_close).pack(side=tk.LEFT, padx=(6, 0))
 
     def _build_controller_tab(self) -> None:
+        # ── 3-panel "Heist Table" layout ──
+        heist_table = tk.Frame(self.tab_controller)
+        heist_table.pack(fill=tk.BOTH, expand=True)
+
+        # Left panel — Loadout Notebook
+        self._loadout_panel = tk.Frame(
+            heist_table, width=190,
+            bg=self._colors.get("panel2", "#e2d0a8"),
+            highlightthickness=1,
+            highlightbackground=self._colors.get("border", "#8b7355"),
+        )
+        self._loadout_panel.pack(side=tk.LEFT, fill=tk.Y, padx=(4, 0), pady=4)
+        self._loadout_panel.pack_propagate(False)
+
+        # Center panel — Controller canvas + toolbar
+        self._controller_center = tk.Frame(heist_table)
+        self._controller_center.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Right panel — Heist Tools
+        self._heist_tools_panel = tk.Frame(
+            heist_table, width=220,
+            bg=self._colors.get("panel2", "#e2d0a8"),
+            highlightthickness=1,
+            highlightbackground=self._colors.get("border", "#8b7355"),
+        )
+        self._heist_tools_panel.pack(side=tk.RIGHT, fill=tk.Y, padx=(0, 4), pady=4)
+        self._heist_tools_panel.pack_propagate(False)
+
+        # Build side panels
+        self._build_loadout_panel()
+        self._build_heist_tools_panel()
+
         # Connection background banner: left/right/both.
-        self._bt_banner = tk.Frame(self.tab_controller, bg=self._colors["panel2"])
+        self._bt_banner = tk.Frame(self._controller_center, bg=self._colors["panel2"])
         self._bt_banner.pack(fill=tk.X, padx=8, pady=(8, 0))
         self._bt_banner_label = tk.Label(
             self._bt_banner,
@@ -1743,7 +1775,7 @@ class App(tk.Tk):
         )
         self._bt_banner_label.pack(fill=tk.X)
 
-        box = ttk.LabelFrame(self.tab_controller, text="Controller connection")
+        box = ttk.LabelFrame(self._controller_center, text="Controller connection")
         box.pack(fill=tk.X, padx=8, pady=8)
 
         row1 = ttk.Frame(box)
@@ -1771,11 +1803,373 @@ class App(tk.Tk):
             "This sends commands to the ESP32 BT host so you don't need to press buttons on the boards. "
             "Your controller may still need to be put into pairing mode (e.g. Joy-Con sync button)."
         )
-        ttk.Label(self.tab_controller, text=note, wraplength=900, justify="left").pack(anchor="w", padx=12, pady=(4, 0))
+        ttk.Label(self._controller_center, text=note, wraplength=900, justify="left").pack(anchor="w", padx=12, pady=(4, 0))
 
         self._build_keymap_editor()
 
         self._update_bt_background()
+
+    # ------------------------------------------------------------------
+    # Left panel — Loadout Notebook ("Heist Library")
+    # ------------------------------------------------------------------
+
+    def _build_loadout_panel(self) -> None:
+        """Build the left-side Loadout Notebook panel."""
+        panel = self._loadout_panel
+        font_family = self._typo.get("font_family", "Segoe Print")
+        bg = self._colors.get("panel2", "#e2d0a8")
+        fg = self._colors.get("text", "#2a1f0e")
+        border = self._colors.get("border", "#8b7355")
+
+        # Title
+        tk.Label(
+            panel, text="\U0001f4c2 Heist Library",
+            bg=bg, fg=fg,
+            font=(font_family, 11, "bold"),
+            anchor="w", padx=8, pady=6,
+        ).pack(fill=tk.X)
+
+        # Divider
+        tk.Frame(panel, height=2, bg=border).pack(fill=tk.X, padx=8)
+
+        # Loadout cards container
+        self._loadout_cards_frame = tk.Frame(panel, bg=bg)
+        self._loadout_cards_frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=8)
+
+        self._loadout_card_frames: List[tk.Frame] = []
+        self._loadout_card_name_labels: List[tk.Label] = []
+        for i in range(4):
+            self._build_loadout_card(i)
+
+        # Bottom actions
+        bottom = tk.Frame(panel, bg=bg)
+        bottom.pack(fill=tk.X, padx=8, pady=(0, 8))
+        tk.Frame(bottom, height=2, bg=border).pack(fill=tk.X, pady=(0, 6))
+
+        btn_frame = tk.Frame(bottom, bg=bg)
+        btn_frame.pack(fill=tk.X)
+        ttk.Button(btn_frame, text="Import", command=self._load_profile, width=8).pack(
+            side=tk.LEFT, padx=(0, 4))
+        ttk.Button(btn_frame, text="Export", command=self._save_profile, width=8).pack(
+            side=tk.LEFT)
+
+        self._refresh_loadout_cards()
+
+    def _build_loadout_card(self, slot: int) -> None:
+        """Build a single loadout card in the left panel."""
+        bg = self._colors.get("panel2", "#e2d0a8")
+        fg = self._colors.get("text", "#2a1f0e")
+        font_family = self._typo.get("font_family", "Segoe Print")
+
+        card = tk.Frame(
+            self._loadout_cards_frame, bg=bg,
+            highlightthickness=2,
+            highlightbackground=self._colors.get("border", "#8b7355"),
+            cursor="hand2",
+        )
+        card.pack(fill=tk.X, pady=(0, 6))
+
+        inner = tk.Frame(card, bg=bg)
+        inner.pack(fill=tk.X, padx=8, pady=6)
+
+        icon_lbl = tk.Label(
+            inner, text="\U0001f4d3", bg=bg, fg=fg,
+            font=(font_family, 14),
+        )
+        icon_lbl.pack(side=tk.LEFT)
+
+        name_var = self._slot_name_vars[slot]
+        name_lbl = tk.Label(
+            inner, textvariable=name_var, bg=bg, fg=fg,
+            font=(font_family, 10), anchor="w",
+        )
+        name_lbl.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(4, 0))
+
+        # Click binding
+        for widget in (card, inner, icon_lbl, name_lbl):
+            widget.bind("<Button-1>", lambda _e, s=slot: self._loadout_card_click(s))
+
+        self._loadout_card_frames.append(card)
+        self._loadout_card_name_labels.append(name_lbl)
+
+    def _loadout_card_click(self, slot: int) -> None:
+        """Handle click on a loadout card — select that slot."""
+        self.slot_var.set(str(slot))
+        self._slot_select(slot)
+        self._refresh_loadout_cards()
+
+    def _refresh_loadout_cards(self) -> None:
+        """Update loadout card visual state (highlight active slot)."""
+        if not hasattr(self, "_loadout_card_frames"):
+            return
+        active = int(self.slot_var.get()) if self.slot_var.get().isdigit() else 0
+        accent = self._colors.get("accent", "#6b4c2a")
+        border = self._colors.get("border", "#8b7355")
+        bg = self._colors.get("panel2", "#e2d0a8")
+        sel_bg = self._colors.get("selected", "#d4c4a0")
+
+        for i, card in enumerate(self._loadout_card_frames):
+            is_active = i == active
+            card.configure(
+                highlightbackground=accent if is_active else border,
+                highlightthickness=3 if is_active else 2,
+            )
+            target_bg = sel_bg if is_active else bg
+            for child in card.winfo_children():
+                try:
+                    child.configure(bg=target_bg)
+                except Exception:
+                    pass
+                for sub in child.winfo_children():
+                    try:
+                        sub.configure(bg=target_bg)
+                    except Exception:
+                        pass
+
+    # ------------------------------------------------------------------
+    # Right panel — Heist Tools
+    # ------------------------------------------------------------------
+
+    def _build_heist_tools_panel(self) -> None:
+        """Build the right-side Heist Tools context panel."""
+        panel = self._heist_tools_panel
+        font_family = self._typo.get("font_family", "Segoe Print")
+        bg = self._colors.get("panel2", "#e2d0a8")
+        fg = self._colors.get("text", "#2a1f0e")
+        border = self._colors.get("border", "#8b7355")
+        muted = self._colors.get("muted", "#8b7355")
+
+        # Title
+        tk.Label(
+            panel, text="\U0001f9f0 Heist Tools",
+            bg=bg, fg=fg,
+            font=(font_family, 11, "bold"),
+            anchor="w", padx=8, pady=6,
+        ).pack(fill=tk.X)
+        tk.Frame(panel, height=2, bg=border).pack(fill=tk.X, padx=8)
+
+        # Default state (shown when no button selected)
+        self._heist_default_frame = tk.Frame(panel, bg=bg)
+        self._heist_default_frame.pack(fill=tk.BOTH, expand=True)
+        tk.Label(
+            self._heist_default_frame,
+            text="Select a button\nto plan a heist\u2026",
+            bg=bg, fg=muted,
+            font=(font_family, 11),
+            justify="center", wraplength=190,
+        ).pack(expand=True)
+
+        # Button card (shown when a hotspot is selected)
+        self._heist_card_frame = tk.Frame(panel, bg=bg)
+        # Not packed yet — shown by _update_heist_tools
+
+        # Button name header
+        self._heist_btn_name_var = tk.StringVar(value="")
+        tk.Label(
+            self._heist_card_frame, textvariable=self._heist_btn_name_var,
+            bg=bg, fg=fg,
+            font=(font_family, 13, "bold"),
+            anchor="w", padx=8, pady=(8, 2),
+        ).pack(fill=tk.X)
+
+        # Current mapping display
+        self._heist_current_var = tk.StringVar(value="")
+        tk.Label(
+            self._heist_card_frame, textvariable=self._heist_current_var,
+            bg=bg, fg=muted,
+            font=(font_family, 9), anchor="w",
+            padx=8, pady=(0, 8), wraplength=190,
+        ).pack(fill=tk.X)
+
+        tk.Frame(self._heist_card_frame, height=2, bg=border).pack(fill=tk.X, padx=8)
+
+        # Action buttons
+        actions = tk.Frame(self._heist_card_frame, bg=bg)
+        actions.pack(fill=tk.X, padx=8, pady=8)
+
+        ttk.Button(
+            actions, text="\U0001f3b9 Keyboard",
+            command=self._heist_steal_keyboard, width=18,
+        ).pack(fill=tk.X, pady=(0, 4))
+
+        ttk.Button(
+            actions, text="\U0001f5b1\ufe0f Mouse Click",
+            command=self._heist_steal_mouse, width=18,
+        ).pack(fill=tk.X, pady=(0, 4))
+
+        ttk.Button(
+            actions, text="\U0001f9ea Trick (Macro)",
+            command=self._heist_assign_trick, width=18,
+        ).pack(fill=tk.X, pady=(0, 4))
+
+        ttk.Button(
+            actions, text="\U0001f3ad Mask Shift",
+            command=self._heist_mask_shift, width=18,
+        ).pack(fill=tk.X, pady=(0, 4))
+
+        tk.Frame(self._heist_card_frame, height=2, bg=border).pack(fill=tk.X, padx=8, pady=(4, 0))
+
+        # Clear button
+        clear_frame = tk.Frame(self._heist_card_frame, bg=bg)
+        clear_frame.pack(fill=tk.X, padx=8, pady=8)
+        ttk.Button(
+            clear_frame, text="\u2716 CLEAR",
+            command=self._keymap_clear_selected, width=18,
+        ).pack(fill=tk.X)
+
+        # ── Masks / Disguises section (always visible at bottom of panel) ──
+        mask_section = tk.Frame(panel, bg=bg)
+        mask_section.pack(side=tk.BOTTOM, fill=tk.X, padx=0, pady=0)
+
+        tk.Frame(mask_section, height=2, bg=border).pack(fill=tk.X, padx=8)
+        tk.Label(
+            mask_section, text="\U0001f3ad Disguises",
+            bg=bg, fg=fg,
+            font=(font_family, 10, "bold"),
+            anchor="w", padx=8, pady=(6, 4),
+        ).pack(fill=tk.X)
+
+        self._mask_cards_frame = tk.Frame(mask_section, bg=bg)
+        self._mask_cards_frame.pack(fill=tk.X, padx=8, pady=(0, 8))
+        self._mask_card_labels: List[tk.Label] = []
+        self._build_mask_cards()
+
+    def _update_heist_tools(self, hotspot_name: Optional[str] = None) -> None:
+        """Update the right-panel Heist Tools card for the selected hotspot."""
+        if not hasattr(self, "_heist_card_frame"):
+            return
+
+        if hotspot_name is None:
+            # Show default state
+            self._heist_card_frame.pack_forget()
+            self._heist_default_frame.pack(fill=tk.BOTH, expand=True)
+            return
+
+        # Show button card
+        self._heist_default_frame.pack_forget()
+        self._heist_card_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Update button name
+        self._heist_btn_name_var.set(f"\u270f\ufe0f {hotspot_name}")
+
+        # Get current mapping info
+        self._heist_current_var.set(self._get_heist_mapping_text(hotspot_name))
+
+    def _get_heist_mapping_text(self, hotspot_name: str) -> str:
+        """Get a human-readable description of the current mapping for a hotspot."""
+        hs = self._keymap_hotspots()
+        key_id = hs.get(hotspot_name)
+        if key_id is None:
+            return "No key_id learned \u2014 use Case first"
+
+        try:
+            prof = self._current_profile()
+        except Exception:
+            return "No loadout"
+
+        mappings = prof.get("mappings", {})
+        if not isinstance(mappings, dict):
+            mappings = {}
+        entry = mappings.get(str(key_id))
+        if not isinstance(entry, dict):
+            return "Passthrough (default)"
+
+        et = entry.get("type", "passthrough")
+        if et == "passthrough":
+            return "Passthrough (default)"
+        if et == "disable":
+            return "Disabled"
+        if et == "remap":
+            to = entry.get("to", "?")
+            return f"Remap \u2192 key_id {to}"
+        if et == "remap_hid":
+            kc = entry.get("keycode", 0)
+            name = hid_keycodes.hid_to_name(entry.get("mod", 0), kc) if isinstance(kc, int) else f"0x{kc:02X}"
+            return f"Keyboard \u2192 {name}"
+        if et == "macro":
+            mid = entry.get("id", "?")
+            return f"Trick \u2192 {mid}"
+        if et == "tap_hold":
+            return "Tap / Hold"
+        return f"Type: {et}"
+
+    # Heist Tools action methods
+
+    def _heist_steal_keyboard(self) -> None:
+        """Begin steal mode for the selected hotspot (keyboard key)."""
+        if self._keymap_selected_name:
+            self._keymap_begin_bind()
+
+    def _heist_steal_mouse(self) -> None:
+        """Assign a mouse-click remap to the selected hotspot."""
+        if self._keymap_selected_name:
+            self._mapping_type.set("remap_hid")
+            self._mapping_popup.show()
+
+    def _heist_assign_trick(self) -> None:
+        """Assign a trick (macro) to the selected hotspot."""
+        if self._keymap_selected_name:
+            self._mapping_type.set("macro")
+            self._mapping_popup.show()
+
+    def _heist_mask_shift(self) -> None:
+        """Open mask/layer config for the selected hotspot."""
+        if self._keymap_selected_name:
+            self._layers_popup.show()
+
+    def _build_mask_cards(self) -> None:
+        """Build mask/layer quick-switch cards in the Heist Tools panel."""
+        bg = self._colors.get("panel2", "#e2d0a8")
+        fg = self._colors.get("text", "#2a1f0e")
+        font_family = self._typo.get("font_family", "Segoe Print")
+        border = self._colors.get("border", "#8b7355")
+
+        # Base mask card
+        base_lbl = tk.Label(
+            self._mask_cards_frame, text="Base Face",
+            bg=bg, fg=fg, font=(font_family, 9),
+            relief="groove", padx=6, pady=3, cursor="hand2",
+        )
+        base_lbl.pack(fill=tk.X, pady=(0, 3))
+        base_lbl.bind("<Button-1>", lambda _e: self._mask_card_click(-1))
+        self._mask_card_labels.append(base_lbl)
+
+        # Layer masks
+        for li in range(4):
+            lbl = tk.Label(
+                self._mask_cards_frame, text=f"+ Mask {li + 1}",
+                bg=bg, fg=fg, font=(font_family, 9),
+                relief="groove", padx=6, pady=3, cursor="hand2",
+            )
+            lbl.pack(fill=tk.X, pady=(0, 3))
+            lbl.bind("<Button-1>", lambda _e, idx=li: self._mask_card_click(idx))
+            self._mask_card_labels.append(lbl)
+
+        self._refresh_mask_cards()
+
+    def _mask_card_click(self, layer_index: int) -> None:
+        """Switch to a mask layer from the right panel."""
+        self._layer_edit_index.set(layer_index)
+        self._keymap_redraw()
+        self._refresh_mask_cards()
+
+    def _refresh_mask_cards(self) -> None:
+        """Update mask card visual state (highlight active mask)."""
+        if not hasattr(self, "_mask_card_labels"):
+            return
+        active = self._layer_edit_index.get()
+        accent = self._colors.get("accent", "#6b4c2a")
+        border = self._colors.get("border", "#8b7355")
+        bg = self._colors.get("panel2", "#e2d0a8")
+        sel_bg = self._colors.get("selected", "#d4c4a0")
+
+        for i, lbl in enumerate(self._mask_card_labels):
+            idx = i - 1  # -1 = base, 0 = mask 1, etc.
+            is_active = idx == active
+            lbl.configure(
+                bg=sel_bg if is_active else bg,
+                relief="sunken" if is_active else "groove",
+            )
 
     def _joycons_image_state(self) -> str:
         if self._bt_connected_left and self._bt_connected_right:
@@ -2382,7 +2776,7 @@ class App(tk.Tk):
             self._mapping_type.set("passthrough")
 
     def _build_keymap_editor(self) -> None:
-        parent = self.tab_controller
+        parent = getattr(self, "_controller_center", self.tab_controller)
 
         # ── Compact toolbar ──
         toolbar = ttk.Frame(parent)
@@ -2955,6 +3349,7 @@ class App(tk.Tk):
             return
 
         self._keymap_selected_name = name
+        self._update_heist_tools(name)
         hs = self._keymap_hotspots()
         bound = hs.get(name)
         if bound is None:
@@ -2991,6 +3386,7 @@ class App(tk.Tk):
             return
 
         self._keymap_selected_name = name
+        self._update_heist_tools(name)
         self._keymap_redraw()
 
         hs = self._keymap_hotspots()
@@ -3280,6 +3676,7 @@ class App(tk.Tk):
         self._kbd_redraw()
         self._play_sound("bind")
         self._start_ink_stamp(hotspot, key_name)
+        self._update_heist_tools(hotspot)
 
     def _keymap_reset_selected(self) -> None:
         """Remove the mapping for the currently selected hotspot (revert to passthrough)."""
@@ -3361,6 +3758,7 @@ class App(tk.Tk):
                 pass
         self._cmd_read_profile()
         self._log_line(f"[host] Selected slot {idx}")
+        self._refresh_loadout_cards()
 
     def _slot_read_all(self) -> None:
         """Read profile names from all 4 slots (sends 4 read commands)."""
@@ -3603,6 +4001,7 @@ class App(tk.Tk):
                 self._layer_edit_index.set(idx)
                 self._build_layer_tab_bar()
                 self._keymap_redraw()
+                self._refresh_mask_cards()
             return _on_click
 
         # Base layer tab
@@ -4431,7 +4830,7 @@ class App(tk.Tk):
             "\u2022 Stick \u2014 Deadzone / response curve for analog sticks (future analog support).",
             "\u2022 Share \u2014 Export/import loadout codes (compressed base64 strings).",
             "\u2022 Overlay \u2014 Always-on-top translucent status window showing active keys.",
-            "\u2022 Controller \u2014 Joy-Con diagram + keymap editor + masks/chords/keyboard preview.",
+            "\u2022 Controller \u2014 3-panel Heist Table: Heist Library (left, loadout cards), controller diagram (center), Heist Tools + Disguises (right).",
             "\u2022 Input Test \u2014 Live event log, timeline, and active-key display.",
             "\u2022 Mouse (M913) \u2014 Configure Redragon M913 mice: buttons, DPI, LED, polling rate.",
             "\u2022 Razer \u2014 Configure Razer mice: DPI stages, buttons, polling, idle timeout, battery.",
@@ -4443,15 +4842,16 @@ class App(tk.Tk):
             "\u2022 Loadouts can be renamed, duplicated, and reset.",
             "\u2022 Export/import via Share tab for backup or sharing with others.",
             "",
-            "## Heist planning (Controller tab)",
-            "Click a button on the Joy-Con diagram to select it, then assign an action:",
-            "\u2022 Passthrough \u2014 use the default keymap.c mapping.",
-            "\u2022 Disable \u2014 ignore this button completely.",
-            "\u2022 Remap \u2014 map to a different logical action.",
-            "\u2022 Remap HID \u2014 map to any arbitrary USB HID keycode.",
-            "\u2022 Trick \u2014 trigger a recorded trick.",
-            "\u2022 Tap/Hold \u2014 different action for short tap vs long press.",
-            "\u2022 Chord \u2014 multi-button combo (press two buttons together for a different action).",
+            "## Heist planning (Controller tab \u2014 Heist Tools panel)",
+            "Click a button on the Joy-Con diagram to select it. The Heist Tools panel (right)",
+            "updates instantly to show the selected button\u2019s name, current mapping, and action buttons:",
+            "\u2022 \U0001f3b9 Keyboard \u2014 press a key to steal (remap to that key).",
+            "\u2022 \U0001f5b1\ufe0f Mouse Click \u2014 map to any mouse button / HID keycode.",
+            "\u2022 \U0001f9ea Trick \u2014 trigger a recorded trick (macro).",
+            "\u2022 \U0001f3ad Mask Shift \u2014 open mask/layer configuration.",
+            "\u2022 \u2716 CLEAR \u2014 remove the mapping entirely.",
+            "",
+            "Right-click a hotspot for additional options: Case, Steal, Reset, Clear, or Disable.",
             "",
             "## Visual feedback",
             "\u2022 Hover glow \u2014 A hand-drawn ink ring highlights buttons as you move the mouse.",
@@ -4460,11 +4860,12 @@ class App(tk.Tk):
             "\u2022 Overlay colour \u2014 Use the \U0001f3a8 dropdown in the toolbar to choose from 7 rainbow",
             "  colours (red, orange, yellow, green, blue, indigo, violet). Default is violet.",
             "",
-            "## Masks",
+            "## Masks (Disguises)",
             "Masks let you have multiple sets of steals and switch between them.",
-            "\u2022 Mask tabs are shown below the controller diagram.",
-            "\u2022 Click a tab to switch the editor to that mask.",
-            "\u2022 Click the + button to add a new mask.",
+            "\u2022 The Disguises section at the bottom of the Heist Tools panel shows 5 mask cards",
+            "  (Base Face + Mask 1\u20134). Click a card to switch the editor to that mask.",
+            "\u2022 Mask tabs are also shown below the controller diagram for quick switching.",
+            "\u2022 Click the + button in the mask tab bar to add a new mask.",
             "\u2022 Base mask is always present and cannot be removed.",
             "",
             "## Safety",
@@ -5416,6 +5817,15 @@ class App(tk.Tk):
             return
         parts = []
 
+        # Connected device
+        try:
+            if self.client.connected:
+                parts.append(f"🔌 {self.port_var.get()}")
+            else:
+                parts.append("⚠ Disconnected")
+        except Exception:
+            parts.append("⚠ Disconnected")
+
         # Active slot
         try:
             parts.append(f"Slot {self.slot_var.get()}")
@@ -5426,9 +5836,9 @@ class App(tk.Tk):
         try:
             li = self._layer_edit_index.get()
             if li < 0:
-                parts.append("Base Mask")
+                parts.append("🎭 Base Mask")
             else:
-                parts.append(f"Mask {li + 1}")
+                parts.append(f"🎭 Mask {li + 1}")
         except Exception:
             pass
 
@@ -5441,6 +5851,11 @@ class App(tk.Tk):
         # Sandbox
         if self._sandbox_active.get():
             parts.append("PRACTICE RUN")
+
+        # Latency indicator
+        if self._perf_enabled and self._perf_redraw_times:
+            avg_ms = sum(self._perf_redraw_times[-10:]) / min(len(self._perf_redraw_times), 10) * 1000
+            parts.append(f"⏱ {avg_ms:.0f}ms")
 
         # UI mode
         parts.append(f"UI: {self._ui_mode.get()}")

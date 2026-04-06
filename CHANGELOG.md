@@ -11,6 +11,9 @@ Until then, entries are grouped by date.
 
 ### Changed
 
+- **3-panel "Heist Table" layout**: the Controller tab is now a three-panel view — Left: **Heist Library** (4 loadout cards with one-click switching, Import/Export buttons), Center: controller canvas (unchanged), Right: **Heist Tools** (context-sensitive panel showing the selected hotspot's name, current mapping, and one-click action buttons for Keyboard / Mouse / Trick / Mask Shift / Clear) plus a **Disguises** section with 5 quick-switch mask cards (Base Face + Mask 1–4). Panels stay synchronized: clicking a hotspot updates Heist Tools, clicking a mask card switches the active layer and redraws the canvas, clicking a loadout card switches slots and refreshes all panels.
+- **Enhanced status bar**: now shows connection indicator (🔌 COMx / ⚠ Disconnected), active mask (🎭 Base Mask / Mask N), and latency (⏱ Xms when profiling enabled).
+- **Window size**: default window geometry increased from 980×720 to 1280×760 to accommodate the 3-panel layout.
 - **"Bind Bandit" UI identity system**: renamed all user-facing terminology across the helper app to match the heist/thief theme. Profile → **Loadout**, Layer → **Mask**, Macro → **Trick**, Mapping → **Heist Plan**, Bind → **Steal**, Apply → **Execute**, Sandbox → **Practice Run**, Learn → **Case**, Defaults → **Quick Job**. Successful binds now show "STOLEN ·" text in the ink stamp animation and status bar. All 14 Help tab sections updated to match. Internal variable names, method names, JSON protocol keys, and firmware code are unchanged.
 
 ### Added
