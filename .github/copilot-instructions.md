@@ -89,6 +89,13 @@ Identify what the change touches and proactively scan the connected files that m
   - Ensure device tolerates unknown commands gracefully.
   - Ensure the helper app is tolerant of non-JSON lines (logs).
 
+- Help tab content changes (`helper-app/joycon_helper/app.py` → `_build_help_tab`)
+  - The Help tab is the **single source of truth** for end-user setup & usage docs inside the app.
+  - Any change to wiring, pin assignments, firmware flash steps, key mappings, serial protocol, helper-app commands, OTA workflow, troubleshooting, or app install procedure **must** be reflected in the corresponding Help tab section.
+  - Sections to check: What Is This?, What You Need, Wiring & Connections, Board Pinout Diagram, Firmware Installation, First End-to-End Test, Using Bind Bandit, Default Key Mapping, Serial Protocol, Mouse Configuration, OTA Firmware Updates, Troubleshooting, Installing / Updating the Helper App, Quick Reference.
+  - Keep section count and order stable; add new sections at the end if needed.
+  - Do not remove the search-filter feature.
+
 ## CI-first default (IMPORTANT)
 
 - If CI exists in this repo, treat CI as the authoritative clean build.
