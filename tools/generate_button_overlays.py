@@ -370,7 +370,7 @@ def main() -> int:
             _generate_overlay(label, px, py, color, wide, dst)
             total += 1
 
-        print(f"  [{device_name}] {len(hotspots)} overlays → {out_dir.relative_to(REPO_ROOT)}")
+        print(f"  [{device_name}] {len(hotspots)} overlays -> {out_dir.relative_to(REPO_ROOT)}")
 
     print(f"[button-overlays] Generated {total} overlay PNGs across {len(DEVICES)} devices")
     return 0
