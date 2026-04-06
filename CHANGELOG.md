@@ -11,6 +11,11 @@ Until then, entries are grouped by date.
 
 ### Added
 
+- **SHA-256 firmware integrity verification**: downloaded firmware binaries are hashed and verified against `sha256sums.txt` (when published as a GitHub release asset). Hash mismatch aborts the update immediately.
+- **Download retry with backoff**: firmware downloads automatically retry up to 3 times with exponential backoff (1 s, 2 s, 4 s) on network failures.
+- **Release notes in update dialog**: the firmware update confirmation dialog now shows the GitHub release notes (truncated to 600 chars) so users know what changed before updating.
+- **Local `.bin` file flashing**: new "Flash from file…" button in the Firmware section lets users pick a local firmware binary and flash it directly. SHA-256 is computed and shown before flashing. Target board is auto-detected from the filename.
+- **OTA rollback protection** (firmware): both boards now enable `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`. After an OTA update, the new firmware calls `fw_ota_mark_valid()` early in `app_main` — if it crashes before doing so, the bootloader automatically rolls back to the previous working partition.
 - **Joy-Con setup FSM** (`joycon_setup.c/.h`): after BT connection, the ESP32 now sends a sequence of subcommands to the Joy-Con — request device info → read factory stick calibration from SPI flash → read user stick calibration → set full report mode (0x30) → enable IMU → enable vibration → set player LEDs → READY. Inspired by the `bluepad32` and `BlueCubeMod` open-source implementations.
 - **SPI flash stick calibration**: factory calibration data (addresses 0x603D/0x6046) and user calibration data (0x8010/0x801D, when magic bytes 0xB2/0xA1 are present) are read from the Joy-Con's onboard flash. This eliminates the warm-up period of the auto-calibration system — sticks are accurate immediately after connection.
 - **Controller type detection**: device info reply identifies the connected controller as Joy-Con (L), Joy-Con (R), or Pro Controller. Type is available via `joycon_setup_get_type()`.

@@ -13,6 +13,7 @@
 #include "usb_kbd.h"
 #include "bridge_serial.h"
 #include "profile_runtime.h"
+#include "fw_ota.h"
 
 static const char* TAG = "s3-kbd";
 
@@ -39,6 +40,7 @@ static const char* bda_to_str(const uint8_t* bda, char* out, size_t out_len) {
 }
 
 void app_main(void) {
+    fw_ota_mark_valid();
     usb_kbd_init();
     bridge_serial_init();
     profile_runtime_init();

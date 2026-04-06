@@ -76,6 +76,13 @@ This firmware uses an **A/B OTA partition layout** (`partitions.csv`). The helpe
 
 The same mechanism also relays OTA data to the ESP32 side over UART, so both boards can be updated from a single USB connection.
 
+### Integrity & rollback
+
+- Downloaded firmware is verified against **SHA-256** checksums (`sha256sums.txt` in the GitHub release) when available.
+- Downloads automatically **retry up to 3 times** with exponential backoff on network errors.
+- **Rollback protection** is enabled (`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`). After an OTA update, the new firmware must call `fw_ota_mark_valid()` early in `app_main` — if it crashes before doing so, the bootloader automatically reverts to the previous partition.
+- Users can also **flash local `.bin` files** from the helper app UI ("Flash from file…" button).
+
 See `helper-app/protocol.md` (firmware OTA commands) and `docs/serial-protocol.md` (OTA UART frames).
 
 ## Mapping

@@ -11,6 +11,7 @@ Releases API.
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import logging
 import ssl
@@ -48,6 +49,10 @@ _END_TIMEOUT = 30
 
 # How long to wait for GitHub API responses (seconds).
 _HTTP_TIMEOUT = 15
+
+# Download retry settings.
+_MAX_RETRIES = 3
+_RETRY_BACKOFF_BASE = 1.0  # seconds; doubles each retry
 
 # Re-use releases URL from updater module.
 from .updater import RELEASES_URL
@@ -87,6 +92,28 @@ def _find_asset(release: Dict[str, Any], name: str) -> Optional[Dict[str, Any]]:
     return None
 
 
+def _fetch_sha256sums(release: Dict[str, Any]) -> Dict[str, str]:
+    """Try to download a sha256sums.txt asset and return {filename: hash}."""
+    asset = _find_asset(release, "sha256sums.txt")
+    if not asset:
+        return {}
+    try:
+        req = Request(asset["browser_download_url"])
+        ctx = ssl.create_default_context()
+        with urlopen(req, timeout=_HTTP_TIMEOUT, context=ctx) as resp:
+            text = resp.read().decode("utf-8")
+        result: Dict[str, str] = {}
+        for line in text.strip().splitlines():
+            parts = line.split(None, 1)
+            if len(parts) == 2:
+                sha, name = parts
+                result[name.strip("* ")] = sha.lower()
+        return result
+    except Exception:
+        log.debug("Could not fetch sha256sums.txt", exc_info=True)
+        return {}
+
+
 def check_firmware_updates(
     current_s3: Optional[str] = None,
     current_esp32: Optional[str] = None,
@@ -123,10 +150,17 @@ def check_firmware_updates(
             except (ValueError, TypeError):
                 log.debug("Could not compare dates, falling back to version only")
 
+    # Fetch SHA256 checksums if published alongside binaries.
+    sha256sums = _fetch_sha256sums(release)
+
+    # Extract release notes (Markdown body).
+    release_notes = (release.get("body") or "").strip()
+
     result: Dict[str, Any] = {
         "tag": tag,
         "version": tag.lstrip("v"),
         "boards": {},
+        "release_notes": release_notes,
     }
 
     # Check ESP32-S3 firmware.
@@ -140,6 +174,7 @@ def check_firmware_updates(
                     "download_url": asset["browser_download_url"],
                     "asset_name": FW_ASSET_S3,
                     "size": asset.get("size", 0),
+                    "expected_sha256": sha256sums.get(FW_ASSET_S3),
                 }
 
     # Check ESP32 BT host firmware.
@@ -153,6 +188,7 @@ def check_firmware_updates(
                     "download_url": asset["browser_download_url"],
                     "asset_name": FW_ASSET_ESP32,
                     "size": asset.get("size", 0),
+                    "expected_sha256": sha256sums.get(FW_ASSET_ESP32),
                 }
 
     if not result["boards"]:
@@ -165,23 +201,69 @@ def check_firmware_updates(
     return result
 
 
-def download_firmware(url: str, *, progress_cb: Optional[Callable[[int, int], None]] = None) -> bytes:
-    """Download a firmware binary from a URL and return raw bytes."""
-    log.info("Downloading firmware from %s", url)
-    req = Request(url)
-    ctx = ssl.create_default_context()
-    with urlopen(req, timeout=120, context=ctx) as resp:
-        total = int(resp.headers.get("Content-Length", 0))
-        data = bytearray()
-        while True:
-            chunk = resp.read(65536)
-            if not chunk:
-                break
-            data.extend(chunk)
-            if progress_cb and total > 0:
-                progress_cb(len(data), total)
-    log.info("Firmware download complete: %d bytes", len(data))
-    return bytes(data)
+def download_firmware(
+    url: str,
+    *,
+    progress_cb: Optional[Callable[[int, int], None]] = None,
+    expected_sha256: Optional[str] = None,
+    expected_size: int = 0,
+) -> bytes:
+    """Download a firmware binary with retry, SHA-256 verification, and size check.
+
+    Raises ``RuntimeError`` on hash mismatch or persistent download failure.
+    """
+    last_err: Optional[Exception] = None
+    for attempt in range(1, _MAX_RETRIES + 1):
+        try:
+            log.info("Downloading firmware from %s (attempt %d/%d)", url, attempt, _MAX_RETRIES)
+            req = Request(url)
+            ctx = ssl.create_default_context()
+            with urlopen(req, timeout=120, context=ctx) as resp:
+                total = int(resp.headers.get("Content-Length", 0))
+                data = bytearray()
+                while True:
+                    chunk = resp.read(65536)
+                    if not chunk:
+                        break
+                    data.extend(chunk)
+                    if progress_cb and total > 0:
+                        progress_cb(len(data), total)
+
+            # Size sanity check.
+            if expected_size and len(data) != expected_size:
+                raise RuntimeError(
+                    f"Size mismatch: expected {expected_size}, got {len(data)}"
+                )
+
+            # SHA-256 integrity verification.
+            actual_hash = hashlib.sha256(data).hexdigest()
+            log.info("Firmware download complete: %d bytes, SHA-256=%s", len(data), actual_hash)
+
+            if expected_sha256:
+                if actual_hash != expected_sha256.lower():
+                    raise RuntimeError(
+                        f"SHA-256 mismatch: expected {expected_sha256}, got {actual_hash}"
+                    )
+                log.info("SHA-256 verified OK")
+
+            return bytes(data)
+
+        except RuntimeError:
+            raise  # integrity errors are not retryable
+        except Exception as e:
+            last_err = e
+            log.warning("Download attempt %d/%d failed: %s", attempt, _MAX_RETRIES, e)
+            if attempt < _MAX_RETRIES:
+                backoff = _RETRY_BACKOFF_BASE * (2 ** (attempt - 1))
+                log.info("Retrying in %.1fs…", backoff)
+                time.sleep(backoff)
+
+    raise RuntimeError(f"Download failed after {_MAX_RETRIES} attempts: {last_err}")
+
+
+def compute_sha256(data: bytes) -> str:
+    """Return the hex SHA-256 digest of *data*."""
+    return hashlib.sha256(data).hexdigest()
 
 
 # ---------------------------------------------------------------------------

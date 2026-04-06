@@ -1361,6 +1361,8 @@ class App(tk.Tk):
         self._fw_check_btn.pack(pady=(4, 4))
         self._fw_update_btn = ttk.Button(fw_frame, text="Update firmware", command=self._fw_do_update, width=22, state="disabled")
         self._fw_update_btn.pack(pady=(0, 4))
+        self._fw_flash_file_btn = ttk.Button(fw_frame, text="Flash from file\u2026", command=self._fw_flash_from_file, width=22)
+        self._fw_flash_file_btn.pack(pady=(0, 4))
         self._pending_fw_update: Optional[Dict[str, Any]] = None
 
         # ── Bottom status bar (mode indicator — always visible) ──
@@ -5350,9 +5352,19 @@ class App(tk.Tk):
             "## How to update",
             "1) Connect to the ESP32-S3 via COM port.",
             "2) Use the Loadout tab \u2192 Firmware Update section.",
-            "3) Select the firmware binary (.bin) for the board you want to update.",
-            "4) Choose the target board (esp32s3 or esp32).",
-            "5) Click Update. The app sends the binary in chunks over serial.",
+            "3) Click 'Check firmware versions' to query the boards and check GitHub.",
+            "4) If an update is available, click 'Update firmware'. Release notes are shown.",
+            "5) The app downloads, verifies (SHA-256), and flashes the binary over serial.",
+            "",
+            "## Flash from file",
+            "Click 'Flash from file\u2026' to pick a local .bin and flash it directly.",
+            "The board is auto-detected from the filename. SHA-256 is displayed before flashing.",
+            "",
+            "## Integrity & rollback",
+            "\u2022 Downloaded firmware is verified against sha256sums.txt (if published in the release).",
+            "\u2022 Downloads retry up to 3 times with exponential backoff on network errors.",
+            "\u2022 After flashing, the new firmware must validate itself on first boot.",
+            "\u2022 If validation fails, the bootloader automatically rolls back to the previous version.",
             "",
             "## Requirements",
             "\u2022 Both firmwares must have OTA partitions configured (partitions.csv).",
@@ -8597,12 +8609,20 @@ class App(tk.Tk):
         if not board_names:
             return
 
-        confirm = messagebox.askyesno(
-            "Firmware update",
+        # Build confirmation message with release notes.
+        msg = (
             f"Update firmware for {', '.join(board_names)} to v{info['version']}?\n\n"
             "The device(s) will reboot after flashing.\n"
-            "Do not disconnect during the update.",
+            "Do not disconnect during the update."
         )
+        notes = info.get("release_notes", "")
+        if notes:
+            preview = notes[:600]
+            if len(notes) > 600:
+                preview += "\n\n(truncated)"
+            msg += f"\n\n--- Release Notes ---\n{preview}"
+
+        confirm = messagebox.askyesno("Firmware update", msg)
         if not confirm:
             return
 
@@ -8624,6 +8644,8 @@ class App(tk.Tk):
                                 f"Downloading {b}… {int(dl * 100 / tot)}%"
                             )
                         ),
+                        expected_sha256=b_info.get("expected_sha256"),
+                        expected_size=b_info.get("size", 0),
                     )
 
                     self.after(0, lambda b=board: self._fw_status.set(f"Flashing {b}…"))
@@ -8644,6 +8666,77 @@ class App(tk.Tk):
 
         import threading
         threading.Thread(target=_run, name="fw-update", daemon=True).start()
+
+    def _fw_flash_from_file(self) -> None:
+        """Let the user pick a local .bin file and flash it to a board."""
+        from tkinter import filedialog
+
+        if not self.serial.is_connected:
+            self._fw_status.set("Not connected.")
+            return
+
+        path = filedialog.askopenfilename(
+            title="Select firmware binary",
+            filetypes=[("Firmware binary", "*.bin"), ("All files", "*.*")],
+        )
+        if not path:
+            return
+
+        # Determine target board.
+        board = fw_updater.BOARD_S3
+        name_lower = path.lower()
+        if "esp32-hid" in name_lower or "hid-host" in name_lower or name_lower.endswith("esp32.bin"):
+            board = fw_updater.BOARD_ESP32
+
+        from pathlib import Path as P
+        data = P(path).read_bytes()
+        sha = fw_updater.compute_sha256(data)
+
+        confirm = messagebox.askyesno(
+            "Flash from file",
+            f"Flash '{P(path).name}' to {board}?\n\n"
+            f"Size: {len(data):,} bytes\n"
+            f"SHA-256: {sha[:16]}…\n\n"
+            "Do not disconnect during flashing.",
+        )
+        if not confirm:
+            return
+
+        self._fw_flash_file_btn.configure(state="disabled")
+        self._fw_status.set(f"Flashing {board}…")
+
+        def _run() -> None:
+            try:
+                flasher = fw_updater.FirmwareFlasher(self.serial)
+                flasher.flash(
+                    board, data,
+                    progress_cb=lambda done, tot: self.after(
+                        0, lambda: self._fw_status.set(
+                            f"Flashing {board}… {int(done * 100 / tot)}%"
+                        )
+                    ),
+                )
+                self.after(0, self._on_fw_file_flash_done)
+            except Exception as e:
+                log.error("Local firmware flash failed: %s", e, exc_info=True)
+                self.after(0, lambda: self._on_fw_file_flash_failed(str(e)))
+
+        import threading
+        threading.Thread(target=_run, name="fw-file-flash", daemon=True).start()
+
+    def _on_fw_file_flash_done(self) -> None:
+        self._fw_flash_file_btn.configure(state="normal")
+        self._fw_status.set("Flashed from file! Device rebooting…")
+        messagebox.showinfo(
+            "Flash complete",
+            "Firmware flashed successfully from file.\n\n"
+            "The device will reboot. You may need to reconnect.",
+        )
+
+    def _on_fw_file_flash_failed(self, error: str) -> None:
+        self._fw_flash_file_btn.configure(state="normal")
+        self._fw_status.set(f"Flash failed: {error}")
+        messagebox.showerror("Flash failed", error)
 
     def _on_fw_update_done(self) -> None:
         self._fw_check_btn.configure(state="normal")

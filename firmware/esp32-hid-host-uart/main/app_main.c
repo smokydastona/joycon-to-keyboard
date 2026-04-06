@@ -8,6 +8,7 @@
 #include "joycon_mapper.h"
 #include "bt_hid_host.h"
 #include "bridge_ctrl.h"
+#include "fw_ota.h"
 
 static const char* TAG = "bind-bandit";
 
@@ -30,6 +31,7 @@ static void uart_init_bridge(void) {
 }
 
 void app_main(void) {
+    fw_ota_mark_valid();
     uart_init_bridge();
 
     ESP_LOGI(TAG, "UART bridge ready (TX=%d RX=%d baud=%d)", BRIDGE_UART_TX_GPIO, BRIDGE_UART_RX_GPIO,

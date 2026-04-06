@@ -22,3 +22,7 @@ void fw_ota_abort(void);
 
 // Returns true while an OTA session is open.
 bool fw_ota_in_progress(void);
+
+// Mark the running firmware as valid, cancelling automatic rollback.
+// Call once early in app_main after basic self-test passes.
+void fw_ota_mark_valid(void);
