@@ -1,7 +1,7 @@
 #!/bin/sh
 # Mandatory UI artifact generation.
 #
-# - Ensures docs/ui/assets/joycons-{left,right,both}.png exist (inspection copies).
+# - Ensures docs/ui/{default,dark}/backgrounds/ composites exist.
 # - Ensures .ui-bundle/ exists (ignored by git) for local runs.
 #
 # If tracked files are generated/updated, they are auto-staged.
@@ -25,5 +25,5 @@ fi
 git add version.json 2>/dev/null || true
 git add helper-app/joycon_helper/_version.py 2>/dev/null || true
 
-# Stage the inspection copies if they exist/changed.
-git add -A docs/ui/assets/joycons-none.png docs/ui/assets/joycons-left.png docs/ui/assets/joycons-right.png docs/ui/assets/joycons-both.png 2>/dev/null || true
+# Stage composited backgrounds if they changed.
+git add -A docs/ui/default/backgrounds/ docs/ui/dark/backgrounds/ 2>/dev/null || true

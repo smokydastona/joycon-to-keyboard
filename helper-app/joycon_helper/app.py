@@ -207,14 +207,26 @@ def _ui_bundle_search_roots() -> List[Path]:
     return _dedupe_paths(roots)
 
 
-def _joycons_search_roots() -> List[Path]:
+def _joycons_search_roots(theme: str = "default") -> List[Path]:
+    """Return search roots for device images, prioritising the given *theme*.
+
+    *theme* is one of ``"default"``, ``"dark"``.
+    The themed ``backgrounds/`` folder is searched first so the pre-baked
+    composited images are found before any fallback locations.
+    """
+    bundle_name = ".ui-bundle-dark" if theme == "dark" else ".ui-bundle"
     roots: List[Path] = []
     try:
+        cwd = Path.cwd()
+        # Theme-specific composited backgrounds (primary)
+        roots.append(cwd / "docs" / "ui" / theme / "backgrounds")
         roots.extend(
             [
-                Path.cwd(),
-                Path.cwd() / ".ui-bundle",
-                Path.cwd() / "docs" / "ui" / "assets",
+                cwd,
+                cwd / bundle_name / "backgrounds",
+                cwd / bundle_name,
+                cwd / ".ui-bundle" / "backgrounds",
+                cwd / ".ui-bundle",
             ]
         )
     except Exception:
@@ -222,20 +234,29 @@ def _joycons_search_roots() -> List[Path]:
 
     exe_dir = _executable_dir()
     if exe_dir is not None:
-        roots.extend([exe_dir, exe_dir / ".ui-bundle"])
+        roots.extend([exe_dir, exe_dir / bundle_name / "backgrounds", exe_dir / bundle_name,
+                      exe_dir / ".ui-bundle" / "backgrounds", exe_dir / ".ui-bundle"])
 
     bundle_root = _frozen_bundle_root()
     if bundle_root is not None:
-        roots.extend([bundle_root, bundle_root / ".ui-bundle"])
+        roots.extend([bundle_root, bundle_root / bundle_name / "backgrounds", bundle_root / bundle_name,
+                      bundle_root / ".ui-bundle" / "backgrounds", bundle_root / ".ui-bundle"])
 
     here = Path(__file__).resolve()
+    repo = here.parents[3]
     roots.extend(
         [
+            repo / "docs" / "ui" / theme / "backgrounds",  # composited backgrounds (primary)
             here.parents[1],  # helper-app/
-            here.parents[1] / ".ui-bundle",  # helper-app/.ui-bundle/
-            here.parents[3],  # repo root/
-            here.parents[3] / ".ui-bundle",  # repo root/.ui-bundle/
-            here.parents[3] / "docs" / "ui" / "assets",  # repo root/docs/ui/assets/
+            here.parents[1] / bundle_name / "backgrounds",
+            here.parents[1] / bundle_name,
+            here.parents[1] / ".ui-bundle" / "backgrounds",
+            here.parents[1] / ".ui-bundle",
+            repo,  # repo root/
+            repo / bundle_name / "backgrounds",
+            repo / bundle_name,
+            repo / ".ui-bundle" / "backgrounds",
+            repo / ".ui-bundle",
         ]
     )
     return _dedupe_paths(roots)
@@ -448,6 +469,7 @@ class App(tk.Tk):
         self._keymap_img_base: Optional[tk.PhotoImage] = None
         self._keymap_img_scaled = None  # tk.PhotoImage or ImageTk.PhotoImage
         self._keymap_pil_base = None  # PIL Image for Pillow composite path
+        self._keymap_is_composite = False  # True when using pre-baked composited PNG
         self._keymap_hotspot_px: Dict[str, Tuple[float, float]] = {}
 
         # M913 mouse overlay image (Mouse tab)
@@ -458,6 +480,7 @@ class App(tk.Tk):
         self._m913_img_base: Optional[tk.PhotoImage] = None
         self._m913_img_scaled = None  # tk.PhotoImage or ImageTk.PhotoImage
         self._m913_pil_base = None  # PIL Image for Pillow composite path
+        self._m913_is_composite = False  # True when using pre-baked composited PNG
 
         # Press-to-bind state
         self._bind_mode = False  # True = waiting for a keyboard key press
@@ -578,11 +601,13 @@ class App(tk.Tk):
         name = "background-dark.png" if prefer_dark else "background.png"
 
         search_roots = list(_joycons_search_roots())
-        # Also check docs/ui/ directly (where the PNGs live in the repo).
+        # Also check docs/ui/{theme}/backgrounds/ (where background PNGs live).
         here = Path(__file__).resolve()
-        search_roots.append(here.parents[3] / "docs" / "ui")
+        prefer_dark = self._detect_dark_preference()
+        bg_theme = "dark" if prefer_dark else "default"
+        search_roots.append(here.parents[3] / "docs" / "ui" / bg_theme / "backgrounds")
         try:
-            search_roots.append(Path.cwd() / "docs" / "ui")
+            search_roots.append(Path.cwd() / "docs" / "ui" / bg_theme / "backgrounds")
         except Exception:
             pass
 
@@ -705,6 +730,33 @@ class App(tk.Tk):
 
         photo = ImageTk.PhotoImage(composite)
         return photo, ox, oy, new_ov_w, new_ov_h
+
+    def _scale_composite_to_canvas(
+        self,
+        composite_pil: "PILImage.Image",
+        canvas_w: int,
+        canvas_h: int,
+    ) -> "Tuple[ImageTk.PhotoImage, int, int, int, int]":
+        """Scale a pre-baked composite image to cover the canvas.
+
+        Returns the same ``(photo, ox, oy, w, h)`` tuple as
+        :meth:`_composite_bg_overlay` so callers can use either
+        interchangeably.  *ox/oy* are always 0 because the composite
+        already contains the background.
+        """
+        src_w, src_h = composite_pil.size
+        scale = max(canvas_w / max(1, src_w), canvas_h / max(1, src_h))
+        new_w = max(1, int(src_w * scale))
+        new_h = max(1, int(src_h * scale))
+        resized = composite_pil.resize((new_w, new_h), PILImage.LANCZOS)
+
+        # Centre-crop to canvas dimensions.
+        left = (new_w - canvas_w) // 2
+        top = (new_h - canvas_h) // 2
+        cropped = resized.crop((left, top, left + canvas_w, top + canvas_h))
+
+        photo = ImageTk.PhotoImage(cropped)
+        return photo, 0, 0, canvas_w, canvas_h
 
     def _load_ui_theme(self) -> dict:
         # Decide light vs dark: check --dark flag, env var, or Windows dark-mode setting.
@@ -1401,33 +1453,38 @@ class App(tk.Tk):
 
     def _find_joycons_png_variants(self) -> Dict[str, Path]:
         prefer_dark = self._detect_dark_preference()
-        if prefer_dark:
-            variant_names = {
-                "none": "joycons-dark-none.png",
-                "left": "joycons-dark-left.png",
-                "right": "joycons-dark-right.png",
-                "both": "joycons-dark-both.png",
-            }
-        else:
-            variant_names = {
-                "none": "joycons-none.png",
-                "left": "joycons-left.png",
-                "right": "joycons-right.png",
-                "both": "joycons-both.png",
-            }
-        search_roots = _joycons_search_roots()
+        theme = "dark" if prefer_dark else "default"
+
+        # Composited and raw filenames are now identical; the theme folder
+        # determines light vs dark.  Search roots prioritise the themed
+        # ``backgrounds/`` folder so composites are found first.
+        variant_names = {
+            "none": "joycons-none.png",
+            "left": "joycons-left.png",
+            "right": "joycons-right.png",
+            "both": "joycons-both.png",
+        }
+        search_roots = _joycons_search_roots(theme)
 
         found: Dict[str, Path] = {}
+        is_composite = False
+
         for state, file_name in variant_names.items():
             for root in search_roots:
                 candidate = root / file_name
                 try:
                     if candidate.exists():
                         found[state] = candidate
+                        # If found in a themed backgrounds dir, it's composited.
+                        if "backgrounds" in str(candidate):
+                            is_composite = True
                         break
                 except Exception:
                     continue
 
+        self._keymap_is_composite = is_composite
+
+        # Legacy fallbacks (joycons.png / joycons-grey.png at repo root).
         fallback_base: Optional[Path] = None
         fallback_none: Optional[Path] = None
         fallback_candidates = [root / "joycons.png" for root in search_roots]
@@ -1496,40 +1553,42 @@ class App(tk.Tk):
         prefer_dark = self._detect_dark_preference()
 
         if layout == "incedius":
+            # Incedius composites live in the default/dark theme folders
+            # with "m913-incedius" naming.
             if prefer_dark:
-                variant_names = {
-                    "connected": "m913_Incedius-dark.png",
-                    "none": "m913_Incedius-dark-none.png",
-                }
+                theme = "dark"
             else:
-                variant_names = {
-                    "connected": "m913_Incedius.png",
-                    "none": "m913_Incedius-none.png",
-                }
+                theme = "default"
+            variant_names = {
+                "connected": "m913-incedius.png",
+                "none": "m913-incedius-none.png",
+            }
         else:
-            if prefer_dark:
-                variant_names = {
-                    "connected": "m913-dark.png",
-                    "none": "m913-dark-none.png",
-                }
-            else:
-                variant_names = {
-                    "connected": "m913.png",
-                    "none": "m913-none.png",
-                }
+            # Stock M913 — light/dark determined by theme folder.
+            theme = "dark" if prefer_dark else "default"
+            variant_names = {
+                "connected": "m913.png",
+                "none": "m913-none.png",
+            }
 
-        search_roots = _joycons_search_roots()
+        search_roots = _joycons_search_roots(theme)
 
         found: Dict[str, Path] = {}
+        is_composite = False
+
         for state, file_name in variant_names.items():
             for root in search_roots:
                 candidate = root / file_name
                 try:
                     if candidate.exists():
                         found[state] = candidate
+                        if "backgrounds" in str(candidate):
+                            is_composite = True
                         break
                 except Exception:
                     continue
+
+        self._m913_is_composite = is_composite
 
         # Fallback: use connected image for disconnected state if only one exists
         if "connected" in found and "none" not in found:
@@ -1586,9 +1645,14 @@ class App(tk.Tk):
 
         # Composite path (Pillow available): fuse overlay onto background.
         if self._m913_pil_base is not None:
-            photo, _ox, _oy, _ow, _oh = self._composite_bg_overlay(
-                self._m913_pil_base, w, h,
-            )
+            if getattr(self, "_m913_is_composite", False):
+                photo, _ox, _oy, _ow, _oh = self._scale_composite_to_canvas(
+                    self._m913_pil_base, w, h,
+                )
+            else:
+                photo, _ox, _oy, _ow, _oh = self._composite_bg_overlay(
+                    self._m913_pil_base, w, h,
+                )
             self._m913_img_scaled = photo  # prevent GC
             c.create_image(0, 0, image=photo, anchor="nw")
             return
@@ -1955,9 +2019,16 @@ class App(tk.Tk):
         # Composite path (Pillow available): fuse overlay onto background.
         if self._keymap_pil_base is not None:
             if need_full:
-                photo, ox, oy, img_w, img_h = self._composite_bg_overlay(
-                    self._keymap_pil_base, w, h,
-                )
+                if getattr(self, "_keymap_is_composite", False):
+                    # Pre-baked composite: just scale to fit canvas.
+                    photo, ox, oy, img_w, img_h = self._scale_composite_to_canvas(
+                        self._keymap_pil_base, w, h,
+                    )
+                else:
+                    # Raw overlay: fuse onto background at runtime.
+                    photo, ox, oy, img_w, img_h = self._composite_bg_overlay(
+                        self._keymap_pil_base, w, h,
+                    )
                 self._keymap_img_scaled = photo  # prevent GC
                 self._keymap_bg_item = c.create_image(0, 0, image=photo, anchor="nw")
                 self._keymap_overlay_ox = ox
@@ -3129,8 +3200,15 @@ class App(tk.Tk):
 
         # Locate and load pinouts.png
         self._help_pinout_base: Optional[tk.PhotoImage] = None
-        search_roots = _joycons_search_roots()
-        for root in search_roots:
+        search_roots = list(_joycons_search_roots())
+        # Also check docs/ui/reference/ directly (pinouts is theme-independent).
+        here = Path(__file__).resolve()
+        search_roots.append(here.parents[3] / "docs" / "ui" / "reference")
+        try:
+            search_roots.append(Path.cwd() / "docs" / "ui" / "reference")
+        except Exception:
+            pass
+        for root in _dedupe_paths(search_roots):
             candidate = root / "pinouts.png"
             try:
                 if candidate.exists():

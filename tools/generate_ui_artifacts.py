@@ -4,6 +4,9 @@ Goals:
 - Keep four inspection copies of joycons.png available (None/Left/Right/Both).
     - Left/Right variants use joycons-grey.png on the unused side.
     - None is a fully-grey disconnected view used by the helper app when no controllers are connected.
+- Pre-bake composited backgrounds: each device overlay is fused onto the app
+    background image so every tab shows a seamless background with the device
+    baked in.
 - Keep the local .ui-bundle/ generated (ignored by git) so the helper app can
     load a consistent theme bundle during development.
 
@@ -21,41 +24,53 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+# ── Directory layout ──
+UI_DIR = REPO_ROOT / "docs" / "ui"
+
+# Intermediate overlays go to a gitignored build dir (not committed).
+BUILD_DIR = REPO_ROOT / ".ui-build" / "overlays"
+
+# ── Joycon source images (at repo root — used for overlay rendering) ──
 JOYCONS_SRC = REPO_ROOT / "joycons.png"
 JOYCONS_GREY_SRC = REPO_ROOT / "joycons-grey.png"
 JOYCONS_DARK_SRC = REPO_ROOT / "joycons-dark.png"
 JOYCONS_DARK_GREY_SRC = REPO_ROOT / "joycons-dark-grey.png"
-JOYCONS_OUT_DIR = REPO_ROOT / "docs" / "ui" / "assets"
+JOYCONS_OUT_DIR = BUILD_DIR
 JOYCONS_COPIES = {
-    "joycons-none.png": "Inspection copy (none disconnected) derived from joycons-grey.png",
-    "joycons-left.png": "Inspection copy (left connected) composited from joycons.png + joycons-grey.png",
-    "joycons-right.png": "Inspection copy (right connected) composited from joycons.png + joycons-grey.png",
-    "joycons-both.png": "Inspection copy (both connected) derived from joycons.png",
+    "joycons-none.png": "Overlay variant (none) derived from joycons-grey.png",
+    "joycons-left.png": "Overlay variant (left connected) composited from joycons.png + joycons-grey.png",
+    "joycons-right.png": "Overlay variant (right connected) composited from joycons.png + joycons-grey.png",
+    "joycons-both.png": "Overlay variant (both connected) derived from joycons.png",
 }
 JOYCONS_DARK_COPIES = {
-    "joycons-dark-none.png": "Dark inspection copy (none) derived from joycons-dark-grey.png",
-    "joycons-dark-left.png": "Dark inspection copy (left connected) composited from joycons-dark.png + joycons-dark-grey.png",
-    "joycons-dark-right.png": "Dark inspection copy (right connected) composited from joycons-dark.png + joycons-dark-grey.png",
-    "joycons-dark-both.png": "Dark inspection copy (both connected) derived from joycons-dark.png",
-}
-
-# M913 mouse overlays — pre-rendered, no compositing needed.  Just copy.
-M913_SRC_DIR = REPO_ROOT / "docs" / "ui" / "assets"
-M913_LIGHT_COPIES = {
-    "m913.png": "M913 mouse overlay (light theme, connected)",
-    "m913-none.png": "M913 mouse overlay (light theme, disconnected)",
-}
-M913_DARK_COPIES = {
-    "m913-dark.png": "M913 mouse overlay (dark theme, connected)",
-    "m913-dark-none.png": "M913 mouse overlay (dark theme, disconnected)",
-}
-
-# Misc static assets — just copy.
-MISC_COPIES = {
-    "pinouts.png": "ESP32 / ESP32-S3 board pinout reference diagram",
+    "joycons-dark-none.png": "Dark overlay variant (none) derived from joycons-dark-grey.png",
+    "joycons-dark-left.png": "Dark overlay variant (left connected) composited from joycons-dark.png + joycons-dark-grey.png",
+    "joycons-dark-right.png": "Dark overlay variant (right connected) composited from joycons-dark.png + joycons-dark-grey.png",
+    "joycons-dark-both.png": "Dark overlay variant (both connected) derived from joycons-dark.png",
 }
 
 GENERATOR_SRC = Path(__file__).resolve()
+
+# ── Background + overlay compositing ──
+# Backgrounds now live inside theme folders (the composited PNGs are THE truth).
+BG_LIGHT = UI_DIR / "default" / "backgrounds" / "background.png"
+BG_DARK = UI_DIR / "dark" / "backgrounds" / "background-dark.png"
+
+# Map: output path (relative to UI_DIR) → (background path, overlay path)
+# Only Joy-Con composites are regenerated (overlays built from source art).
+# M913 stock + Incedius composites are committed truth and NOT regenerated.
+COMPOSITES: dict[str, tuple[Path, Path]] = {
+    # default (light) — Joy-Con
+    "default/backgrounds/joycons-none.png":  (BG_LIGHT, BUILD_DIR / "joycons-none.png"),
+    "default/backgrounds/joycons-left.png":  (BG_LIGHT, BUILD_DIR / "joycons-left.png"),
+    "default/backgrounds/joycons-right.png": (BG_LIGHT, BUILD_DIR / "joycons-right.png"),
+    "default/backgrounds/joycons-both.png":  (BG_LIGHT, BUILD_DIR / "joycons-both.png"),
+    # dark — Joy-Con
+    "dark/backgrounds/joycons-none.png":  (BG_DARK, BUILD_DIR / "joycons-dark-none.png"),
+    "dark/backgrounds/joycons-left.png":  (BG_DARK, BUILD_DIR / "joycons-dark-left.png"),
+    "dark/backgrounds/joycons-right.png": (BG_DARK, BUILD_DIR / "joycons-dark-right.png"),
+    "dark/backgrounds/joycons-both.png":  (BG_DARK, BUILD_DIR / "joycons-dark-both.png"),
+}
 
 UI_BUNDLE_DIR = REPO_ROOT / ".ui-bundle"
 UI_BUNDLE_GENERATOR = REPO_ROOT / "tools" / "generate_ui_bundle.py"
@@ -65,17 +80,18 @@ UI_BUNDLE_INPUTS = [
     JOYCONS_GREY_SRC,
     JOYCONS_DARK_SRC,
     JOYCONS_DARK_GREY_SRC,
-    REPO_ROOT / "docs" / "ui" / "background.png",
-    REPO_ROOT / "docs" / "ui" / "background-dark.png",
-    REPO_ROOT / "docs" / "ui" / "assets" / "m913.png",
-    REPO_ROOT / "docs" / "ui" / "assets" / "m913-none.png",
-    REPO_ROOT / "docs" / "ui" / "assets" / "m913-dark.png",
-    REPO_ROOT / "docs" / "ui" / "assets" / "m913-dark-none.png",
-    REPO_ROOT / "docs" / "ui" / "assets" / "m913_Incedius.png",
-    REPO_ROOT / "docs" / "ui" / "assets" / "m913_Incedius-none.png",
-    REPO_ROOT / "docs" / "ui" / "assets" / "m913_Incedius-dark.png",
-    REPO_ROOT / "docs" / "ui" / "assets" / "m913_Incedius-dark-none.png",
-    REPO_ROOT / "docs" / "ui" / "assets" / "pinouts.png",
+    BG_LIGHT,
+    BG_DARK,
+    # Composited backgrounds are the truth — they are bundle inputs.
+    UI_DIR / "default" / "backgrounds" / "m913.png",
+    UI_DIR / "default" / "backgrounds" / "m913-none.png",
+    UI_DIR / "dark" / "backgrounds" / "m913.png",
+    UI_DIR / "dark" / "backgrounds" / "m913-none.png",
+    UI_DIR / "default" / "backgrounds" / "m913-incedius.png",
+    UI_DIR / "default" / "backgrounds" / "m913-incedius-none.png",
+    UI_DIR / "dark" / "backgrounds" / "m913-incedius.png",
+    UI_DIR / "dark" / "backgrounds" / "m913-incedius-none.png",
+    UI_DIR / "reference" / "pinouts.png",
 ]
 
 
@@ -145,6 +161,57 @@ def _render_joycons_variant(
 
     dst.parent.mkdir(parents=True, exist_ok=True)
     out.save(dst, format="PNG", optimize=True)
+    return True
+
+
+def _composite_overlay_on_bg(
+    dst: Path,
+    bg_path: Path,
+    overlay_path: Path,
+) -> bool:
+    """Fuse *overlay_path* centred onto *bg_path* and write to *dst*.
+
+    The background is scaled to cover the overlay's dimensions (so the
+    composite is the same size as the overlay — it IS the tab background).
+    """
+    if not bg_path.exists() or not overlay_path.exists():
+        return False
+
+    if not _needs_update([bg_path, overlay_path, GENERATOR_SRC], dst):
+        return False
+
+    try:
+        from PIL import Image  # type: ignore
+    except Exception:
+        print(
+            "[ui-artifacts] Pillow is required to render composited backgrounds.\n"
+            "Install with: pip install Pillow",
+            file=sys.stderr,
+        )
+        raise
+
+    overlay = Image.open(overlay_path).convert("RGBA")
+    bg = Image.open(bg_path).convert("RGBA")
+
+    ov_w, ov_h = overlay.size
+
+    # Scale the background to cover the overlay dimensions.
+    bg_w, bg_h = bg.size
+    scale = max(ov_w / bg_w, ov_h / bg_h)
+    new_bg_w = int(bg_w * scale)
+    new_bg_h = int(bg_h * scale)
+    bg_resized = bg.resize((new_bg_w, new_bg_h), Image.LANCZOS)
+
+    # Centre-crop to overlay dimensions.
+    left = (new_bg_w - ov_w) // 2
+    top = (new_bg_h - ov_h) // 2
+    composite = bg_resized.crop((left, top, left + ov_w, top + ov_h))
+
+    # Alpha-composite the overlay onto the background.
+    composite = Image.alpha_composite(composite.convert("RGBA"), overlay)
+
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    composite.save(dst, format="PNG", optimize=True)
     return True
 
 
@@ -220,10 +287,21 @@ def main() -> int:
         print(f"[ui-artifacts] bundle generation failed: {e}")
         return 2
 
+    # ── Pre-bake composited backgrounds (overlay fused onto background) ──
+    for name, (bg, overlay) in COMPOSITES.items():
+        dst = UI_DIR / name
+        try:
+            did = _composite_overlay_on_bg(dst, bg, overlay)
+        except Exception as e:
+            print(f"[ui-artifacts] composite failed for {name}: {e}", file=sys.stderr)
+            return 4
+        if did:
+            changed.append(str(dst.relative_to(REPO_ROOT)))
+
     # Copy background PNGs into the bundle so the helper app can find them.
     BG_PNGS = {
-        "background.png": REPO_ROOT / "docs" / "ui" / "background.png",
-        "background-dark.png": REPO_ROOT / "docs" / "ui" / "background-dark.png",
+        "background.png": BG_LIGHT,
+        "background-dark.png": BG_DARK,
     }
     for dst_name, src in BG_PNGS.items():
         if src.exists():

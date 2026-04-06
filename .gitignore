@@ -16,3 +16,4 @@ logs/
 crash-logs/
 pending_fw/
 codesign_dev/
+.ui-build/
