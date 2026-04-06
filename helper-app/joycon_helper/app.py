@@ -52,14 +52,14 @@ DEFAULT_UI_THEME: dict = {
         "text": "#2a1f0e",
         "muted": "#6b5d48",
         "border": "#b09878",
-        "accent": "#2f4a9e",
-        "accent2": "#2b6a4b",
-        "danger": "#b42318",
-        "warning": "#a16207",
-        "active": "#2b6a4b",
-        "conflict": "#b42318",
-        "modified": "#a16207",
-        "selected": "#2f4a9e",
+        "accent": "#4a6480",
+        "accent2": "#4a7060",
+        "danger": "#9e4040",
+        "warning": "#8a6830",
+        "active": "#4a7060",
+        "conflict": "#9e4040",
+        "modified": "#8a6830",
+        "selected": "#4a6480",
         "pulse_bright": "#60c090",
         "timeline_press": "#2b6a4b",
         "timeline_release": "#6b5d48",
@@ -86,14 +86,14 @@ DARK_UI_THEME: dict = {
         "text": "#a8bcd0",
         "muted": "#6888aa",
         "border": "#2a3a54",
-        "accent": "#4a7cc8",
-        "accent2": "#3a8a5c",
-        "danger": "#c84848",
-        "warning": "#b89030",
-        "active": "#3a8a5c",
-        "conflict": "#c84848",
-        "modified": "#b89030",
-        "selected": "#4a7cc8",
+        "accent": "#5a7890",
+        "accent2": "#4a8068",
+        "danger": "#a85050",
+        "warning": "#988848",
+        "active": "#4a8068",
+        "conflict": "#a85050",
+        "modified": "#988848",
+        "selected": "#5a7890",
         "pulse_bright": "#60c898",
         "timeline_press": "#3a8a5c",
         "timeline_release": "#6888aa",
@@ -573,6 +573,87 @@ class OverlayWindow(tk.Toplevel):
         self.last_macro_var.set(f"Macro: {macro_id}  ({state})")
 
 
+class SketchPopup(tk.Toplevel):
+    """Themed popup dialog with pencil-sketch aesthetic.
+
+    Opens as a non-modal transient window positioned near the parent.
+    Reuse the same instance by calling ``show()`` / ``hide()`` instead
+    of creating/destroying.
+    """
+
+    def __init__(self, parent: tk.Tk, title: str = "", colors: Optional[dict] = None,
+                 typo: Optional[dict] = None, width: int = 420, height: int = 340) -> None:
+        super().__init__(parent)
+        self._parent = parent
+        self._colors = colors or DEFAULT_UI_THEME["colors"]
+        self._typo = typo or DEFAULT_UI_THEME["typography"]
+
+        self.title(title)
+        self.geometry(f"{width}x{height}")
+        self.resizable(True, True)
+        self.transient(parent)
+        self.protocol("WM_DELETE_WINDOW", self.hide)
+
+        bg = self._colors.get("bg", "#e8d8b8")
+        self.configure(bg=bg)
+        try:
+            self.attributes("-alpha", 0.96)
+        except Exception:
+            pass
+
+        # Title bar with sketch font
+        title_frame = tk.Frame(self, bg=self._colors.get("panel2", "#e2d0a8"), height=32)
+        title_frame.pack(fill=tk.X)
+        title_frame.pack_propagate(False)
+
+        font_family = self._typo.get("font_family", "Segoe Print")
+        tk.Label(
+            title_frame, text=title,
+            font=(font_family, 11),
+            bg=self._colors.get("panel2", "#e2d0a8"),
+            fg=self._colors.get("text", "#2a1f0e"),
+            padx=10, anchor="w",
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        close_btn = tk.Label(
+            title_frame, text=" x ",
+            font=(font_family, 10),
+            bg=self._colors.get("panel2", "#e2d0a8"),
+            fg=self._colors.get("muted", "#6b5d48"),
+            cursor="hand2",
+        )
+        close_btn.pack(side=tk.RIGHT, padx=(0, 6))
+        close_btn.bind("<Button-1>", lambda _: self.hide())
+
+        # Divider line
+        div = tk.Frame(self, height=2, bg=self._colors.get("border", "#b09878"))
+        div.pack(fill=tk.X)
+
+        # Content area — subclasses / callers pack widgets into self.body
+        self.body = tk.Frame(self, bg=bg)
+        self.body.pack(fill=tk.BOTH, expand=True, padx=8, pady=8)
+
+        # Start hidden
+        self.withdraw()
+
+    def show(self) -> None:
+        """Show the popup, positioning near the parent if not already placed."""
+        self.deiconify()
+        self.lift()
+        self.focus_force()
+
+    def hide(self) -> None:
+        """Hide the popup without destroying it."""
+        self.withdraw()
+
+    def toggle(self) -> None:
+        """Toggle visibility."""
+        if self.winfo_viewable():
+            self.hide()
+        else:
+            self.show()
+
+
 class App(tk.Tk):
     def __init__(self) -> None:
         super().__init__()
@@ -1048,9 +1129,9 @@ class App(tk.Tk):
         )
         style.configure("TCombobox", padding=(6, 3))
 
-        # Buttons
-        style.configure("TButton", padding=(10, 6), font=base_font)
-        style.configure("Primary.TButton", padding=(10, 6), font=base_font)
+        # Buttons (muted — reduced padding and subtle styling)
+        style.configure("TButton", padding=(6, 3), font=base_font)
+        style.configure("Primary.TButton", padding=(6, 3), font=base_font)
 
         # Notebook
         try:
@@ -2271,40 +2352,46 @@ class App(tk.Tk):
             self._mapping_type.set("passthrough")
 
     def _build_keymap_editor(self) -> None:
-        box = ttk.LabelFrame(self.tab_controller, text="Keymap editor")
-        box.pack(fill=tk.BOTH, expand=True, padx=8, pady=(8, 8))
+        parent = self.tab_controller
 
-        top = ttk.Frame(box)
-        top.pack(fill=tk.X, padx=8, pady=(6, 6))
-        ttk.Label(top, textvariable=self._keymap_status, wraplength=480, justify="left").pack(side=tk.LEFT)
+        # ── Compact toolbar ──
+        toolbar = ttk.Frame(parent)
+        toolbar.pack(fill=tk.X, padx=8, pady=(0, 2))
 
-        btns = ttk.Frame(top)
-        btns.pack(side=tk.RIGHT)
-        ttk.Button(btns, text="Guided Setup", command=self._open_guided_wizard).pack(side=tk.LEFT)
-        ttk.Button(btns, text="Smart Defaults", command=self._apply_smart_defaults).pack(side=tk.LEFT, padx=(6, 0))
-        ttk.Button(btns, text="Learn selected", command=self._keymap_begin_learn).pack(side=tk.LEFT, padx=(6, 0))
-        self._bind_btn = ttk.Button(btns, text="Bind key", command=self._keymap_begin_bind)
-        self._bind_btn.pack(side=tk.LEFT, padx=(6, 0))
-        ttk.Button(btns, text="Clear binding", command=self._keymap_clear_selected).pack(side=tk.LEFT, padx=(6, 0))
-        ttk.Button(btns, text="Reset button", command=self._keymap_reset_selected).pack(side=tk.LEFT, padx=(6, 0))
+        # Popup trigger buttons (open on-demand panels)
+        ttk.Button(toolbar, text="Map\u2026", command=lambda: self._mapping_popup.toggle(), width=6).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Layers\u2026", command=lambda: self._layers_popup.toggle(), width=8).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Chords\u2026", command=lambda: self._chords_popup.toggle(), width=8).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Keyboard\u2026", command=lambda: self._keyboard_popup.toggle(), width=10).pack(side=tk.LEFT, padx=2)
 
-        # ── Search bar ──
-        search_row = ttk.Frame(box)
-        search_row.pack(fill=tk.X, padx=8, pady=(0, 4))
-        ttk.Label(search_row, text="Search:").pack(side=tk.LEFT)
-        search_entry = ttk.Entry(search_row, textvariable=self._search_var, width=20)
-        search_entry.pack(side=tk.LEFT, padx=(4, 8))
-        self._search_var.trace_add("write", self._on_search_changed)
-        ttk.Button(search_row, text="Clear", command=lambda: self._search_var.set("")).pack(side=tk.LEFT)
+        sep = ttk.Separator(toolbar, orient=tk.VERTICAL)
+        sep.pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=2)
 
-        # Sandbox toggle
+        # Compact action buttons
+        ttk.Button(toolbar, text="Setup", command=self._open_guided_wizard).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Defaults", command=self._apply_smart_defaults).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Learn", command=self._keymap_begin_learn).pack(side=tk.LEFT, padx=2)
+        self._bind_btn = ttk.Button(toolbar, text="Bind", command=self._keymap_begin_bind)
+        self._bind_btn.pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Clear", command=self._keymap_clear_selected).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Reset", command=self._keymap_reset_selected).pack(side=tk.LEFT, padx=2)
+
+        # Right side: search + sandbox
         ttk.Checkbutton(
-            search_row, text="Sandbox mode", variable=self._sandbox_active,
+            toolbar, text="Sandbox", variable=self._sandbox_active,
             command=self._toggle_sandbox,
-        ).pack(side=tk.RIGHT, padx=(12, 0))
+        ).pack(side=tk.RIGHT, padx=(4, 0))
+        ttk.Entry(toolbar, textvariable=self._search_var, width=14).pack(side=tk.RIGHT, padx=2)
+        self._search_var.trace_add("write", self._on_search_changed)
+        ttk.Label(toolbar, text="Search:").pack(side=tk.RIGHT)
 
-        self._keymap_canvas = tk.Canvas(box, height=340, highlightthickness=1)
-        self._keymap_canvas.pack(fill=tk.BOTH, expand=True, padx=8, pady=(0, 8))
+        # ── Status line ──
+        ttk.Label(parent, textvariable=self._keymap_status, wraplength=700,
+                  justify="left").pack(fill=tk.X, padx=8)
+
+        # ── Canvas: DOMINANT — fills all remaining space ──
+        self._keymap_canvas = tk.Canvas(parent, highlightthickness=1)
+        self._keymap_canvas.pack(fill=tk.BOTH, expand=True, padx=8, pady=(4, 4))
         try:
             self._keymap_canvas.configure(bg=self._colors["panel2"], highlightbackground=self._colors["border"])
         except Exception:
@@ -2320,41 +2407,81 @@ class App(tk.Tk):
 
         self._keymap_img_paths = self._find_joycons_png_variants()
         self._set_keymap_image_state()
-
         self._keymap_redraw()
 
-        # ── Keyboard preview (shows which PC keys are mapped) ──
-        kbd_label = ttk.Label(box, text="Keyboard output preview", style="Muted.TLabel")
-        kbd_label.pack(anchor="w", padx=8, pady=(4, 0))
-        self._kbd_canvas = tk.Canvas(box, height=200, highlightthickness=1)
-        self._kbd_canvas.pack(fill=tk.BOTH, padx=8, pady=(0, 4))
-        try:
-            self._kbd_canvas.configure(
-                bg=self._colors["panel2"],
-                highlightbackground=self._colors["border"],
-            )
-        except Exception:
-            pass
-        self._kbd_canvas.bind("<Configure>", lambda _e: self._kbd_redraw())
-        self._load_keyboard_image()
-        self._kbd_redraw()
+        # ── Conflict bar (compact, below canvas) ──
+        self._conflict_var = tk.StringVar(value="")
+        conflict_bar = ttk.Frame(parent)
+        conflict_bar.pack(fill=tk.X, padx=8, pady=(0, 4))
+        self._conflict_label = ttk.Label(conflict_bar, textvariable=self._conflict_var,
+                                          foreground=self._colors.get("danger", "red"))
+        self._conflict_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self._conflict_fix_btn = ttk.Button(conflict_bar, text="Auto-fix", command=self._conflict_auto_fix)
+        self._conflict_fix_btn.pack(side=tk.LEFT, padx=(4, 0))
+        self._conflict_fix_btn.pack_forget()  # hidden by default
+
+        # ── Build popup panels ──
+        self._build_mapping_popup()
+        self._build_layers_popup()
+        self._build_chords_popup()
+        self._build_keyboard_popup()
+
+    # ------------------------------------------------------------------
+    # Keymap editor popup panels (opened via toolbar buttons)
+    # ------------------------------------------------------------------
+
+    def _build_mapping_popup(self) -> None:
+        """Build the mapping controls popup (input key_id, type, remap, macro)."""
+        self._mapping_popup = SketchPopup(
+            self, title="Input Mapping", colors=self._colors,
+            typo=self._typo, width=520, height=120)
+        body = self._mapping_popup.body
+
+        r = ttk.Frame(body)
+        r.pack(fill=tk.X, pady=(4, 4))
+
+        ttk.Label(r, text="Input key_id:").pack(side=tk.LEFT)
+        ttk.Entry(r, textvariable=self._mapping_key_id, width=6).pack(side=tk.LEFT, padx=(6, 12))
+
+        ttk.Label(r, text="Type:").pack(side=tk.LEFT)
+        ttk.Combobox(
+            r, textvariable=self._mapping_type,
+            values=["passthrough", "disable", "remap", "remap_hid", "macro", "tap_hold"],
+            width=14, state="readonly",
+        ).pack(side=tk.LEFT, padx=(6, 12))
+
+        r2 = ttk.Frame(body)
+        r2.pack(fill=tk.X, pady=(0, 4))
+
+        ttk.Label(r2, text="Remap to:").pack(side=tk.LEFT)
+        ttk.Entry(r2, textvariable=self._mapping_remap_to, width=6).pack(side=tk.LEFT, padx=(6, 12))
+
+        ttk.Label(r2, text="Macro id:").pack(side=tk.LEFT)
+        ttk.Entry(r2, textvariable=self._mapping_macro_id, width=14).pack(side=tk.LEFT, padx=(6, 12))
+
+        ttk.Button(r2, text="Apply", command=self._mapping_apply).pack(side=tk.LEFT)
+
+    def _build_layers_popup(self) -> None:
+        """Build the layers popup (layer selector, config, stack summary)."""
+        self._layers_popup = SketchPopup(
+            self, title="Layers", colors=self._colors,
+            typo=self._typo, width=560, height=260)
+        body = self._layers_popup.body
 
         # Layer selector
-        layer_box = ttk.LabelFrame(box, text="Layer")
-        layer_box.pack(fill=tk.X, padx=8, pady=(0, 4))
-        layer_row = ttk.Frame(layer_box)
-        layer_row.pack(fill=tk.X, padx=8, pady=(4, 4))
+        layer_row = ttk.Frame(body)
+        layer_row.pack(fill=tk.X, pady=(4, 4))
         ttk.Radiobutton(layer_row, text="Base", variable=self._layer_edit_index, value=-1,
                         command=self._keymap_redraw).pack(side=tk.LEFT)
         for li in range(4):
             ttk.Radiobutton(layer_row, text=f"Layer {li+1}", variable=self._layer_edit_index, value=li,
                             command=self._keymap_redraw).pack(side=tk.LEFT, padx=(8, 0))
-        ttk.Button(layer_row, text="Add layer", command=self._layer_add).pack(side=tk.LEFT, padx=(16, 0))
-        ttk.Button(layer_row, text="Remove layer", command=self._layer_remove).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Button(layer_row, text="Add", command=self._layer_add).pack(side=tk.LEFT, padx=(16, 0))
+        ttk.Button(layer_row, text="Remove", command=self._layer_remove).pack(side=tk.LEFT, padx=(6, 0))
 
-        # Layer activation config (only visible when a layer is selected)
-        self._layer_cfg_frame = ttk.Frame(layer_box)
-        self._layer_cfg_frame.pack(fill=tk.X, padx=8, pady=(0, 4))
+        # Layer activation config
+        self._layer_cfg_frame = ttk.Frame(body)
+        self._layer_cfg_frame.pack(fill=tk.X, pady=(0, 4))
         self._advanced_widgets.append(self._layer_cfg_frame)
         ttk.Label(self._layer_cfg_frame, text="Activation key_id:").pack(side=tk.LEFT)
         self._layer_key_id_var = tk.StringVar(value="")
@@ -2366,77 +2493,62 @@ class App(tk.Tk):
         ttk.Label(self._layer_cfg_frame, text="Name:").pack(side=tk.LEFT)
         self._layer_name_var = tk.StringVar(value="")
         ttk.Entry(self._layer_cfg_frame, textvariable=self._layer_name_var, width=14).pack(side=tk.LEFT, padx=(4, 8))
-        ttk.Button(self._layer_cfg_frame, text="Apply layer config", command=self._layer_apply_config).pack(side=tk.LEFT)
+        ttk.Button(self._layer_cfg_frame, text="Apply", command=self._layer_apply_config).pack(side=tk.LEFT)
 
         # Visual layer stack summary
-        self._layer_stack_frame = ttk.Frame(layer_box)
-        self._layer_stack_frame.pack(fill=tk.X, padx=8, pady=(0, 4))
+        self._layer_stack_frame = ttk.Frame(body)
+        self._layer_stack_frame.pack(fill=tk.X, pady=(0, 4))
         self._layer_stack_labels: list[ttk.Label] = []
         self._advanced_widgets.append(self._layer_stack_frame)
         self._rebuild_layer_stack()
 
-        # Minimal inline mapping controls for the selected/bound input key_id.
-        map_box = ttk.LabelFrame(box, text="Selected input mapping")
-        map_box.pack(fill=tk.X, padx=8, pady=(0, 8))
-        r = ttk.Frame(map_box)
-        r.pack(fill=tk.X, padx=8, pady=(6, 6))
+    def _build_chords_popup(self) -> None:
+        """Build the chords popup (multi-button combos)."""
+        self._chords_popup = SketchPopup(
+            self, title="Chords (multi-button combos)", colors=self._colors,
+            typo=self._typo, width=500, height=200)
+        body = self._chords_popup.body
 
-        ttk.Label(r, text="Input key_id:").pack(side=tk.LEFT)
-        ttk.Entry(r, textvariable=self._mapping_key_id, width=6).pack(side=tk.LEFT, padx=(6, 12))
-
-        ttk.Label(r, text="Type:").pack(side=tk.LEFT)
-        ttk.Combobox(
-            r,
-            textvariable=self._mapping_type,
-            values=["passthrough", "disable", "remap", "remap_hid", "macro", "tap_hold"],
-            width=14,
-            state="readonly",
-        ).pack(side=tk.LEFT, padx=(6, 12))
-
-        ttk.Label(r, text="Remap to:").pack(side=tk.LEFT)
-        ttk.Entry(r, textvariable=self._mapping_remap_to, width=6).pack(side=tk.LEFT, padx=(6, 12))
-
-        ttk.Label(r, text="Macro id:").pack(side=tk.LEFT)
-        ttk.Entry(r, textvariable=self._mapping_macro_id, width=14).pack(side=tk.LEFT, padx=(6, 12))
-
-        ttk.Button(r, text="Apply", command=self._mapping_apply).pack(side=tk.LEFT)
-
-        # Conflict warning label
-        self._conflict_var = tk.StringVar(value="")
-        self._conflict_label = ttk.Label(box, textvariable=self._conflict_var, foreground=self._colors.get("danger", "red"))
-        self._conflict_label.pack(fill=tk.X, padx=8, pady=(0, 4))
-
-        # Fix-conflicts button (hidden when no conflicts)
-        self._conflict_fix_btn = ttk.Button(box, text="Auto-fix conflicts", command=self._conflict_auto_fix)
-        self._conflict_fix_btn.pack(padx=8, anchor="w", pady=(0, 4))
-        self._conflict_fix_btn.pack_forget()  # hidden by default
-
-        # ── Chording section ──
-        chord_box = ttk.LabelFrame(box, text="Chords (multi-button combos)")
-        chord_box.pack(fill=tk.X, padx=8, pady=(0, 8))
-        self._advanced_widgets.append(chord_box)
-        chord_info = ttk.Label(
-            chord_box,
+        ttk.Label(
+            body,
             text="Define combos: press multiple controller buttons simultaneously for a different action.",
-            wraplength=700,
-            justify="left",
-        )
-        chord_info.pack(anchor="w", padx=8, pady=(4, 2))
-        chord_row = ttk.Frame(chord_box)
-        chord_row.pack(fill=tk.X, padx=8, pady=(0, 4))
+            wraplength=460, justify="left",
+        ).pack(anchor="w", pady=(4, 4))
+
+        chord_row = ttk.Frame(body)
+        chord_row.pack(fill=tk.X, pady=(0, 4))
         ttk.Label(chord_row, text="Keys (comma-sep key_ids):").pack(side=tk.LEFT)
         self._chord_keys_var = tk.StringVar(value="")
         ttk.Entry(chord_row, textvariable=self._chord_keys_var, width=16).pack(side=tk.LEFT, padx=(4, 8))
         ttk.Label(chord_row, text="Output keycode:").pack(side=tk.LEFT)
         self._chord_output_var = tk.StringVar(value="")
         ttk.Entry(chord_row, textvariable=self._chord_output_var, width=8).pack(side=tk.LEFT, padx=(4, 8))
-        ttk.Button(chord_row, text="Add chord", command=self._chord_add).pack(side=tk.LEFT, padx=(4, 0))
-        ttk.Button(chord_row, text="Clear chords", command=self._chord_clear).pack(side=tk.LEFT, padx=(4, 0))
+        ttk.Button(chord_row, text="Add", command=self._chord_add).pack(side=tk.LEFT, padx=(4, 0))
+        ttk.Button(chord_row, text="Clear all", command=self._chord_clear).pack(side=tk.LEFT, padx=(4, 0))
 
         self._chord_list_var = tk.StringVar(value="(none)")
-        ttk.Label(chord_box, textvariable=self._chord_list_var, wraplength=700, justify="left").pack(
-            anchor="w", padx=8, pady=(0, 4)
-        )
+        ttk.Label(body, textvariable=self._chord_list_var, wraplength=460, justify="left").pack(
+            anchor="w", pady=(0, 4))
+
+    def _build_keyboard_popup(self) -> None:
+        """Build the keyboard preview popup (shows which PC keys are mapped)."""
+        self._keyboard_popup = SketchPopup(
+            self, title="Keyboard Output Preview", colors=self._colors,
+            typo=self._typo, width=800, height=320)
+        body = self._keyboard_popup.body
+
+        self._kbd_canvas = tk.Canvas(body, height=260, highlightthickness=1)
+        self._kbd_canvas.pack(fill=tk.BOTH, expand=True)
+        try:
+            self._kbd_canvas.configure(
+                bg=self._colors["panel2"],
+                highlightbackground=self._colors["border"],
+            )
+        except Exception:
+            pass
+        self._kbd_canvas.bind("<Configure>", lambda _e: self._kbd_redraw())
+        self._load_keyboard_image()
+        self._kbd_redraw()
 
     def _get_mapping_output(self, key_id: int) -> Optional[Tuple[int, int]]:
         """Return the (mod, keycode) output for a key_id, or None if passthrough/default."""
@@ -2584,7 +2696,7 @@ class App(tk.Tk):
                 parts = [f"{key}: {', '.join(names)}" for key, names in conflicts.items()]
                 self._conflict_var.set("Conflicts: " + "; ".join(parts))
                 try:
-                    self._conflict_fix_btn.pack(padx=8, anchor="w", pady=(0, 4))
+                    self._conflict_fix_btn.pack(side=tk.LEFT, padx=(4, 0))
                 except Exception:
                     pass
             else:
@@ -3558,7 +3670,7 @@ class App(tk.Tk):
     # ------------------------------------------------------------------
 
     def _build_mouse_tab(self) -> None:
-        """Build the Mouse tab: M913 device selection, buttons, DPI, LED, polling."""
+        """Build the Mouse tab: M913 device selection + dominant overlay + popup panels."""
         parent = self.tab_mouse
 
         # ── Instance state ──
@@ -3570,47 +3682,30 @@ class App(tk.Tk):
         self._m913_dpi_en_vars: List[tk.BooleanVar] = []
         self._m913_registry = m913_device.load_device_registry()
 
-        # ── Top bar: device selector + scan ──
-        dev_frame = ttk.LabelFrame(parent, text="M913 Device")
-        dev_frame.pack(fill=tk.X, padx=6, pady=(6, 3))
+        # ── Compact toolbar: device + layout + popup triggers ──
+        toolbar = ttk.Frame(parent)
+        toolbar.pack(fill=tk.X, padx=6, pady=(6, 2))
 
-        row = ttk.Frame(dev_frame)
-        row.pack(fill=tk.X, padx=6, pady=4)
-
-        ttk.Label(row, text="Device:").pack(side=tk.LEFT)
+        ttk.Label(toolbar, text="Device:").pack(side=tk.LEFT)
         self._m913_dev_var = tk.StringVar()
-        self._m913_dev_combo = ttk.Combobox(row, textvariable=self._m913_dev_var,
-                                            state="readonly", width=36)
-        self._m913_dev_combo.pack(side=tk.LEFT, padx=(4, 6))
+        self._m913_dev_combo = ttk.Combobox(toolbar, textvariable=self._m913_dev_var,
+                                            state="readonly", width=24)
+        self._m913_dev_combo.pack(side=tk.LEFT, padx=(4, 4))
         self._m913_dev_combo.bind("<<ComboboxSelected>>", lambda _: self._m913_on_device_selected())
 
-        ttk.Button(row, text="Scan", command=self._m913_scan_devices).pack(side=tk.LEFT, padx=2)
-        ttk.Button(row, text="Apply", command=self._m913_apply_config).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Scan", command=self._m913_scan_devices).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Apply", command=self._m913_apply_config).pack(side=tk.LEFT, padx=2)
 
-        if not m913_device.HID_AVAILABLE:
-            ttk.Label(dev_frame, text="⚠ hidapi not installed — install with: pip install hidapi",
-                      foreground=self._colors.get("danger", "red")).pack(padx=6, pady=2)
+        sep = ttk.Separator(toolbar, orient=tk.VERTICAL)
+        sep.pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=2)
 
-        # ── Sister profile linking ──
-        sister_row = ttk.Frame(dev_frame)
-        sister_row.pack(fill=tk.X, padx=6, pady=(0, 4))
-        ttk.Label(sister_row, text="Link to Joy-Con slot:").pack(side=tk.LEFT)
-        self._m913_sister_var = tk.StringVar(value="None")
-        sister_cb = ttk.Combobox(sister_row, textvariable=self._m913_sister_var,
-                                 values=["None", "Slot 1", "Slot 2", "Slot 3", "Slot 4"],
-                                 state="readonly", width=10)
-        sister_cb.pack(side=tk.LEFT, padx=4)
-        sister_cb.bind("<<ComboboxSelected>>", lambda _: self._m913_on_sister_changed())
-
-        # ── Layout mode (Stock M913 vs IncediusMod) ──
-        layout_row = ttk.Frame(dev_frame)
-        layout_row.pack(fill=tk.X, padx=6, pady=(0, 4))
-        ttk.Label(layout_row, text="Layout:").pack(side=tk.LEFT)
+        # Layout selector
+        ttk.Label(toolbar, text="Layout:").pack(side=tk.LEFT)
         self._m913_layout_var = tk.StringVar(value=self._m913_profile.layout)
         layout_display = {"stock": "Stock M913", "incedius": "IncediusMod"}
         self._m913_layout_display = layout_display
         self._m913_layout_reverse = {v: k for k, v in layout_display.items()}
-        layout_cb = ttk.Combobox(layout_row, textvariable=self._m913_layout_var,
+        layout_cb = ttk.Combobox(toolbar, textvariable=self._m913_layout_var,
                                  values=list(layout_display.values()),
                                  state="readonly", width=14)
         layout_cb.set(layout_display.get(self._m913_profile.layout, "Stock M913"))
@@ -3618,16 +3713,43 @@ class App(tk.Tk):
         layout_cb.bind("<<ComboboxSelected>>", lambda _: self._m913_on_layout_changed())
 
         self._m913_edit_layout_btn = ttk.Button(
-            layout_row, text="Edit Map\u2026",
+            toolbar, text="Edit Map\u2026",
             command=self._m913_edit_incedius_map)
-        self._m913_edit_layout_btn.pack(side=tk.LEFT, padx=4)
-        # Only enable when IncediusMod is selected
+        self._m913_edit_layout_btn.pack(side=tk.LEFT, padx=2)
         self._m913_edit_layout_btn.state(
             ["!disabled"] if self._m913_profile.layout == "incedius" else ["disabled"])
 
-        # ── M913 overlay image ──
-        self._m913_overlay_canvas = tk.Canvas(parent, height=220, highlightthickness=1)
-        self._m913_overlay_canvas.pack(fill=tk.X, padx=6, pady=(3, 3))
+        sep2 = ttk.Separator(toolbar, orient=tk.VERTICAL)
+        sep2.pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=2)
+
+        # Popup trigger buttons
+        ttk.Button(toolbar, text="Buttons\u2026",
+                   command=lambda: self._m913_buttons_popup.toggle()).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="DPI\u2026",
+                   command=lambda: self._m913_dpi_popup.toggle()).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="LED\u2026",
+                   command=lambda: self._m913_led_popup.toggle()).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Settings\u2026",
+                   command=lambda: self._m913_settings_popup.toggle()).pack(side=tk.LEFT, padx=2)
+
+        if not m913_device.HID_AVAILABLE:
+            ttk.Label(parent, text="\u26a0 hidapi not installed \u2014 pip install hidapi",
+                      foreground=self._colors.get("danger", "red")).pack(padx=6, pady=2)
+
+        # ── Sister profile linking (compact) ──
+        link_row = ttk.Frame(parent)
+        link_row.pack(fill=tk.X, padx=6)
+        ttk.Label(link_row, text="Link to Joy-Con slot:").pack(side=tk.LEFT)
+        self._m913_sister_var = tk.StringVar(value="None")
+        sister_cb = ttk.Combobox(link_row, textvariable=self._m913_sister_var,
+                                 values=["None", "Slot 1", "Slot 2", "Slot 3", "Slot 4"],
+                                 state="readonly", width=10)
+        sister_cb.pack(side=tk.LEFT, padx=4)
+        sister_cb.bind("<<ComboboxSelected>>", lambda _: self._m913_on_sister_changed())
+
+        # ── M913 overlay canvas: DOMINANT — fills all remaining space ──
+        self._m913_overlay_canvas = tk.Canvas(parent, highlightthickness=1)
+        self._m913_overlay_canvas.pack(fill=tk.BOTH, expand=True, padx=6, pady=(3, 3))
         try:
             self._m913_overlay_canvas.configure(
                 bg=self._colors.get("panel2", "#f2e8d0"),
@@ -3639,33 +3761,37 @@ class App(tk.Tk):
         self._m913_img_paths = self._find_m913_png_variants(self._m913_profile.layout)
         self._m913_set_image_state("none")
 
-        # ── Scrollable content ──
-        canvas_wrap = ttk.Frame(parent)
-        canvas_wrap.pack(fill=tk.BOTH, expand=True, padx=6, pady=3)
+        # ── Status label ──
+        self._m913_status_var = tk.StringVar(value="Ready \u2014 click Scan to detect M913 devices")
+        ttk.Label(parent, textvariable=self._m913_status_var).pack(anchor="w", padx=6, pady=(0, 4))
 
-        m_canvas = tk.Canvas(canvas_wrap, highlightthickness=0,
-                             bg=self._colors.get("panel", "#f2e8d0"))
-        m_scroll = ttk.Scrollbar(canvas_wrap, orient=tk.VERTICAL, command=m_canvas.yview)
-        m_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        m_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        m_canvas.configure(yscrollcommand=m_scroll.set)
+        # ── Build popup panels ──
+        self._build_m913_buttons_popup()
+        self._build_m913_dpi_popup()
+        self._build_m913_led_popup()
+        self._build_m913_settings_popup()
 
-        inner = ttk.Frame(m_canvas)
-        m_canvas.create_window((0, 0), window=inner, anchor="nw")
-        inner.bind("<Configure>", lambda e: m_canvas.configure(scrollregion=m_canvas.bbox("all")))
-        m_canvas.bind_all("<MouseWheel>", lambda e: m_canvas.yview_scroll(-e.delta // 120, "units"))
+        # Auto-scan on tab open
+        self.after(200, self._m913_scan_devices)
 
-        # ── Button mapping ──
-        btn_frame = ttk.LabelFrame(inner, text="Button Mapping (16 buttons)")
-        btn_frame.pack(fill=tk.X, padx=4, pady=(4, 2))
+    # ------------------------------------------------------------------
+    # M913 popup panels
+    # ------------------------------------------------------------------
+
+    def _build_m913_buttons_popup(self) -> None:
+        """Popup: 16-button mapping grid."""
+        self._m913_buttons_popup = SketchPopup(
+            self, title="Button Mapping (16 buttons)", colors=self._colors,
+            typo=self._typo, width=400, height=460)
+        body = self._m913_buttons_popup.body
 
         action_choices = m913_device.ALL_ACTIONS + m913_device.ALL_KEY_NAMES
-
         self._m913_button_labels: Dict[str, ttk.Label] = {}
         display_names = self._m913_resolved_display_names(self._m913_profile.layout)
+
         for i, btn_name in enumerate(m913_device.BUTTON_ORDER):
-            r = ttk.Frame(btn_frame)
-            r.pack(fill=tk.X, padx=4, pady=1)
+            r = ttk.Frame(body)
+            r.pack(fill=tk.X, pady=1)
             display = display_names.get(btn_name, btn_name)
             lbl = ttk.Label(r, text=f"{display}:", width=14, anchor="w")
             lbl.pack(side=tk.LEFT)
@@ -3675,15 +3801,18 @@ class App(tk.Tk):
             cb = ttk.Combobox(r, textvariable=var, values=action_choices, width=24)
             cb.pack(side=tk.LEFT, padx=4)
 
-        # ── DPI settings ──
-        dpi_frame = ttk.LabelFrame(inner, text="DPI (5 levels, 100–16000)")
-        dpi_frame.pack(fill=tk.X, padx=4, pady=2)
+    def _build_m913_dpi_popup(self) -> None:
+        """Popup: DPI levels (5 stages)."""
+        self._m913_dpi_popup = SketchPopup(
+            self, title="DPI (5 levels, 100\u201316000)", colors=self._colors,
+            typo=self._typo, width=320, height=200)
+        body = self._m913_dpi_popup.body
 
         self._m913_dpi_vars = []
         self._m913_dpi_en_vars = []
         for i in range(5):
-            r = ttk.Frame(dpi_frame)
-            r.pack(fill=tk.X, padx=4, pady=1)
+            r = ttk.Frame(body)
+            r.pack(fill=tk.X, pady=1)
             en_var = tk.BooleanVar(value=self._m913_profile.dpi_enabled[i])
             self._m913_dpi_en_vars.append(en_var)
             ttk.Checkbutton(r, variable=en_var).pack(side=tk.LEFT)
@@ -3694,25 +3823,26 @@ class App(tk.Tk):
                              textvariable=dpi_var, width=8)
             sb.pack(side=tk.LEFT, padx=4)
 
-        # ── LED settings ──
-        led_frame = ttk.LabelFrame(inner, text="LED")
-        led_frame.pack(fill=tk.X, padx=4, pady=2)
+    def _build_m913_led_popup(self) -> None:
+        """Popup: LED mode, color, brightness, speed."""
+        self._m913_led_popup = SketchPopup(
+            self, title="LED Settings", colors=self._colors,
+            typo=self._typo, width=380, height=140)
+        body = self._m913_led_popup.body
 
-        lr1 = ttk.Frame(led_frame)
-        lr1.pack(fill=tk.X, padx=4, pady=2)
+        lr1 = ttk.Frame(body)
+        lr1.pack(fill=tk.X, pady=2)
         ttk.Label(lr1, text="Mode:").pack(side=tk.LEFT)
         self._m913_led_mode_var = tk.StringVar(value=self._m913_profile.led_mode)
-        led_mode_cb = ttk.Combobox(lr1, textvariable=self._m913_led_mode_var,
-                                   values=["off", "steady", "respiration", "rainbow"],
-                                   state="readonly", width=14)
-        led_mode_cb.pack(side=tk.LEFT, padx=4)
-
+        ttk.Combobox(lr1, textvariable=self._m913_led_mode_var,
+                     values=["off", "steady", "respiration", "rainbow"],
+                     state="readonly", width=14).pack(side=tk.LEFT, padx=4)
         ttk.Label(lr1, text="Color (#hex):").pack(side=tk.LEFT, padx=(8, 0))
         self._m913_led_color_var = tk.StringVar(value=f"{self._m913_profile.led_color:06x}")
         ttk.Entry(lr1, textvariable=self._m913_led_color_var, width=8).pack(side=tk.LEFT, padx=4)
 
-        lr2 = ttk.Frame(led_frame)
-        lr2.pack(fill=tk.X, padx=4, pady=2)
+        lr2 = ttk.Frame(body)
+        lr2.pack(fill=tk.X, pady=2)
         ttk.Label(lr2, text="Brightness:").pack(side=tk.LEFT)
         self._m913_led_bright_var = tk.IntVar(value=self._m913_profile.led_brightness)
         ttk.Scale(lr2, from_=0, to=255, variable=self._m913_led_bright_var,
@@ -3722,37 +3852,32 @@ class App(tk.Tk):
         ttk.Spinbox(lr2, from_=1, to=5, textvariable=self._m913_led_speed_var,
                      width=4).pack(side=tk.LEFT, padx=4)
 
-        # ── Polling rate ──
-        poll_frame = ttk.LabelFrame(inner, text="Polling Rate")
-        poll_frame.pack(fill=tk.X, padx=4, pady=2)
+    def _build_m913_settings_popup(self) -> None:
+        """Popup: polling rate + profile save/load."""
+        self._m913_settings_popup = SketchPopup(
+            self, title="Mouse Settings", colors=self._colors,
+            typo=self._typo, width=400, height=180)
+        body = self._m913_settings_popup.body
 
-        pr = ttk.Frame(poll_frame)
-        pr.pack(fill=tk.X, padx=4, pady=2)
+        # Polling rate
+        ttk.Label(body, text="Polling Rate:").pack(anchor="w", pady=(4, 2))
+        pr = ttk.Frame(body)
+        pr.pack(fill=tk.X, pady=(0, 6))
         self._m913_poll_var = tk.IntVar(value=self._m913_profile.polling_rate)
         for hz in (125, 250, 500, 1000):
             ttk.Radiobutton(pr, text=f"{hz} Hz", value=hz,
                             variable=self._m913_poll_var).pack(side=tk.LEFT, padx=6)
 
-        # ── Profile save/load ──
-        prof_frame = ttk.LabelFrame(inner, text="M913 Profile")
-        prof_frame.pack(fill=tk.X, padx=4, pady=(2, 6))
-
-        pfr = ttk.Frame(prof_frame)
-        pfr.pack(fill=tk.X, padx=4, pady=4)
+        # Profile save/load
+        ttk.Label(body, text="Profile:").pack(anchor="w", pady=(0, 2))
+        pfr = ttk.Frame(body)
+        pfr.pack(fill=tk.X)
         ttk.Label(pfr, text="Name:").pack(side=tk.LEFT)
         self._m913_prof_name_var = tk.StringVar(value=self._m913_profile.name)
         ttk.Entry(pfr, textvariable=self._m913_prof_name_var, width=20).pack(side=tk.LEFT, padx=4)
-
         ttk.Button(pfr, text="Save", command=self._m913_save_profile).pack(side=tk.LEFT, padx=2)
         ttk.Button(pfr, text="Load", command=self._m913_load_profile).pack(side=tk.LEFT, padx=2)
         ttk.Button(pfr, text="Delete", command=self._m913_delete_profile).pack(side=tk.LEFT, padx=2)
-
-        # ── Status label ──
-        self._m913_status_var = tk.StringVar(value="Ready — click Scan to detect M913 devices")
-        ttk.Label(parent, textvariable=self._m913_status_var).pack(anchor="w", padx=6, pady=(0, 6))
-
-        # Auto-scan on tab open
-        self.after(200, self._m913_scan_devices)
 
     # ------------------------------------------------------------------
     # Help tab
@@ -4091,7 +4216,7 @@ class App(tk.Tk):
     # ------------------------------------------------------------------
 
     def _build_razer_tab(self) -> None:
-        """Build the Razer tab: device selection, battery, DPI, buttons, profiles."""
+        """Build the Razer tab: device selection + dominant overlay + popup panels."""
         parent = self.tab_razer
 
         # ── Instance state ──
@@ -4104,32 +4229,53 @@ class App(tk.Tk):
         self._razer_state: Optional[razer_device.RazerDeviceState] = None
         self._razer_registry = razer_device.load_device_registry()
 
-        # ── Top bar: device selector + scan ──
-        dev_frame = ttk.LabelFrame(parent, text="Razer Device")
-        dev_frame.pack(fill=tk.X, padx=6, pady=(6, 3))
+        # ── Compact toolbar: device + popup triggers ──
+        toolbar = ttk.Frame(parent)
+        toolbar.pack(fill=tk.X, padx=6, pady=(6, 2))
 
-        row = ttk.Frame(dev_frame)
-        row.pack(fill=tk.X, padx=6, pady=4)
-
-        ttk.Label(row, text="Device:").pack(side=tk.LEFT)
+        ttk.Label(toolbar, text="Device:").pack(side=tk.LEFT)
         self._razer_dev_var = tk.StringVar()
-        self._razer_dev_combo = ttk.Combobox(row, textvariable=self._razer_dev_var,
-                                             state="readonly", width=36)
-        self._razer_dev_combo.pack(side=tk.LEFT, padx=(4, 6))
+        self._razer_dev_combo = ttk.Combobox(toolbar, textvariable=self._razer_dev_var,
+                                             state="readonly", width=24)
+        self._razer_dev_combo.pack(side=tk.LEFT, padx=(4, 4))
         self._razer_dev_combo.bind("<<ComboboxSelected>>",
                                    lambda _: self._razer_on_device_selected())
 
-        ttk.Button(row, text="Scan", command=self._razer_scan_devices).pack(side=tk.LEFT, padx=2)
-        ttk.Button(row, text="Read State", command=self._razer_read_state).pack(side=tk.LEFT, padx=2)
-        ttk.Button(row, text="Apply", command=self._razer_apply_config).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Scan", command=self._razer_scan_devices).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Read State", command=self._razer_read_state).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Apply", command=self._razer_apply_config).pack(side=tk.LEFT, padx=2)
+
+        sep = ttk.Separator(toolbar, orient=tk.VERTICAL)
+        sep.pack(side=tk.LEFT, fill=tk.Y, padx=6, pady=2)
+
+        # Popup trigger buttons
+        ttk.Button(toolbar, text="DPI\u2026",
+                   command=lambda: self._razer_dpi_popup.toggle()).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Buttons\u2026",
+                   command=lambda: self._razer_buttons_popup.toggle()).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Settings\u2026",
+                   command=lambda: self._razer_settings_popup.toggle()).pack(side=tk.LEFT, padx=2)
 
         if not razer_device.HID_AVAILABLE:
-            ttk.Label(dev_frame, text="⚠ hidapi not installed — install with: pip install hidapi",
+            ttk.Label(parent, text="\u26a0 hidapi not installed \u2014 pip install hidapi",
                       foreground=self._colors.get("danger", "red")).pack(padx=6, pady=2)
 
-        # ── Mouse overlay image ──
-        self._razer_overlay_canvas = tk.Canvas(parent, height=220, highlightthickness=1)
-        self._razer_overlay_canvas.pack(fill=tk.X, padx=6, pady=(3, 3))
+        # ── Device info bar (compact) ──
+        info_bar = ttk.Frame(parent)
+        info_bar.pack(fill=tk.X, padx=6)
+        ttk.Label(info_bar, text="FW:").pack(side=tk.LEFT)
+        self._razer_fw_var = tk.StringVar(value="\u2014")
+        ttk.Label(info_bar, textvariable=self._razer_fw_var, width=8).pack(side=tk.LEFT, padx=(2, 8))
+        ttk.Label(info_bar, text="Serial:").pack(side=tk.LEFT)
+        self._razer_serial_var = tk.StringVar(value="\u2014")
+        ttk.Label(info_bar, textvariable=self._razer_serial_var, width=16).pack(side=tk.LEFT, padx=(2, 8))
+        ttk.Label(info_bar, text="Battery:").pack(side=tk.LEFT)
+        self._razer_battery_var = tk.StringVar(value="\u2014")
+        ttk.Label(info_bar, textvariable=self._razer_battery_var, width=10).pack(side=tk.LEFT, padx=2)
+
+        # ── Razer overlay canvas: DOMINANT ──
+        self._razer_overlay_canvas = tk.Canvas(parent, highlightthickness=1)
+        self._razer_overlay_canvas.pack(fill=tk.BOTH, expand=True, padx=6, pady=(3, 3))
         try:
             self._razer_overlay_canvas.configure(
                 bg=self._colors.get("panel2", "#f2e8d0"),
@@ -4141,52 +4287,35 @@ class App(tk.Tk):
         self._razer_img_paths = self._find_razer_png_variants()
         self._razer_set_image_state("none")
 
-        # ── Device info / battery row ──
-        info_frame = ttk.LabelFrame(parent, text="Device Info")
-        info_frame.pack(fill=tk.X, padx=6, pady=(3, 3))
+        # ── Status ──
+        self._razer_status_var = tk.StringVar(value="Ready \u2014 click Scan to detect Razer devices")
+        ttk.Label(parent, textvariable=self._razer_status_var).pack(anchor="w", padx=6, pady=(0, 4))
 
-        info_row = ttk.Frame(info_frame)
-        info_row.pack(fill=tk.X, padx=6, pady=4)
+        # ── Build popup panels ──
+        self._build_razer_dpi_popup()
+        self._build_razer_buttons_popup()
+        self._build_razer_settings_popup()
 
-        ttk.Label(info_row, text="Firmware:").pack(side=tk.LEFT)
-        self._razer_fw_var = tk.StringVar(value="—")
-        ttk.Label(info_row, textvariable=self._razer_fw_var, width=10).pack(side=tk.LEFT, padx=(2, 12))
+        # Auto-scan on tab open
+        self.after(200, self._razer_scan_devices)
 
-        ttk.Label(info_row, text="Serial:").pack(side=tk.LEFT)
-        self._razer_serial_var = tk.StringVar(value="—")
-        ttk.Label(info_row, textvariable=self._razer_serial_var, width=18).pack(side=tk.LEFT, padx=(2, 12))
+    # ------------------------------------------------------------------
+    # Razer popup panels
+    # ------------------------------------------------------------------
 
-        ttk.Label(info_row, text="Battery:").pack(side=tk.LEFT)
-        self._razer_battery_var = tk.StringVar(value="—")
-        ttk.Label(info_row, textvariable=self._razer_battery_var, width=12).pack(side=tk.LEFT, padx=2)
-
-        # ── Scrollable content ──
-        canvas_wrap = ttk.Frame(parent)
-        canvas_wrap.pack(fill=tk.BOTH, expand=True, padx=6, pady=3)
-
-        r_canvas = tk.Canvas(canvas_wrap, highlightthickness=0,
-                             bg=self._colors.get("panel", "#f2e8d0"))
-        r_scroll = ttk.Scrollbar(canvas_wrap, orient=tk.VERTICAL, command=r_canvas.yview)
-        r_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        r_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        r_canvas.configure(yscrollcommand=r_scroll.set)
-
-        inner = ttk.Frame(r_canvas)
-        r_canvas.create_window((0, 0), window=inner, anchor="nw")
-        inner.bind("<Configure>", lambda e: r_canvas.configure(scrollregion=r_canvas.bbox("all")))
-        r_canvas.bind_all("<MouseWheel>",
-                          lambda e: r_canvas.yview_scroll(-e.delta // 120, "units"))
-
-        # ── DPI stages ──
-        dpi_frame = ttk.LabelFrame(inner, text="DPI Stages (5 levels)")
-        dpi_frame.pack(fill=tk.X, padx=4, pady=(4, 2))
+    def _build_razer_dpi_popup(self) -> None:
+        """Popup: DPI stages (5 levels, X/Y per stage)."""
+        self._razer_dpi_popup = SketchPopup(
+            self, title="DPI Stages (5 levels)", colors=self._colors,
+            typo=self._typo, width=380, height=220)
+        body = self._razer_dpi_popup.body
 
         self._razer_dpi_stage_x_vars = []
         self._razer_dpi_stage_y_vars = []
         self._razer_dpi_active_var = tk.IntVar(value=self._razer_profile.active_dpi_stage)
         for i in range(5):
-            r = ttk.Frame(dpi_frame)
-            r.pack(fill=tk.X, padx=4, pady=1)
+            r = ttk.Frame(body)
+            r.pack(fill=tk.X, pady=1)
             dx, dy = self._razer_profile.dpi_stages[i] if i < len(self._razer_profile.dpi_stages) else (800, 800)
             ttk.Radiobutton(r, text=f"Stage {i + 1}:", value=i + 1,
                             variable=self._razer_dpi_active_var).pack(side=tk.LEFT)
@@ -4201,37 +4330,17 @@ class App(tk.Tk):
             ttk.Spinbox(r, from_=100, to=26000, increment=100,
                         textvariable=yvar, width=7).pack(side=tk.LEFT, padx=2)
 
-        # ── Polling rate ──
-        poll_frame = ttk.LabelFrame(inner, text="Polling Rate")
-        poll_frame.pack(fill=tk.X, padx=4, pady=2)
-
-        pr = ttk.Frame(poll_frame)
-        pr.pack(fill=tk.X, padx=4, pady=2)
-        self._razer_poll_var = tk.IntVar(value=self._razer_profile.poll_rate)
-        for hz in (125, 500, 1000):
-            ttk.Radiobutton(pr, text=f"{hz} Hz", value=hz,
-                            variable=self._razer_poll_var).pack(side=tk.LEFT, padx=6)
-
-        # ── Idle / sleep timeout ──
-        idle_frame = ttk.LabelFrame(inner, text="Idle Timeout (60–900 sec)")
-        idle_frame.pack(fill=tk.X, padx=4, pady=2)
-
-        idle_row = ttk.Frame(idle_frame)
-        idle_row.pack(fill=tk.X, padx=4, pady=2)
-        ttk.Label(idle_row, text="Seconds:").pack(side=tk.LEFT)
-        self._razer_idle_var = tk.IntVar(value=self._razer_profile.idle_time)
-        ttk.Spinbox(idle_row, from_=60, to=900, increment=30,
-                    textvariable=self._razer_idle_var, width=7).pack(side=tk.LEFT, padx=4)
-
-        # ── Button remapping ──
-        btn_frame = ttk.LabelFrame(inner, text="Button Remapping (on-device memory)")
-        btn_frame.pack(fill=tk.X, padx=4, pady=2)
+    def _build_razer_buttons_popup(self) -> None:
+        """Popup: button remapping."""
+        self._razer_buttons_popup = SketchPopup(
+            self, title="Button Remapping", colors=self._colors,
+            typo=self._typo, width=380, height=320)
+        body = self._razer_buttons_popup.body
 
         action_choices = razer_device.REMAP_ACTIONS
-
         for name in razer_device.BUTTON_ORDER:
-            r = ttk.Frame(btn_frame)
-            r.pack(fill=tk.X, padx=4, pady=1)
+            r = ttk.Frame(body)
+            r.pack(fill=tk.X, pady=1)
             display = razer_device.BUTTON_DISPLAY_NAMES.get(name, name)
             ttk.Label(r, text=f"{display}:", width=16, anchor="w").pack(side=tk.LEFT)
             var = tk.StringVar(value=self._razer_profile.button_bindings.get(name, "default"))
@@ -4239,26 +4348,40 @@ class App(tk.Tk):
             cb = ttk.Combobox(r, textvariable=var, values=action_choices, width=20)
             cb.pack(side=tk.LEFT, padx=4)
 
-        # ── Profile save/load ──
-        prof_frame = ttk.LabelFrame(inner, text="Razer Profile")
-        prof_frame.pack(fill=tk.X, padx=4, pady=(2, 6))
+    def _build_razer_settings_popup(self) -> None:
+        """Popup: polling rate, idle timeout, profile save/load."""
+        self._razer_settings_popup = SketchPopup(
+            self, title="Razer Settings", colors=self._colors,
+            typo=self._typo, width=420, height=220)
+        body = self._razer_settings_popup.body
 
-        pfr = ttk.Frame(prof_frame)
-        pfr.pack(fill=tk.X, padx=4, pady=4)
+        # Polling rate
+        ttk.Label(body, text="Polling Rate:").pack(anchor="w", pady=(4, 2))
+        pr = ttk.Frame(body)
+        pr.pack(fill=tk.X, pady=(0, 4))
+        self._razer_poll_var = tk.IntVar(value=self._razer_profile.poll_rate)
+        for hz in (125, 500, 1000):
+            ttk.Radiobutton(pr, text=f"{hz} Hz", value=hz,
+                            variable=self._razer_poll_var).pack(side=tk.LEFT, padx=6)
+
+        # Idle timeout
+        idle_row = ttk.Frame(body)
+        idle_row.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(idle_row, text="Idle timeout (60\u2013900 sec):").pack(side=tk.LEFT)
+        self._razer_idle_var = tk.IntVar(value=self._razer_profile.idle_time)
+        ttk.Spinbox(idle_row, from_=60, to=900, increment=30,
+                    textvariable=self._razer_idle_var, width=7).pack(side=tk.LEFT, padx=4)
+
+        # Profile save/load
+        ttk.Label(body, text="Profile:").pack(anchor="w", pady=(0, 2))
+        pfr = ttk.Frame(body)
+        pfr.pack(fill=tk.X)
         ttk.Label(pfr, text="Name:").pack(side=tk.LEFT)
         self._razer_prof_name_var = tk.StringVar(value=self._razer_profile.name)
         ttk.Entry(pfr, textvariable=self._razer_prof_name_var, width=20).pack(side=tk.LEFT, padx=4)
-
         ttk.Button(pfr, text="Save", command=self._razer_save_profile).pack(side=tk.LEFT, padx=2)
         ttk.Button(pfr, text="Load", command=self._razer_load_profile).pack(side=tk.LEFT, padx=2)
         ttk.Button(pfr, text="Delete", command=self._razer_delete_profile).pack(side=tk.LEFT, padx=2)
-
-        # ── Status ──
-        self._razer_status_var = tk.StringVar(value="Ready — click Scan to detect Razer devices")
-        ttk.Label(parent, textvariable=self._razer_status_var).pack(anchor="w", padx=6, pady=(0, 6))
-
-        # Auto-scan on tab open
-        self.after(200, self._razer_scan_devices)
 
     # ── Razer helpers ────────────────────────────────────────────
 

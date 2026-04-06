@@ -11,6 +11,10 @@ Until then, entries are grouped by date.
 
 ### Added
 
+- **Popup-based UI refactor**: Controller, Mouse, and Razer tabs now show the device canvas as the dominant visual (fills all available space). Button mapping, DPI, LED, layers, chords, and other controls moved into on-demand popup panels (`SketchPopup`) opened via compact toolbar buttons. This replaces the crowded inline layout where controls pushed the device image into a small fixed-height strip.
+- **SketchPopup class**: reusable themed popup (`tk.Toplevel`) with pencil-sketch aesthetic — hand-drawn title bar, themed background, toggle show/hide. Available for all tabs.
+- **Pencil sketch UI assets**: generated hand-drawn popup frames, toolbar backgrounds, dividers, and corner doodles for both light and dark themes (8 new PNGs in `docs/ui/*/misc/`).
+- **Muted theme colors**: accent, danger, warning, and selection colors toned down in both light and dark themes; button padding reduced for a less visually noisy interface.
 - **Razer mouse support**: new `razer_device.py` module and **Razer** tab in Bind Bandit for configuring Razer Basilisk X HyperSpeed mice (and other supported models) over USB HID Feature Reports. Supports battery readback, DPI stages (5 levels, X/Y independent), polling rate, idle timeout, and **on-device button remapping** (7 buttons → keyboard keys, mouse buttons, DPI cycle, or disable). All settings are written to the mouse's onboard memory — no Synapse, no drivers, anti-cheat safe. Includes profile save/load/delete with per-device auto-linking, and Read State to pull live configuration from the device. Protocol based on the 90-byte Razer USB HID specification reverse-engineered by the OpenSnek project.
 - **Mouse overlay hotspots**: updated `MOUSE_HOTSPOTS` labels to match `razer_device.BUTTON_SLOTS` naming (lowercase with underscores) for overlay integration.
 
