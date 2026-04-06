@@ -1,12 +1,12 @@
 #!/bin/sh
-# Mandatory UI artifact generation before push.
+# Validate that UI artifacts are up-to-date before push.
+# The pre-commit hook already generates and stages them, so this only
+# checks for unexpected dirty state.
 set -e
 
-if command -v py >/dev/null 2>&1; then
-  py -3 tools/generate_ui_artifacts.py
-elif command -v python >/dev/null 2>&1; then
-  python tools/generate_ui_artifacts.py
-else
-  echo "[pre-push] python/py not found; cannot generate mandatory UI artifacts" >&2
+# If tracked overlay/background files are dirty, abort the push so
+# the developer can commit them first.
+if git diff --name-only HEAD -- docs/ui/ | grep -q .; then
+  echo "[pre-push] docs/ui/ has uncommitted changes — run 'git add -A docs/ui/ && git commit --amend' first." >&2
   exit 1
 fi

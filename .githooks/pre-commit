@@ -25,5 +25,6 @@ fi
 git add version.json 2>/dev/null || true
 git add helper-app/joycon_helper/_version.py 2>/dev/null || true
 
-# Stage composited backgrounds if they changed.
+# Stage composited backgrounds and button overlays if they changed.
 git add -A docs/ui/default/backgrounds/ docs/ui/dark/backgrounds/ 2>/dev/null || true
+git add -A docs/ui/button_overlays/ 2>/dev/null || true
