@@ -446,7 +446,8 @@ class App(tk.Tk):
         self._keymap_img_paths: Dict[str, Path] = {}
         self._keymap_img_path: Optional[Path] = None
         self._keymap_img_base: Optional[tk.PhotoImage] = None
-        self._keymap_img_scaled: Optional[tk.PhotoImage] = None
+        self._keymap_img_scaled = None  # tk.PhotoImage or ImageTk.PhotoImage
+        self._keymap_pil_base = None  # PIL Image for Pillow composite path
         self._keymap_hotspot_px: Dict[str, Tuple[float, float]] = {}
 
         # M913 mouse overlay image (Mouse tab)
@@ -455,7 +456,8 @@ class App(tk.Tk):
         self._m913_img_paths: Dict[str, Path] = {}
         self._m913_img_path: Optional[Path] = None
         self._m913_img_base: Optional[tk.PhotoImage] = None
-        self._m913_img_scaled: Optional[tk.PhotoImage] = None
+        self._m913_img_scaled = None  # tk.PhotoImage or ImageTk.PhotoImage
+        self._m913_pil_base = None  # PIL Image for Pillow composite path
 
         # Press-to-bind state
         self._bind_mode = False  # True = waiting for a keyboard key press
@@ -652,6 +654,57 @@ class App(tk.Tk):
         if event.widget is not self:
             return
         self._refresh_bg()
+
+    # ------------------------------------------------------------------
+    # Compositing: fuse device overlay onto background for tab canvases
+    # ------------------------------------------------------------------
+
+    def _composite_bg_overlay(
+        self,
+        overlay_pil: "PILImage.Image",
+        canvas_w: int,
+        canvas_h: int,
+    ) -> "Tuple[ImageTk.PhotoImage, int, int, int, int]":
+        """Composite *overlay_pil* centred on the background at *canvas_w* × *canvas_h*.
+
+        Returns ``(photo, ox, oy, overlay_w, overlay_h)`` where *ox/oy* are the
+        top-left pixel coords of the (scaled) overlay within the composite —
+        needed so hotspot positions can be computed relative to the overlay.
+
+        If no background is loaded the overlay is placed on a solid panel
+        colour so the canvas still looks clean.
+        """
+        # Scale the overlay to fit inside the canvas (contain).
+        ov_w, ov_h = overlay_pil.size
+        fit_scale = min(canvas_w / max(1, ov_w), canvas_h / max(1, ov_h), 1.0)
+        new_ov_w = max(1, int(ov_w * fit_scale))
+        new_ov_h = max(1, int(ov_h * fit_scale))
+        overlay_scaled = overlay_pil.resize((new_ov_w, new_ov_h), PILImage.LANCZOS)
+
+        ox = (canvas_w - new_ov_w) // 2
+        oy = (canvas_h - new_ov_h) // 2
+
+        # Build the canvas-sized background.
+        bg_pil = getattr(self, "_bg_pil_original", None)
+        if bg_pil is not None:
+            orig_w, orig_h = bg_pil.size
+            bg_scale = max(canvas_w / orig_w, canvas_h / orig_h)
+            bw = int(orig_w * bg_scale)
+            bh = int(orig_h * bg_scale)
+            bg_resized = bg_pil.resize((bw, bh), PILImage.LANCZOS)
+            left = (bw - canvas_w) // 2
+            top = (bh - canvas_h) // 2
+            composite = bg_resized.crop((left, top, left + canvas_w, top + canvas_h)).convert("RGBA")
+        else:
+            panel_hex = self._colors.get("panel2", "#f2e8d0")
+            r, g, b = int(panel_hex[1:3], 16), int(panel_hex[3:5], 16), int(panel_hex[5:7], 16)
+            composite = PILImage.new("RGBA", (canvas_w, canvas_h), (r, g, b, 255))
+
+        # Alpha-composite the overlay onto the background.
+        composite.paste(overlay_scaled, (ox, oy), overlay_scaled)
+
+        photo = ImageTk.PhotoImage(composite)
+        return photo, ox, oy, new_ov_w, new_ov_h
 
     def _load_ui_theme(self) -> dict:
         # Decide light vs dark: check --dark flag, env var, or Windows dark-mode setting.
@@ -1411,7 +1464,8 @@ class App(tk.Tk):
             next_state = "none"
 
         path = self._keymap_img_paths.get(next_state)
-        if path == self._keymap_img_path and self._keymap_img_base is not None:
+        has_image = self._keymap_pil_base is not None or self._keymap_img_base is not None
+        if path == self._keymap_img_path and has_image:
             self._keymap_img_state = next_state
             return
 
@@ -1419,12 +1473,20 @@ class App(tk.Tk):
         self._keymap_img_path = path
         self._keymap_img_base = None
         self._keymap_img_scaled = None
+        self._keymap_pil_base = None
 
         if self._keymap_img_path:
-            try:
-                self._keymap_img_base = tk.PhotoImage(file=str(self._keymap_img_path))
-            except Exception:
-                self._keymap_img_base = None
+            if _HAS_PIL:
+                try:
+                    self._keymap_pil_base = PILImage.open(str(self._keymap_img_path)).convert("RGBA")
+                except Exception:
+                    self._keymap_pil_base = None
+            # Fallback to tk.PhotoImage when Pillow is unavailable.
+            if self._keymap_pil_base is None:
+                try:
+                    self._keymap_img_base = tk.PhotoImage(file=str(self._keymap_img_path))
+                except Exception:
+                    self._keymap_img_base = None
 
     # ------------------------------------------------------------------
     # M913 mouse overlay image helpers
@@ -1482,7 +1544,8 @@ class App(tk.Tk):
             state = "none"
 
         path = self._m913_img_paths.get(state)
-        if path == self._m913_img_path and self._m913_img_base is not None:
+        has_image = self._m913_pil_base is not None or self._m913_img_base is not None
+        if path == self._m913_img_path and has_image:
             self._m913_img_state = state
             return
 
@@ -1490,12 +1553,19 @@ class App(tk.Tk):
         self._m913_img_path = path
         self._m913_img_base = None
         self._m913_img_scaled = None
+        self._m913_pil_base = None
 
         if self._m913_img_path:
-            try:
-                self._m913_img_base = tk.PhotoImage(file=str(self._m913_img_path))
-            except Exception:
-                self._m913_img_base = None
+            if _HAS_PIL:
+                try:
+                    self._m913_pil_base = PILImage.open(str(self._m913_img_path)).convert("RGBA")
+                except Exception:
+                    self._m913_pil_base = None
+            if self._m913_pil_base is None:
+                try:
+                    self._m913_img_base = tk.PhotoImage(file=str(self._m913_img_path))
+                except Exception:
+                    self._m913_img_base = None
 
         self._m913_redraw_overlay()
 
@@ -1509,11 +1579,21 @@ class App(tk.Tk):
         w = max(c.winfo_width(), 1)
         h = max(c.winfo_height(), 1)
 
-        if not self._m913_img_base:
+        if not self._m913_pil_base and not self._m913_img_base:
             msg = "M913 mouse image not found" if not self._m913_img_path else "Failed to load M913 image"
             c.create_text(w // 2, h // 2, text=msg, fill=self._colors.get("muted", "#666"))
             return
 
+        # Composite path (Pillow available): fuse overlay onto background.
+        if self._m913_pil_base is not None:
+            photo, _ox, _oy, _ow, _oh = self._composite_bg_overlay(
+                self._m913_pil_base, w, h,
+            )
+            self._m913_img_scaled = photo  # prevent GC
+            c.create_image(0, 0, image=photo, anchor="nw")
+            return
+
+        # Legacy fallback: tk.PhotoImage overlay without compositing.
         base_w = self._m913_img_base.width()
         base_h = self._m913_img_base.height()
         factor = max(1, int(math.ceil(base_w / max(1, w))), int(math.ceil(base_h / max(1, h))))
@@ -1860,7 +1940,7 @@ class App(tk.Tk):
             self._keymap_bg_item = None
             self._keymap_last_canvas_size = (w, h)
 
-        if not self._keymap_img_base:
+        if not self._keymap_pil_base and not self._keymap_img_base:
             state_name = self._keymap_img_state
             msg = (
                 f"Joy-Con image for state '{state_name}' not found"
@@ -1872,24 +1952,42 @@ class App(tk.Tk):
             self._keymap_hotspot_px = {}
             return
 
-        base_w = self._keymap_img_base.width()
-        base_h = self._keymap_img_base.height()
-        factor = max(1, int(math.ceil(base_w / max(1, w))), int(math.ceil(base_h / max(1, h))))
+        # Composite path (Pillow available): fuse overlay onto background.
+        if self._keymap_pil_base is not None:
+            if need_full:
+                photo, ox, oy, img_w, img_h = self._composite_bg_overlay(
+                    self._keymap_pil_base, w, h,
+                )
+                self._keymap_img_scaled = photo  # prevent GC
+                self._keymap_bg_item = c.create_image(0, 0, image=photo, anchor="nw")
+                self._keymap_overlay_ox = ox
+                self._keymap_overlay_oy = oy
+                self._keymap_overlay_w = img_w
+                self._keymap_overlay_h = img_h
+            ox = getattr(self, "_keymap_overlay_ox", 0)
+            oy = getattr(self, "_keymap_overlay_oy", 0)
+            img_w = getattr(self, "_keymap_overlay_w", w)
+            img_h = getattr(self, "_keymap_overlay_h", h)
+        else:
+            # Legacy fallback: tk.PhotoImage overlay without compositing.
+            base_w = self._keymap_img_base.width()
+            base_h = self._keymap_img_base.height()
+            factor = max(1, int(math.ceil(base_w / max(1, w))), int(math.ceil(base_h / max(1, h))))
 
-        if need_full or factor != self._keymap_last_scale_factor:
-            self._keymap_last_scale_factor = factor
-            try:
-                self._keymap_img_scaled = self._keymap_img_base.subsample(factor, factor)
-            except Exception:
-                self._keymap_img_scaled = self._keymap_img_base
+            if need_full or factor != self._keymap_last_scale_factor:
+                self._keymap_last_scale_factor = factor
+                try:
+                    self._keymap_img_scaled = self._keymap_img_base.subsample(factor, factor)
+                except Exception:
+                    self._keymap_img_scaled = self._keymap_img_base
 
-        img_w = self._keymap_img_scaled.width()
-        img_h = self._keymap_img_scaled.height()
-        ox = (w - img_w) / 2.0
-        oy = (h - img_h) / 2.0
+            img_w = self._keymap_img_scaled.width()
+            img_h = self._keymap_img_scaled.height()
+            ox = (w - img_w) / 2.0
+            oy = (h - img_h) / 2.0
 
-        if need_full:
-            self._keymap_bg_item = c.create_image(ox, oy, image=self._keymap_img_scaled, anchor="nw")
+            if need_full:
+                self._keymap_bg_item = c.create_image(ox, oy, image=self._keymap_img_scaled, anchor="nw")
 
         hs_bindings = self._keymap_hotspots()
         conflicts = self._detect_conflicts()
@@ -3124,6 +3222,7 @@ class App(tk.Tk):
         self._m913_img_base = None
         self._m913_img_scaled = None
         self._m913_img_path = None
+        self._m913_pil_base = None
         self._m913_set_image_state(self._m913_img_state)
 
     def _m913_resolved_display_names(self, mode: str) -> Dict[str, str]:

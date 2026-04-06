@@ -11,6 +11,8 @@ Until then, entries are grouped by date.
 
 ### Added
 
+- **Composited device backgrounds**: the Controller and Mouse tab canvases now fuse the device overlay PNG onto the app background image at runtime using Pillow alpha-compositing. Instead of a floating overlay on a solid-colour canvas, each tab shows a seamless background with the device baked in — tooltips and hotspot controls now line up with the device image. Falls back to the previous overlay-only rendering when Pillow is unavailable.
+
 - **IncediusMod mouse overlay support**: M913 Mouse tab now uses layout-specific overlay images — Stock M913 (`m913.png` / `m913-none.png`) or IncediusMod (`m913_Incedius.png` / `m913_Incedius-none.png`) — selected automatically when the user switches layout mode. Switching layout mode live reloads the overlay instantly.
 - **Dark mode overlay images**: both M913 and Joy-Con overlay finders now select dark-variant PNGs when dark mode is active, matching the background theme.
 
