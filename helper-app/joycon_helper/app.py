@@ -585,7 +585,7 @@ class OverlayWindow(tk.Toplevel):
         self.last_key_var.set(f"Key event: {'DOWN' if pressed else 'UP'}  key_id={key_id}")
 
     def set_macro(self, macro_id: str, state: str) -> None:
-        self.last_macro_var.set(f"Macro: {macro_id}  ({state})")
+        self.last_macro_var.set(f"Trick: {macro_id}  ({state})")
 
 
 class SketchPopup(tk.Toplevel):
@@ -726,7 +726,7 @@ class App(tk.Tk):
         self._bt_banner_label: Optional[tk.Label] = None
 
         # Keymap editor (Controller tab)
-        self._keymap_status = tk.StringVar(value="Click a control to select it. Use Learn to bind its key_id.")
+        self._keymap_status = tk.StringVar(value="Click a target to select it. Use Case to learn its key_id.")
         self._keymap_selected_name: Optional[str] = None
         self._keymap_learn_name: Optional[str] = None
         self._keymap_canvas: Optional[tk.Canvas] = None
@@ -1282,8 +1282,8 @@ class App(tk.Tk):
         self.tab_razer = ttk.Frame(self.tabs)
         self.tab_help = ttk.Frame(self.tabs)
 
-        self.tabs.add(self.tab_profile, text="Profile")
-        self.tabs.add(self.tab_macros, text="Macros")
+        self.tabs.add(self.tab_profile, text="Loadout")
+        self.tabs.add(self.tab_macros, text="Tricks")
         self.tabs.add(self.tab_stick, text="Stick")
         self.tabs.add(self.tab_share, text="Share")
         self.tabs.add(self.tab_overlay, text="Overlay")
@@ -1315,9 +1315,9 @@ class App(tk.Tk):
         self.slot_combo.pack(side=tk.LEFT, padx=(6, 0))
 
         ttk.Button(right, text="Ping", command=self._cmd_ping, width=22).pack(pady=(8, 0))
-        ttk.Button(right, text="Upload profile to slot", command=self._cmd_write_profile, width=22).pack(pady=(6, 0))
+        ttk.Button(right, text="Upload loadout to slot", command=self._cmd_write_profile, width=22).pack(pady=(6, 0))
         ttk.Button(right, text="Upload + Activate", command=self._cmd_upload_and_set_active, width=22).pack(pady=(6, 0))
-        ttk.Button(right, text="Read profile from slot", command=self._cmd_read_profile, width=22).pack(pady=(6, 0))
+        ttk.Button(right, text="Read loadout from slot", command=self._cmd_read_profile, width=22).pack(pady=(6, 0))
         ttk.Button(right, text="Set active slot", command=self._cmd_set_active, width=22).pack(pady=(6, 0))
         ttk.Button(right, text="Safe mode (reset slot)", command=self._cmd_safe_mode, width=22).pack(pady=(6, 0))
 
@@ -1394,7 +1394,7 @@ class App(tk.Tk):
             return
         self._tabs_built.add(tab_name)
         builders: Dict[str, Any] = {
-            "Macros": self._build_macros_tab,
+            "Tricks": self._build_macros_tab,
             "Stick": self._build_stick_tab,
             "Share": self._build_share_tab,
             "Overlay": self._build_overlay_tab,
@@ -1410,7 +1410,7 @@ class App(tk.Tk):
 
     def _build_profile_tab(self) -> None:
         # ── Slot quick-select row ──
-        slot_frame = ttk.LabelFrame(self.tab_profile, text="Profile slots")
+        slot_frame = ttk.LabelFrame(self.tab_profile, text="Loadout slots")
         slot_frame.pack(fill=tk.X, pady=(0, 4))
         slot_row = ttk.Frame(slot_frame)
         slot_row.pack(fill=tk.X, padx=8, pady=(4, 4))
@@ -1440,7 +1440,7 @@ class App(tk.Tk):
         ttk.Button(mgmt, text="Duplicate", command=self._profile_duplicate).pack(side=tk.LEFT, padx=(6, 0))
         ttk.Button(mgmt, text="Reset to defaults", command=self._profile_reset_defaults).pack(side=tk.LEFT, padx=(6, 0))
 
-        ttk.Label(self.tab_profile, text="Profile JSON").pack(anchor="w")
+        ttk.Label(self.tab_profile, text="Loadout JSON").pack(anchor="w")
         self.profile_text = ScrolledText(self.tab_profile, height=18)
         self.profile_text.pack(fill=tk.BOTH, expand=True)
         self._theme_scrolled_text(self.profile_text)
@@ -1458,7 +1458,7 @@ class App(tk.Tk):
         )
 
         # ── Per-app auto-profile switching ──
-        app_switch_frame = ttk.LabelFrame(self.tab_profile, text="Per-App Auto-Profile Switching")
+        app_switch_frame = ttk.LabelFrame(self.tab_profile, text="Per-App Auto-Loadout Switching")
         app_switch_frame.pack(fill=tk.X, pady=(6, 4))
 
         switch_top = ttk.Frame(app_switch_frame)
@@ -1487,7 +1487,7 @@ class App(tk.Tk):
         right = ttk.Frame(row)
         right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
 
-        ttk.Label(left, text="Macros").pack(anchor="w")
+        ttk.Label(left, text="Tricks").pack(anchor="w")
         self.macro_list = tk.Listbox(left, height=18, width=22)
         self.macro_list.pack(fill=tk.Y, expand=False)
         self.macro_list.bind("<<ListboxSelect>>", lambda _e: self._refresh_macro_steps())
@@ -1510,7 +1510,7 @@ class App(tk.Tk):
         ttk.Button(step_btns, text="Add delay", command=self._step_add_delay).pack(side=tk.LEFT, padx=(6, 0))
         ttk.Button(step_btns, text="Delete step", command=self._step_delete).pack(side=tk.LEFT, padx=(6, 0))
 
-        map_box = ttk.LabelFrame(self.tab_macros, text="Input mapping (key_id → action)")
+        map_box = ttk.LabelFrame(self.tab_macros, text="Heist plan (key_id → action)")
         map_box.pack(fill=tk.X, pady=(10, 0))
 
         r1 = ttk.Frame(map_box)
@@ -1530,7 +1530,7 @@ class App(tk.Tk):
         ttk.Label(r1, text="Remap to:").pack(side=tk.LEFT)
         ttk.Entry(r1, textvariable=self._mapping_remap_to, width=6).pack(side=tk.LEFT, padx=(6, 12))
 
-        ttk.Label(r1, text="Macro id:").pack(side=tk.LEFT)
+        ttk.Label(r1, text="Trick id:").pack(side=tk.LEFT)
         ttk.Entry(r1, textvariable=self._mapping_macro_id, width=14).pack(side=tk.LEFT, padx=(6, 12))
 
         ttk.Label(r1, text="Pick:").pack(side=tk.LEFT)
@@ -1544,7 +1544,7 @@ class App(tk.Tk):
         self.macro_pick.pack(side=tk.LEFT, padx=(6, 12))
         self.macro_pick.bind("<<ComboboxSelected>>", lambda _e: self._mapping_pick_macro())
 
-        ttk.Button(r1, text="Apply", command=self._mapping_apply).pack(side=tk.LEFT)
+        ttk.Button(r1, text="Execute", command=self._mapping_apply).pack(side=tk.LEFT)
 
         self._refresh_macro_list()
 
@@ -1618,7 +1618,7 @@ class App(tk.Tk):
         ttk.Label(
             self.tab_share,
             text=(
-                "This is offline-only sharing: a compressed+encoded profile string. "
+                "This is offline-only sharing: a compressed+encoded loadout string. "
                 "No network calls, no overlays/hooks, and nothing game-specific."
             ),
             wraplength=900,
@@ -1630,7 +1630,7 @@ class App(tk.Tk):
         preset_box.pack(fill=tk.X, padx=0, pady=(12, 0))
         ttk.Label(
             preset_box,
-            text="Load a ready-made mapping preset. This replaces the current profile mappings.",
+            text="Load a ready-made heist plan preset. This replaces the current loadout.",
             wraplength=700,
             justify="left",
         ).pack(anchor="w", padx=8, pady=(4, 2))
@@ -1693,7 +1693,7 @@ class App(tk.Tk):
         preset = presets.get(name)
         if not preset:
             return
-        if not messagebox.askyesno("Apply preset", f"Replace current mappings with '{name}' preset?"):
+        if not messagebox.askyesno("Execute preset", f"Replace current heist plans with '{name}' preset?"):
             return
         try:
             prof = self._current_profile()
@@ -2389,8 +2389,8 @@ class App(tk.Tk):
         toolbar.pack(fill=tk.X, padx=8, pady=(0, 2))
 
         # Popup trigger buttons (open on-demand panels)
-        ttk.Button(toolbar, text="Map\u2026", command=lambda: self._mapping_popup.toggle(), width=6).pack(side=tk.LEFT, padx=2)
-        ttk.Button(toolbar, text="Layers\u2026", command=lambda: self._layers_popup.toggle(), width=8).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Heist Plan\u2026", command=lambda: self._mapping_popup.toggle(), width=6).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Masks\u2026", command=lambda: self._layers_popup.toggle(), width=8).pack(side=tk.LEFT, padx=2)
         ttk.Button(toolbar, text="Chords\u2026", command=lambda: self._chords_popup.toggle(), width=8).pack(side=tk.LEFT, padx=2)
         ttk.Button(toolbar, text="Keyboard\u2026", command=lambda: self._keyboard_popup.toggle(), width=10).pack(side=tk.LEFT, padx=2)
 
@@ -2399,9 +2399,9 @@ class App(tk.Tk):
 
         # Compact action buttons
         ttk.Button(toolbar, text="Setup", command=self._open_guided_wizard).pack(side=tk.LEFT, padx=2)
-        ttk.Button(toolbar, text="Defaults", command=self._apply_smart_defaults).pack(side=tk.LEFT, padx=2)
-        ttk.Button(toolbar, text="Learn", command=self._keymap_begin_learn).pack(side=tk.LEFT, padx=2)
-        self._bind_btn = ttk.Button(toolbar, text="Bind", command=self._keymap_begin_bind)
+        ttk.Button(toolbar, text="Quick Job", command=self._apply_smart_defaults).pack(side=tk.LEFT, padx=2)
+        ttk.Button(toolbar, text="Case", command=self._keymap_begin_learn).pack(side=tk.LEFT, padx=2)
+        self._bind_btn = ttk.Button(toolbar, text="Steal", command=self._keymap_begin_bind)
         self._bind_btn.pack(side=tk.LEFT, padx=2)
         ttk.Button(toolbar, text="Clear", command=self._keymap_clear_selected).pack(side=tk.LEFT, padx=2)
         ttk.Button(toolbar, text="Reset", command=self._keymap_reset_selected).pack(side=tk.LEFT, padx=2)
@@ -2409,7 +2409,7 @@ class App(tk.Tk):
 
         # Right side: colour picker, search + sandbox
         ttk.Checkbutton(
-            toolbar, text="Sandbox", variable=self._sandbox_active,
+            toolbar, text="Practice Run", variable=self._sandbox_active,
             command=self._toggle_sandbox,
         ).pack(side=tk.RIGHT, padx=(4, 0))
         ttk.Entry(toolbar, textvariable=self._search_var, width=14).pack(side=tk.RIGHT, padx=2)
@@ -2478,7 +2478,7 @@ class App(tk.Tk):
     def _build_mapping_popup(self) -> None:
         """Build the mapping controls popup (input key_id, type, remap, macro)."""
         self._mapping_popup = SketchPopup(
-            self, title="Input Mapping", colors=self._colors,
+            self, title="Heist Plan", colors=self._colors,
             typo=self._typo, width=520, height=120)
         body = self._mapping_popup.body
 
@@ -2501,15 +2501,15 @@ class App(tk.Tk):
         ttk.Label(r2, text="Remap to:").pack(side=tk.LEFT)
         ttk.Entry(r2, textvariable=self._mapping_remap_to, width=6).pack(side=tk.LEFT, padx=(6, 12))
 
-        ttk.Label(r2, text="Macro id:").pack(side=tk.LEFT)
+        ttk.Label(r2, text="Trick id:").pack(side=tk.LEFT)
         ttk.Entry(r2, textvariable=self._mapping_macro_id, width=14).pack(side=tk.LEFT, padx=(6, 12))
 
-        ttk.Button(r2, text="Apply", command=self._mapping_apply).pack(side=tk.LEFT)
+        ttk.Button(r2, text="Execute", command=self._mapping_apply).pack(side=tk.LEFT)
 
     def _build_layers_popup(self) -> None:
         """Build the layers popup (layer selector, config, stack summary)."""
         self._layers_popup = SketchPopup(
-            self, title="Layers", colors=self._colors,
+            self, title="Masks", colors=self._colors,
             typo=self._typo, width=560, height=260)
         body = self._layers_popup.body
 
@@ -2519,7 +2519,7 @@ class App(tk.Tk):
         ttk.Radiobutton(layer_row, text="Base", variable=self._layer_edit_index, value=-1,
                         command=self._keymap_redraw).pack(side=tk.LEFT)
         for li in range(4):
-            ttk.Radiobutton(layer_row, text=f"Layer {li+1}", variable=self._layer_edit_index, value=li,
+            ttk.Radiobutton(layer_row, text=f"Mask {li+1}", variable=self._layer_edit_index, value=li,
                             command=self._keymap_redraw).pack(side=tk.LEFT, padx=(8, 0))
         ttk.Button(layer_row, text="Add", command=self._layer_add).pack(side=tk.LEFT, padx=(16, 0))
         ttk.Button(layer_row, text="Remove", command=self._layer_remove).pack(side=tk.LEFT, padx=(6, 0))
@@ -2538,7 +2538,7 @@ class App(tk.Tk):
         ttk.Label(self._layer_cfg_frame, text="Name:").pack(side=tk.LEFT)
         self._layer_name_var = tk.StringVar(value="")
         ttk.Entry(self._layer_cfg_frame, textvariable=self._layer_name_var, width=14).pack(side=tk.LEFT, padx=(4, 8))
-        ttk.Button(self._layer_cfg_frame, text="Apply", command=self._layer_apply_config).pack(side=tk.LEFT)
+        ttk.Button(self._layer_cfg_frame, text="Execute", command=self._layer_apply_config).pack(side=tk.LEFT)
 
         # Visual layer stack summary
         self._layer_stack_frame = ttk.Frame(body)
@@ -2962,7 +2962,7 @@ class App(tk.Tk):
             self._keymap_learn_name = name
             self._mapping_key_id.set("")
             self._keymap_status.set(
-                f"[{name}] Press the controller button now to learn its key_id… (or right-click for options)"
+                f"[{name}] Press the controller button now to case its key_id… (or right-click for options)"
             )
         else:
             # Has key_id → auto-enter press-to-bind mode (press keyboard key)
@@ -2971,7 +2971,7 @@ class App(tk.Tk):
             self._mapping_key_id.set(str(bound))
             self._mapping_load_from_profile(int(bound))
             self._keymap_status.set(
-                f"[{name}] Press a keyboard key to bind → key_id={bound}  (Escape to cancel, right-click for more)"
+                f"[{name}] Press a keyboard key to steal → key_id={bound}  (Escape to cancel, right-click for more)"
             )
             self._show_bind_overlay(name, int(bound))
 
@@ -2979,10 +2979,10 @@ class App(tk.Tk):
 
     def _keymap_begin_learn(self) -> None:
         if not self._keymap_selected_name:
-            self._keymap_status.set("Select a control first.")
+            self._keymap_status.set("Pick a target first.")
             return
         self._keymap_learn_name = self._keymap_selected_name
-        self._keymap_status.set(f"Learning {self._keymap_selected_name}… press that controller button now.")
+        self._keymap_status.set(f"Casing {self._keymap_selected_name}… press that controller button now.")
 
     def _keymap_on_right_click(self, e: tk.Event) -> None:
         """Show a context menu for the clicked hotspot."""
@@ -2998,7 +2998,7 @@ class App(tk.Tk):
 
         menu = tk.Menu(self, tearoff=0)
         menu.add_command(
-            label=f"Learn key_id for {name}",
+            label=f"Case key_id for {name}",
             command=lambda: self._keymap_context_learn(name),
         )
         if bound is not None:
@@ -3012,7 +3012,7 @@ class App(tk.Tk):
             )
             menu.add_separator()
             menu.add_command(
-                label=f"Explain {name} mapping",
+                label=f"Explain {name} heist plan",
                 command=lambda: self._show_explain_dialog(name),
             )
             menu.add_separator()
@@ -3021,7 +3021,7 @@ class App(tk.Tk):
                 command=lambda: self._keymap_context_reset(name),
             )
             menu.add_command(
-                label=f"Clear {name} binding",
+                label=f"Clear {name} steal",
                 command=lambda: self._keymap_context_clear(name),
             )
             menu.add_command(
@@ -3059,7 +3059,7 @@ class App(tk.Tk):
         self._bind_mode = True
         self._bind_hotspot = name
         self._mapping_key_id.set(str(key_id))
-        self._keymap_status.set(f"[{name}] Press a keyboard key to bind… (Escape to cancel)")
+        self._keymap_status.set(f"[{name}] Press a keyboard key to steal… (Escape to cancel)")
         self._show_bind_overlay(name, int(key_id))
 
     def _keymap_context_reset(self, name: str) -> None:
@@ -3213,16 +3213,16 @@ class App(tk.Tk):
     def _keymap_begin_bind(self) -> None:
         """Start press-to-bind: wait for a keyboard key press to map to the selected hotspot."""
         if not self._keymap_selected_name:
-            self._keymap_status.set("Select a control first.")
+            self._keymap_status.set("Pick a target first.")
             return
         hs = self._keymap_hotspots()
         bound_key_id = hs.get(self._keymap_selected_name)
         if bound_key_id is None:
-            self._keymap_status.set(f"Use Learn first to assign a key_id to {self._keymap_selected_name}.")
+            self._keymap_status.set(f"Use Case first to assign a key_id to {self._keymap_selected_name}.")
             return
         self._bind_mode = True
         self._bind_hotspot = self._keymap_selected_name
-        self._keymap_status.set(f"Press a keyboard key to bind to {self._keymap_selected_name}… (Escape to cancel)")
+        self._keymap_status.set(f"Press a keyboard key to steal {self._keymap_selected_name}… (Escape to cancel)")
         self._show_bind_overlay(self._keymap_selected_name, int(bound_key_id))
 
     def _on_keypress_bind(self, event: tk.Event) -> None:
@@ -3235,7 +3235,7 @@ class App(tk.Tk):
             self._bind_mode = False
             self._bind_hotspot = None
             self._hide_bind_overlay()
-            self._keymap_status.set("Bind cancelled.")
+            self._keymap_status.set("Heist cancelled.")
             return
 
         hid = hid_keycodes.keysym_to_hid(keysym)
@@ -3273,7 +3273,7 @@ class App(tk.Tk):
         self._set_profile_obj(prof, undo_label=f"bind {hotspot}")
 
         key_name = hid_keycodes.hid_to_name(mod, keycode)
-        self._keymap_status.set(f"Bound {hotspot} → {key_name}")
+        self._keymap_status.set(f"STOLEN · {hotspot} → {key_name}")
         self._mapping_key_id.set(str(key_id))
         self._mapping_type.set("remap_hid")
         self._keymap_redraw()
@@ -3284,7 +3284,7 @@ class App(tk.Tk):
     def _keymap_reset_selected(self) -> None:
         """Remove the mapping for the currently selected hotspot (revert to passthrough)."""
         if not self._keymap_selected_name:
-            self._keymap_status.set("Select a control first.")
+            self._keymap_status.set("Pick a target first.")
             return
         hs = self._keymap_hotspots()
         key_id = hs.get(self._keymap_selected_name)
@@ -3452,7 +3452,7 @@ class App(tk.Tk):
         """Reset the active slot to a clean default profile and activate it."""
         confirm = messagebox.askyesno(
             "Safe mode",
-            "This will overwrite the current slot with a clean default profile "
+            "This will overwrite the current slot with a clean default loadout "
             "and set it as active on the device.\n\n"
             "Use this if your controls become unusable.\n\n"
             "Continue?",
@@ -3465,7 +3465,7 @@ class App(tk.Tk):
         self._set_profile_obj(fresh)
         self._send_cmd({"cmd": "write_profile", "slot": slot, "profile": fresh})
         self._send_cmd({"cmd": "set_active_profile", "slot": slot})
-        self._log_line(f"[host] Safe mode: slot {slot} reset to defaults and activated")
+        self._log_line(f"[host] Safe mode: slot {slot} reset to defaults and activated \u2014 clean loadout")
 
     def _layer_add(self) -> None:
         """Add a new layer to the profile."""
@@ -3478,7 +3478,7 @@ class App(tk.Tk):
             layers = []
             prof["layers"] = layers
         if len(layers) >= 4:
-            messagebox.showinfo("Layer limit", "Maximum 4 layers supported.")
+            messagebox.showinfo("Mask limit", "Maximum 4 masks supported.")
             return
         idx = len(layers)
         layers.append({
@@ -3491,13 +3491,13 @@ class App(tk.Tk):
         self._layer_edit_index.set(idx)
         self._keymap_redraw()
         self._rebuild_layer_stack()
-        self._log_line(f"[host] Added layer {idx + 1}")
+        self._log_line(f"[host] Added mask {idx + 1}")
 
     def _layer_remove(self) -> None:
         """Remove the currently selected layer."""
         idx = self._layer_edit_index.get()
         if idx < 0:
-            messagebox.showinfo("Select layer", "Select a layer (not Base) to remove.")
+            messagebox.showinfo("Select mask", "Select a mask (not Base) to remove.")
             return
         try:
             prof = self._current_profile()
@@ -3511,7 +3511,7 @@ class App(tk.Tk):
         self._layer_edit_index.set(-1)
         self._keymap_redraw()
         self._rebuild_layer_stack()
-        self._log_line(f"[host] Removed layer '{removed.get('name', idx)}'")
+        self._log_line(f"[host] Removed mask '{removed.get('name', idx)}'")
 
     def _layer_apply_config(self) -> None:
         """Apply the layer configuration (activation key_id, mode, name) from the UI."""
@@ -3536,7 +3536,7 @@ class App(tk.Tk):
         if name:
             layers[idx]["name"] = name
         self._set_profile_obj(prof)
-        self._log_line(f"[host] Layer {idx + 1} config updated")
+        self._log_line(f"[host] Mask {idx + 1} config updated")
 
     def _rebuild_layer_stack(self) -> None:
         """Rebuild the visual layer stack summary (shows mapping counts per layer)."""
@@ -3556,7 +3556,7 @@ class App(tk.Tk):
             layers = []
         base_count = len(prof.get("mappings", {}))
 
-        desc = f"  Base  ({base_count} mappings)"
+        desc = f"  Base  ({base_count} heist plans)"
         lbl = ttk.Label(frame, text=desc, relief="ridge", padding=(6, 2))
         lbl.pack(side=tk.LEFT, padx=(0, 4))
         self._layer_stack_labels.append(lbl)
@@ -3845,7 +3845,7 @@ class App(tk.Tk):
         layout_cb.bind("<<ComboboxSelected>>", lambda _: self._m913_on_layout_changed())
 
         self._m913_edit_layout_btn = ttk.Button(
-            toolbar, text="Edit Map\u2026",
+            toolbar, text="Edit Heist Plan\u2026",
             command=self._m913_edit_incedius_map)
         self._m913_edit_layout_btn.pack(side=tk.LEFT, padx=2)
         self._m913_edit_layout_btn.state(
@@ -3913,7 +3913,7 @@ class App(tk.Tk):
     def _build_m913_buttons_popup(self) -> None:
         """Popup: 16-button mapping grid."""
         self._m913_buttons_popup = SketchPopup(
-            self, title="Button Mapping (16 buttons)", colors=self._colors,
+            self, title="Button Heist Plan (16 buttons)", colors=self._colors,
             typo=self._typo, width=400, height=460)
         body = self._m913_buttons_popup.body
 
@@ -4204,7 +4204,7 @@ class App(tk.Tk):
             "2) It sends button events over a UART serial link to an ESP32-S3 board.",
             "3) The ESP32-S3 plugs into the PC and shows up as a USB HID keyboard.",
             "4) This app (Bind Bandit) talks to the ESP32-S3 over a USB serial port",
-            "   to configure profiles, mappings, macros, and more.",
+            "   to configure loadouts, heist plans, tricks, and more.",
         ], collapsed=False)
 
         # ══════════════════════════════════════════════════════════════
@@ -4426,46 +4426,46 @@ class App(tk.Tk):
             "\u2022 If no COM port appears, check that the ESP32-S3 is plugged in and CDC is enabled.",
             "",
             "## Tabs overview",
-            "\u2022 Profile \u2014 JSON profile editor, slot quick-switch, rename/duplicate/reset.",
-            "\u2022 Macros \u2014 Record and edit macro sequences (key + delay steps).",
+            "\u2022 Loadout \u2014 JSON loadout editor, slot quick-switch, rename/duplicate/reset.",
+            "\u2022 Tricks \u2014 Record and edit trick sequences (key + delay steps).",
             "\u2022 Stick \u2014 Deadzone / response curve for analog sticks (future analog support).",
-            "\u2022 Share \u2014 Export/import profile codes (compressed base64 strings).",
+            "\u2022 Share \u2014 Export/import loadout codes (compressed base64 strings).",
             "\u2022 Overlay \u2014 Always-on-top translucent status window showing active keys.",
-            "\u2022 Controller \u2014 Joy-Con diagram + keymap editor + layers/chords/keyboard preview.",
+            "\u2022 Controller \u2014 Joy-Con diagram + keymap editor + masks/chords/keyboard preview.",
             "\u2022 Input Test \u2014 Live event log, timeline, and active-key display.",
             "\u2022 Mouse (M913) \u2014 Configure Redragon M913 mice: buttons, DPI, LED, polling rate.",
             "\u2022 Razer \u2014 Configure Razer mice: DPI stages, buttons, polling, idle timeout, battery.",
             "\u2022 Help \u2014 This tab.",
             "",
-            "## Profiles",
-            "\u2022 4 profile slots (0\u20133) stored on the ESP32-S3.",
-            "\u2022 Each profile contains: key mappings, remapping rules, macros, layers, chords.",
-            "\u2022 Profiles can be renamed, duplicated, and reset.",
+            "## Loadouts",
+            "\u2022 4 loadout slots (0\u20133) stored on the ESP32-S3.",
+            "\u2022 Each loadout contains: heist plans, remapping rules, tricks, masks, chords.",
+            "\u2022 Loadouts can be renamed, duplicated, and reset.",
             "\u2022 Export/import via Share tab for backup or sharing with others.",
             "",
-            "## Key mapping (Controller tab)",
+            "## Heist planning (Controller tab)",
             "Click a button on the Joy-Con diagram to select it, then assign an action:",
             "\u2022 Passthrough \u2014 use the default keymap.c mapping.",
             "\u2022 Disable \u2014 ignore this button completely.",
             "\u2022 Remap \u2014 map to a different logical action.",
             "\u2022 Remap HID \u2014 map to any arbitrary USB HID keycode.",
-            "\u2022 Macro \u2014 trigger a recorded macro.",
+            "\u2022 Trick \u2014 trigger a recorded trick.",
             "\u2022 Tap/Hold \u2014 different action for short tap vs long press.",
             "\u2022 Chord \u2014 multi-button combo (press two buttons together for a different action).",
             "",
             "## Visual feedback",
             "\u2022 Hover glow \u2014 A hand-drawn ink ring highlights buttons as you move the mouse.",
-            "\u2022 Bind overlay \u2014 A floating card appears during press-to-bind showing which button you\u2019re binding.",
-            "\u2022 Ink stamp \u2014 An expanding ring + checkmark animation confirms a successful bind.",
+            "\u2022 Steal overlay \u2014 A floating card appears during press-to-steal showing which button you\u2019re stealing.",
+            "\u2022 Ink stamp \u2014 An expanding ring with STOLEN confirms a successful steal.",
             "\u2022 Overlay colour \u2014 Use the \U0001f3a8 dropdown in the toolbar to choose from 7 rainbow",
             "  colours (red, orange, yellow, green, blue, indigo, violet). Default is violet.",
             "",
-            "## Layers",
-            "Layers let you have multiple sets of bindings and switch between them.",
-            "\u2022 Layer tabs are shown below the controller diagram.",
-            "\u2022 Click a tab to switch the editor to that layer.",
-            "\u2022 Click the + button to add a new layer.",
-            "\u2022 Base layer is always present and cannot be removed.",
+            "## Masks",
+            "Masks let you have multiple sets of steals and switch between them.",
+            "\u2022 Mask tabs are shown below the controller diagram.",
+            "\u2022 Click a tab to switch the editor to that mask.",
+            "\u2022 Click the + button to add a new mask.",
+            "\u2022 Base mask is always present and cannot be removed.",
             "",
             "## Safety",
             "\u2022 Restore \u2014 The toolbar has a Restore\u2026 button that reverts to the last config that was",
@@ -4506,7 +4506,7 @@ class App(tk.Tk):
             "  Shake = 1    Tilt Up = 2    Tilt Down = 3",
             "  Tilt Left = 4    Tilt Right = 5    Flick = 6",
             "",
-            "All mappings are fully customizable in the Controller tab.",
+            "All heist plans are fully customizable in the Controller tab.",
         ])
 
         # ══════════════════════════════════════════════════════════════
@@ -4553,7 +4553,7 @@ class App(tk.Tk):
             "\u2022 LED: color, effect, brightness.",
             "\u2022 Polling rate: 125 / 250 / 500 / 1000 Hz.",
             "\u2022 IncediusMod variant supported (different side button layout).",
-            "\u2022 Profiles: save / load / delete / auto-link per device.",
+            "\u2022 Loadouts: save / load / delete / auto-link per device.",
             "",
             "## Razer mice (Razer tab)",
             "\u2022 Basilisk X HyperSpeed and other supported models.",
@@ -4561,7 +4561,7 @@ class App(tk.Tk):
             "\u2022 7 remappable buttons (keyboard keys, mouse buttons, DPI cycle, disable).",
             "\u2022 Polling rate, idle timeout, battery readback.",
             "\u2022 All settings written to onboard memory \u2014 no drivers needed, anti-cheat safe.",
-            "\u2022 Profiles: save / load / delete / auto-link per device.",
+            "\u2022 Loadouts: save / load / delete / auto-link per device.",
             "",
             "## How it works",
             "Both use USB HID Feature Reports to read/write the mouse\u2019s onboard memory.",
@@ -4576,7 +4576,7 @@ class App(tk.Tk):
             "",
             "## How to update",
             "1) Connect to the ESP32-S3 via COM port.",
-            "2) Use the Profile tab \u2192 Firmware Update section.",
+            "2) Use the Loadout tab \u2192 Firmware Update section.",
             "3) Select the firmware binary (.bin) for the board you want to update.",
             "4) Choose the target board (esp32s3 or esp32).",
             "5) Click Update. The app sends the binary in chunks over serial.",
@@ -4673,11 +4673,11 @@ class App(tk.Tk):
             "  python -m joycon_helper",
             "",
             "## Controller tab shortcuts",
-            "  Click hotspot        \u2014  Select + start press-to-bind",
-            "  Right-click hotspot  \u2014  Context menu (bind, learn, reset\u2026)",
-            "  Escape during bind   \u2014  Cancel press-to-bind",
+            "  Click hotspot        \u2014  Select + start press-to-steal",
+            "  Right-click hotspot  \u2014  Context menu (steal, case, reset\u2026)",
+            "  Escape during steal  \u2014  Cancel press-to-steal",
             "  Restore\u2026 button     \u2014  Revert to last written config",
-            "  Layer tabs (below diagram)  \u2014  Switch active editing layer",
+            "  Mask tabs (below diagram)   \u2014  Switch active editing mask",
             "",
             "## Key docs",
             "  docs/wiring.md            \u2014 detailed wiring guide",
@@ -5106,7 +5106,7 @@ class App(tk.Tk):
     def _build_razer_buttons_popup(self) -> None:
         """Popup: button remapping."""
         self._razer_buttons_popup = SketchPopup(
-            self, title="Button Remapping", colors=self._colors,
+            self, title="Button Heist Plan", colors=self._colors,
             typo=self._typo, width=380, height=320)
         body = self._razer_buttons_popup.body
 
@@ -5426,21 +5426,21 @@ class App(tk.Tk):
         try:
             li = self._layer_edit_index.get()
             if li < 0:
-                parts.append("Base Layer")
+                parts.append("Base Mask")
             else:
-                parts.append(f"Layer {li + 1}")
+                parts.append(f"Mask {li + 1}")
         except Exception:
             pass
 
         # Bind mode
         if self._bind_mode:
-            parts.append("BIND MODE")
+            parts.append("STEAL MODE")
         elif self._keymap_learn_name:
-            parts.append("LEARN MODE")
+            parts.append("CASE MODE")
 
         # Sandbox
         if self._sandbox_active.get():
-            parts.append("SANDBOX")
+            parts.append("PRACTICE RUN")
 
         # UI mode
         parts.append(f"UI: {self._ui_mode.get()}")
@@ -5484,7 +5484,7 @@ class App(tk.Tk):
         try:
             if simple:
                 # Hide Macros, Stick, Share tabs (keep Profile, Controller, Input Test, Overlay)
-                for tab_name in ("Macros", "Stick", "Share"):
+                for tab_name in ("Tricks", "Stick", "Share"):
                     for i in range(self.tabs.index("end")):
                         if self.tabs.tab(i, "text") == tab_name:
                             self.tabs.hide(i)
@@ -5504,13 +5504,13 @@ class App(tk.Tk):
         if self._sandbox_active.get():
             # Entering sandbox: snapshot current profile
             self._sandbox_snapshot = self.profile_text.get("1.0", "end").strip()
-            self._log_line("[host] Sandbox mode ON — changes are temporary")
+            self._log_line("[host] Practice Run ON — changes are temporary")
         else:
             # Exiting sandbox without applying
             if self._sandbox_snapshot is not None:
                 confirm = messagebox.askyesno(
-                    "Exit Sandbox",
-                    "Apply sandbox changes to the real profile?\n\n"
+                    "Exit Practice Run",
+                    "Apply practice run changes to the real loadout?\n\n"
                     "Yes = keep changes\nNo = discard changes",
                 )
                 if not confirm and self._sandbox_snapshot:
@@ -5523,9 +5523,9 @@ class App(tk.Tk):
                         self._keymap_refresh_visuals()
                     except Exception:
                         pass
-                    self._log_line("[host] Sandbox changes discarded")
+                    self._log_line("[host] Practice run changes discarded")
                 else:
-                    self._log_line("[host] Sandbox changes applied")
+                    self._log_line("[host] Practice run changes applied")
             self._sandbox_snapshot = None
 
     # ------------------------------------------------------------------
@@ -5871,11 +5871,11 @@ class App(tk.Tk):
         hs = self._keymap_hotspots()
         key_id = hs.get(hotspot)
 
-        lines: List[str] = [f"=== {hotspot} Mapping Chain ===", ""]
+        lines: List[str] = [f"=== {hotspot} Heist Chain ===", ""]
 
         if key_id is None:
             lines.append(f"1. Input: {hotspot} — NO key_id learned")
-            lines.append("   Status: Not configured. Use Learn to assign a controller button.")
+            lines.append("   Status: Not configured. Use Case to assign a controller button.")
             return "\n".join(lines)
 
         lines.append(f"1. Input: {hotspot} → key_id = {key_id}")
@@ -5890,24 +5890,24 @@ class App(tk.Tk):
         try:
             prof = self._current_profile()
         except Exception:
-            lines.append("2. Mapping: ERROR — could not read profile")
+            lines.append("2. Heist plan: ERROR — could not read loadout")
             return "\n".join(lines)
 
         mappings = prof.get("mappings", {})
         entry = mappings.get(str(key_id)) if isinstance(mappings, dict) else None
 
         if entry is None or not isinstance(entry, dict):
-            lines.append("2. Mapping: passthrough (default keymap.c)")
+            lines.append("2. Heist plan: passthrough (default keymap.c)")
             dk = hid_keycodes.DEFAULT_KEYMAP.get(key_id)
             if dk:
                 lines.append(f"3. Output: {hid_keycodes.hid_to_name(dk[0], dk[1])}")
-                lines.append("   Status: OK — key will be sent via default mapping")
+                lines.append("   Status: OK — key will be sent via default heist plan")
             else:
                 lines.append(f"3. Output: NONE (key_id {key_id} not in default keymap)")
                 lines.append("   Status: WARNING — this key_id has no default output")
         else:
             et = entry.get("type", "?")
-            lines.append(f"2. Mapping: {et}")
+            lines.append(f"2. Heist plan: {et}")
 
             if et == "disable":
                 lines.append("3. Output: DISABLED — input is ignored")
@@ -5927,13 +5927,13 @@ class App(tk.Tk):
                     lines.append("   Status: WARNING — remap target not in default keymap")
             elif et == "macro":
                 mid = entry.get("id", "?")
-                lines.append(f"3. Output: triggers macro '{mid}'")
+                lines.append(f"3. Output: triggers trick '{mid}'")
                 macros = prof.get("macros", [])
                 found = any(m.get("id") == mid for m in macros if isinstance(m, dict))
                 if found:
-                    lines.append("   Status: OK — macro exists in profile")
+                    lines.append("   Status: OK — trick exists in loadout")
                 else:
-                    lines.append(f"   Status: ERROR — macro '{mid}' not found in profile!")
+                    lines.append(f"   Status: ERROR — trick '{mid}' not found in loadout!")
             elif et == "tap_hold":
                 tap = entry.get("tap", {})
                 hold = entry.get("hold", {})
@@ -6055,7 +6055,7 @@ class App(tk.Tk):
         # Title
         self._bind_overlay_items.append(
             c.create_text((x1 + x2) // 2, y1 + 18,
-                          text=f"\u2328  Press a key to bind {hotspot_name}",
+                          text=f"\u2328  Press a key to steal {hotspot_name}",
                           fill=colors.get("text", "#2a1f0e"),
                           font=(font_fam, 10, "bold"), tags=tag))
         # Subtitle
@@ -6125,7 +6125,7 @@ class App(tk.Tk):
         label_y = cy - 30 - int(20 * t)
         text_col = _blend_hex(self._overlay_hex(), self._colors.get("bg", "#e8d8b8"), t * 0.8)
         c.create_text(
-            cx, label_y, text=f"\u2714 {anim['label']}",
+            cx, label_y, text=f"STOLEN \u00b7 {anim['label']}",
             fill=text_col,
             font=(self._typo.get("font_family", "Segoe Print"), 9, "bold"),
             tags="ink_stamp",
@@ -6192,20 +6192,20 @@ class App(tk.Tk):
     def _restore_last_good_profile(self) -> None:
         """Restore the last-known-good profile snapshot."""
         if not self._last_good_profile:
-            messagebox.showinfo("No backup", "No last-known-good profile saved yet.\n\n"
-                                "A snapshot is saved automatically each time the profile\n"
+            messagebox.showinfo("No backup", "No last-known-good loadout saved yet.\n\n"
+                                "A snapshot is saved automatically each time the loadout\n"
                                 "is successfully written to the device.")
             return
         if not messagebox.askyesno("Restore",
-                                   "Restore the last profile that was successfully written to the device?\n\n"
-                                   "Current profile will be replaced (undo is available)."):
+                                   "Restore the last loadout that was successfully written to the device?\n\n"
+                                   "Current loadout will be replaced (undo is available)."):
             return
         try:
             obj = json.loads(self._last_good_profile)
             self._set_profile_obj(obj, undo_label="restore last good")
             self._keymap_redraw()
             self._kbd_redraw()
-            self._keymap_status.set("Restored last-known-good profile.")
+            self._keymap_status.set("Restored last-known-good loadout.")
             self._play_sound("undo")
         except Exception as e:
             messagebox.showerror("Restore failed", str(e))
@@ -6235,7 +6235,7 @@ class App(tk.Tk):
 
         self._mapping_key_id.set(str(int(key_id)))
         self._mapping_load_from_profile(int(key_id))
-        self._keymap_status.set(f"Bound {learned_name} → key_id={int(key_id)}")
+        self._keymap_status.set(f"STOLEN · {learned_name} → key_id={int(key_id)}")
         self._play_sound("bind")
 
         # Auto-advance: select the next unbound hotspot for fast sequential mapping.
@@ -6256,7 +6256,7 @@ class App(tk.Tk):
             if candidate not in hs:
                 self._keymap_selected_name = candidate
                 self._keymap_status.set(
-                    f"Auto-selected '{candidate}' — press Learn to bind, or click another."
+                    f"Auto-selected '{candidate}' — press Case to steal, or click another."
                 )
                 self._keymap_dirty = True
                 return
@@ -6278,7 +6278,7 @@ class App(tk.Tk):
         hs.pop(self._keymap_selected_name, None)
         self._set_profile_obj(prof)
         self._mapping_key_id.set("")
-        self._keymap_status.set(f"Cleared binding for {self._keymap_selected_name}.")
+        self._keymap_status.set(f"Cleared steal for {self._keymap_selected_name}.")
 
     def _update_bt_background(self) -> None:
         if not self._bt_banner or not self._bt_banner_label:
@@ -6597,9 +6597,9 @@ class App(tk.Tk):
             active = obj.get("active", False)
             ts = time.strftime("%H:%M:%S")
             state_str = "activated" if active else "deactivated"
-            self._log_line(f"[device] Layer '{name}' {state_str}")
+            self._log_line(f"[device] Mask '{name}' {state_str}")
             try:
-                self._input_test_append(f"[{ts}] Layer '{name}' {state_str}")
+                self._input_test_append(f"[{ts}] Mask '{name}' {state_str}")
             except Exception:
                 pass
 

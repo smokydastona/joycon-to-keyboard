@@ -9,6 +9,10 @@ Until then, entries are grouped by date.
 
 - Capture real controller HID reports and implement evidence-based mapping in the ESP32 host mapper (no guessing report layouts).
 
+### Changed
+
+- **"Bind Bandit" UI identity system**: renamed all user-facing terminology across the helper app to match the heist/thief theme. Profile → **Loadout**, Layer → **Mask**, Macro → **Trick**, Mapping → **Heist Plan**, Bind → **Steal**, Apply → **Execute**, Sandbox → **Practice Run**, Learn → **Case**, Defaults → **Quick Job**. Successful binds now show "STOLEN ·" text in the ink stamp animation and status bar. All 14 Help tab sections updated to match. Internal variable names, method names, JSON protocol keys, and firmware code are unchanged.
+
 ### Added
 
 - **Comprehensive Help tab**: replaced the single pinout-image Help tab with a full 14-section collapsible help guide covering: What Is This, What You Need, Wiring & Connections, Board Pinout Diagram (embedded image preserved), Firmware Installation (ESP32-S3 then ESP32), First End-to-End Test, Using Bind Bandit, Default Key Mapping table, Serial Protocol reference, Mouse Configuration (M913 & Razer), OTA Firmware Updates, Troubleshooting (6 categories), Installing / Updating the Helper App, and a Quick Reference card. Includes a live search bar that filters sections by keyword. All sections are collapsible with toggle arrows.
