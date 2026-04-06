@@ -3883,36 +3883,293 @@ class App(tk.Tk):
     # Help tab
     # ------------------------------------------------------------------
 
+    # ── Help-tab helpers ─────────────────────────────────────────────
+
+    def _help_section(
+        self,
+        parent: tk.Widget,
+        title: str,
+        body_lines: List[str],
+        *,
+        collapsed: bool = True,
+        mono: bool = False,
+    ) -> tk.Frame:
+        """Create a collapsible help section.
+
+        Returns the content frame so callers can pack extra widgets (e.g. images).
+        """
+        colors = self._colors
+        typo = self._typo
+        font_fam = typo.get("font_family", "Segoe Print")
+        mono_fam = typo.get("mono_family", "Consolas")
+        mono_sz = typo.get("mono_size", 10)
+
+        wrapper = tk.Frame(parent, bg=colors.get("bg", "#e8d8b8"))
+        wrapper.pack(fill=tk.X, padx=4, pady=(4, 0))
+
+        # Header row (toggle button)
+        header = tk.Frame(wrapper, bg=colors.get("panel2", "#e2d0a8"))
+        header.pack(fill=tk.X)
+
+        arrow_var = tk.StringVar(value="\u25b6" if collapsed else "\u25bc")
+        toggle_btn = tk.Label(
+            header, textvariable=arrow_var,
+            font=(font_fam, 10), bg=colors.get("panel2", "#e2d0a8"),
+            fg=colors.get("accent", "#4a6480"), cursor="hand2", padx=6,
+        )
+        toggle_btn.pack(side=tk.LEFT)
+
+        tk.Label(
+            header, text=title, font=(font_fam, 11, "bold"),
+            bg=colors.get("panel2", "#e2d0a8"), fg=colors.get("text", "#2a1f0e"),
+            anchor="w",
+        ).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # Divider
+        tk.Frame(wrapper, height=1, bg=colors.get("border", "#b09878")).pack(fill=tk.X)
+
+        # Body
+        body = tk.Frame(wrapper, bg=colors.get("bg", "#e8d8b8"))
+        if not collapsed:
+            body.pack(fill=tk.X, padx=8, pady=(2, 6))
+
+        text_font = (mono_fam, mono_sz) if mono else (font_fam, typo.get("font_size", 10))
+        for line in body_lines:
+            # Detect sub-headers (lines starting with  ▸ or ##)
+            if line.startswith("## "):
+                tk.Label(
+                    body, text=line[3:], font=(font_fam, 10, "bold"),
+                    bg=colors.get("bg", "#e8d8b8"), fg=colors.get("accent", "#4a6480"),
+                    anchor="w", justify=tk.LEFT,
+                ).pack(anchor="w", pady=(6, 1))
+            elif line.startswith("  "):
+                # Indented / code-like
+                tk.Label(
+                    body, text=line, font=(mono_fam, mono_sz),
+                    bg=colors.get("bg", "#e8d8b8"), fg=colors.get("muted", "#6b5d48"),
+                    anchor="w", justify=tk.LEFT,
+                ).pack(anchor="w")
+            else:
+                tk.Label(
+                    body, text=line, font=text_font, wraplength=700,
+                    bg=colors.get("bg", "#e8d8b8"), fg=colors.get("text", "#2a1f0e"),
+                    anchor="w", justify=tk.LEFT,
+                ).pack(anchor="w", pady=1)
+
+        def _toggle(_e: Any = None) -> None:
+            if body.winfo_manager():
+                body.pack_forget()
+                arrow_var.set("\u25b6")
+            else:
+                body.pack(fill=tk.X, padx=8, pady=(2, 6))
+                arrow_var.set("\u25bc")
+                # Scroll into view
+                parent.update_idletasks()
+
+        toggle_btn.bind("<Button-1>", _toggle)
+        header.bind("<Button-1>", _toggle)
+        for child in header.winfo_children():
+            child.bind("<Button-1>", _toggle)
+
+        return body
+
     def _build_help_tab(self) -> None:
-        """Build the Help tab: pinout reference diagram."""
+        """Build the comprehensive Help tab with all setup / usage info."""
         parent = self.tab_help
+        colors = self._colors
+        typo = self._typo
+        font_fam = typo.get("font_family", "Segoe Print")
 
-        ttk.Label(parent, text="Board Pinout Reference",
-                  font=("TkDefaultFont", 12, "bold")).pack(anchor="w", padx=6, pady=(6, 2))
-        ttk.Label(parent, text="Arduino Nano ESP32-S3 (USB HID Keyboard)  ·  NodeMCU ESP32-WROOM-32 (BT Host)",
-                  foreground=self._colors.get("muted", "#666")).pack(anchor="w", padx=6, pady=(0, 4))
+        # ── Navigation bar ────────────────────────────────────────────
+        nav = tk.Frame(parent, bg=colors.get("panel2", "#e2d0a8"))
+        nav.pack(fill=tk.X, padx=4, pady=(4, 2))
 
-        # Scrollable canvas for the pinout image
-        canvas_wrap = ttk.Frame(parent)
-        canvas_wrap.pack(fill=tk.BOTH, expand=True, padx=6, pady=3)
+        tk.Label(
+            nav, text="Help & Setup Guide",
+            font=(font_fam, 13, "bold"),
+            bg=colors.get("panel2", "#e2d0a8"),
+            fg=colors.get("text", "#2a1f0e"),
+        ).pack(side=tk.LEFT, padx=8, pady=4)
 
-        h_scroll = ttk.Scrollbar(canvas_wrap, orient=tk.HORIZONTAL)
-        v_scroll = ttk.Scrollbar(canvas_wrap, orient=tk.VERTICAL)
-        pinout_canvas = tk.Canvas(canvas_wrap, highlightthickness=0,
-                                  bg=self._colors.get("panel", "#f2e8d0"),
-                                  xscrollcommand=h_scroll.set,
-                                  yscrollcommand=v_scroll.set)
-        h_scroll.configure(command=pinout_canvas.xview)
-        v_scroll.configure(command=pinout_canvas.yview)
+        # Search entry
+        search_var = tk.StringVar()
+        search_entry = tk.Entry(
+            nav, textvariable=search_var, width=28,
+            font=(font_fam, 10),
+            bg=colors.get("panel", "#f2e8d0"),
+            fg=colors.get("text", "#2a1f0e"),
+            insertbackground=colors.get("text", "#2a1f0e"),
+        )
+        search_entry.pack(side=tk.RIGHT, padx=8, pady=4)
+        tk.Label(
+            nav, text="Search:",
+            font=(font_fam, 10),
+            bg=colors.get("panel2", "#e2d0a8"),
+            fg=colors.get("muted", "#6b5d48"),
+        ).pack(side=tk.RIGHT)
 
+        # ── Scrollable content area ───────────────────────────────────
+        outer = ttk.Frame(parent)
+        outer.pack(fill=tk.BOTH, expand=True, padx=2, pady=2)
+
+        v_scroll = ttk.Scrollbar(outer, orient=tk.VERTICAL)
+        help_canvas = tk.Canvas(
+            outer, highlightthickness=0,
+            bg=colors.get("bg", "#e8d8b8"),
+            yscrollcommand=v_scroll.set,
+        )
+        v_scroll.configure(command=help_canvas.yview)
         v_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        help_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        content = tk.Frame(help_canvas, bg=colors.get("bg", "#e8d8b8"))
+        canvas_window = help_canvas.create_window((0, 0), window=content, anchor="nw")
+
+        def _on_configure(_e: Any = None) -> None:
+            help_canvas.configure(scrollregion=help_canvas.bbox("all"))
+
+        def _on_canvas_resize(e: Any) -> None:
+            help_canvas.itemconfigure(canvas_window, width=e.width)
+
+        content.bind("<Configure>", _on_configure)
+        help_canvas.bind("<Configure>", _on_canvas_resize)
+
+        def _on_mousewheel(event: Any) -> None:
+            help_canvas.yview_scroll(-event.delta // 120, "units")
+
+        help_canvas.bind("<MouseWheel>", _on_mousewheel)
+        content.bind("<MouseWheel>", _on_mousewheel)
+
+        # Propagate mouse-wheel from all children
+        def _bind_wheel(widget: tk.Widget) -> None:
+            widget.bind("<MouseWheel>", _on_mousewheel)
+            for child in widget.winfo_children():
+                _bind_wheel(child)
+
+        # Keep track of all section wrappers for search filtering
+        self._help_sections: List[tk.Frame] = []
+        self._help_section_titles: List[str] = []
+
+        def _add(title: str, lines: List[str], **kw: Any) -> tk.Frame:
+            body = self._help_section(content, title, lines, **kw)
+            wrapper = body.master  # the wrapper Frame
+            self._help_sections.append(wrapper)
+            self._help_section_titles.append(title.lower())
+            return body
+
+        # ══════════════════════════════════════════════════════════════
+        # 1. OVERVIEW
+        # ══════════════════════════════════════════════════════════════
+        _add("\U0001f3ae  What Is This?", [
+            "Bind Bandit is the companion app for the Joy-Con \u2192 Hardware Keyboard Bridge.",
+            "",
+            "The bridge converts wireless controller input (Joy-Con, Binbok, etc.) into",
+            "real USB keyboard output that the PC sees as a genuine hardware keyboard.",
+            "This is anti-cheat safe \u2014 no virtual drivers, no injected input.",
+            "",
+            "## How it works",
+            "1) An ESP32 board connects wirelessly to your controller via Bluetooth Classic.",
+            "2) It sends button events over a UART serial link to an ESP32-S3 board.",
+            "3) The ESP32-S3 plugs into the PC and shows up as a USB HID keyboard.",
+            "4) This app (Bind Bandit) talks to the ESP32-S3 over a USB serial port",
+            "   to configure profiles, mappings, macros, and more.",
+        ], collapsed=False)
+
+        # ══════════════════════════════════════════════════════════════
+        # 2. WHAT YOU NEED
+        # ══════════════════════════════════════════════════════════════
+        _add("\U0001f6d2  What You Need", [
+            "## Hardware",
+            "\u2022 ESP32-S3 dev board (e.g. Arduino Nano ESP32 ABX00083) \u2014 the USB keyboard side",
+            "\u2022 ESP32 dev board with Classic Bluetooth (e.g. NodeMCU ESP32-WROOM-32) \u2014 the BT host side",
+            "\u2022 3 jumper wires (power + ground + UART data)",
+            "\u2022 A Joy-Con, Binbok, or compatible Bluetooth Classic HID controller",
+            "\u2022 USB cable to connect the ESP32-S3 to the PC",
+            "",
+            "## Software",
+            "\u2022 ESP-IDF (Espressif IoT Development Framework) for building/flashing firmware",
+            "\u2022 Python 3.10+ with pip (for this helper app)",
+            "\u2022 USB drivers for your ESP32 dev board (CP210x or CH340 if needed)",
+            "",
+            "## Important board note",
+            "You need TWO separate boards because:",
+            "\u2022 ESP32-S3 is great at USB device mode but has NO Classic Bluetooth",
+            "\u2022 ESP32 (original) has Classic Bluetooth but no USB device mode",
+            "One board cannot do both (unless BLE HID-over-GATT is proven for your controller).",
+        ])
+
+        # ══════════════════════════════════════════════════════════════
+        # 3. WIRING
+        # ══════════════════════════════════════════════════════════════
+        _add("\U0001f50c  Wiring & Connections", [
+            "Only the ESP32-S3 plugs into the PC. The ESP32 is powered from the ESP32-S3",
+            "so the whole adapter runs from one USB cable (single dongle).",
+            "",
+            "## Minimum wiring (3 wires)",
+            "\u2022 Power:  ESP32-S3  5V/VUSB  \u2192  ESP32  VIN/5V",
+            "\u2022 Ground: ESP32-S3  GND      \u2192  ESP32  GND",
+            "\u2022 Data:   ESP32     TX (GPIO17) \u2192 ESP32-S3 RX (GPIO44)",
+            "",
+            "## Optional 4th wire (recommended)",
+            "\u2022 Return: ESP32-S3  TX (GPIO43) \u2192  ESP32  RX (GPIO16)",
+            "  Enables the helper app to send commands back to the ESP32",
+            "  (start scan, set target controller, etc.)",
+            "",
+            "## Default pin assignments",
+            "  ESP32 (BT host):",
+            "    TX = GPIO17    RX = GPIO16 (optional)",
+            "    UART baud = 115200",
+            "",
+            "  ESP32-S3 (Arduino Nano ESP32):",
+            "    RX0 = GPIO44   TX0 = GPIO43",
+            "    UART baud = 115200",
+            "",
+            "## Voltage warning",
+            "\u2022 UART signals are 3.3V on both chips \u2014 do NOT connect 5V to RX/TX pins.",
+            "\u2022 Power goes through the dev board's VIN/5V pin (feeds into on-board regulator).",
+            "\u2022 Do NOT feed 5V into a 3V3 pin.",
+            "",
+            "## Avoid double-powering",
+            "Don\u2019t plug the ESP32 into its own USB while it\u2019s also being powered from",
+            "the ESP32-S3 \u2014 two 5V sources on VIN can damage the board.",
+            "",
+            "## Physical tips",
+            "\u2022 Keep UART wires short (a few cm).",
+            "\u2022 Route GND next to the data wire to reduce noise.",
+            "\u2022 If you see garbage bytes: check common ground, baud rate (115200),",
+            "  and that you haven\u2019t swapped RX and TX.",
+        ])
+
+        # ══════════════════════════════════════════════════════════════
+        # 4. PINOUT DIAGRAM
+        # ══════════════════════════════════════════════════════════════
+        pinout_body = _add("\U0001f4cc  Board Pinout Diagram", [
+            "Arduino Nano ESP32-S3 (USB HID Keyboard)  \u00b7  NodeMCU ESP32-WROOM-32 (BT Host)",
+            "",
+            "Scroll to pan; Shift+Scroll for horizontal.  Image: pinouts.png",
+        ])
+
+        # Embed the pinout image in a scrollable sub-canvas
+        pin_canvas_wrap = tk.Frame(pinout_body, bg=colors.get("bg", "#e8d8b8"))
+        pin_canvas_wrap.pack(fill=tk.X, pady=(4, 4))
+
+        h_scroll = ttk.Scrollbar(pin_canvas_wrap, orient=tk.HORIZONTAL)
+        v_scroll_pin = ttk.Scrollbar(pin_canvas_wrap, orient=tk.VERTICAL)
+        pinout_canvas = tk.Canvas(
+            pin_canvas_wrap, highlightthickness=0, height=360,
+            bg=colors.get("panel", "#f2e8d0"),
+            xscrollcommand=h_scroll.set,
+            yscrollcommand=v_scroll_pin.set,
+        )
+        h_scroll.configure(command=pinout_canvas.xview)
+        v_scroll_pin.configure(command=pinout_canvas.yview)
+        v_scroll_pin.pack(side=tk.RIGHT, fill=tk.Y)
         h_scroll.pack(side=tk.BOTTOM, fill=tk.X)
         pinout_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        # Locate and load pinouts.png
+        # Load pinouts.png
         self._help_pinout_base: Optional[tk.PhotoImage] = None
         search_roots = list(_joycons_search_roots())
-        # Also check docs/ui/reference/ directly (pinouts is theme-independent).
         here = Path(__file__).resolve()
         search_roots.append(here.parents[3] / "docs" / "ui" / "reference")
         try:
@@ -3934,18 +4191,377 @@ class App(tk.Tk):
             pinout_canvas.create_image(0, 0, image=self._help_pinout_base, anchor="nw")
             pinout_canvas.configure(scrollregion=(0, 0, img_w, img_h))
         else:
-            pinout_canvas.create_text(200, 100, text="pinouts.png not found",
-                                      fill=self._colors.get("muted", "#666"))
+            pinout_canvas.create_text(200, 80, text="pinouts.png not found",
+                                      fill=colors.get("muted", "#666"))
 
-        # Mouse-wheel scrolling
-        def _on_mousewheel(event: Any) -> None:
+        def _pin_wheel(event: Any) -> None:
             pinout_canvas.yview_scroll(-event.delta // 120, "units")
 
-        def _on_shift_mousewheel(event: Any) -> None:
+        def _pin_shift_wheel(event: Any) -> None:
             pinout_canvas.xview_scroll(-event.delta // 120, "units")
 
-        pinout_canvas.bind("<MouseWheel>", _on_mousewheel)
-        pinout_canvas.bind("<Shift-MouseWheel>", _on_shift_mousewheel)
+        pinout_canvas.bind("<MouseWheel>", _pin_wheel)
+        pinout_canvas.bind("<Shift-MouseWheel>", _pin_shift_wheel)
+
+        # ══════════════════════════════════════════════════════════════
+        # 5. FIRMWARE INSTALL
+        # ══════════════════════════════════════════════════════════════
+        _add("\U0001f4be  Firmware Installation", [
+            "You need to flash TWO separate firmwares \u2014 one for each board.",
+            "Flash the ESP32-S3 first (it\u2019s the USB \u201cfront\u201d of the dongle).",
+            "",
+            "## Prerequisites",
+            "\u2022 ESP-IDF installed (Espressif installer for Windows recommended)",
+            "\u2022 An \u201cESP-IDF PowerShell\u201d terminal (comes with the installer)",
+            "\u2022 USB drivers for your dev board\u2019s USB-to-UART chip (CP210x / CH340)",
+            "",
+            "## General workflow",
+            "  idf.py set-target <chip>   (once per project folder)",
+            "  idf.py menuconfig          (configure GPIOs / settings)",
+            "  idf.py build",
+            "  idf.py flash monitor",
+            "",
+            "## Step 1: Flash ESP32-S3 (USB keyboard)",
+            "Folder: firmware/esp32s3-usb-kbd/",
+            "",
+            "  idf.py set-target esp32s3",
+            "  idf.py menuconfig",
+            "  idf.py build",
+            "  idf.py flash monitor",
+            "",
+            "Menuconfig settings:",
+            "\u2022 Bridge UART RX GPIO = 44  (Arduino Nano RX0)",
+            "\u2022 Bridge UART TX GPIO = 43  (Arduino Nano TX0)",
+            "\u2022 Bridge UART baud = 115200",
+            "",
+            "After flashing: PC should see a USB keyboard + COM port.",
+            "",
+            "## Step 2: Flash ESP32 (Bluetooth host)",
+            "Folder: firmware/esp32-hid-host-uart/",
+            "",
+            "Temporarily disconnect VIN wire if both boards are wired together,",
+            "then plug the ESP32 into its own USB for flashing.",
+            "",
+            "  idf.py set-target esp32",
+            "  idf.py menuconfig",
+            "  idf.py build",
+            "  idf.py flash monitor",
+            "",
+            "Menuconfig settings:",
+            "\u2022 Target device name substring = Joy-Con  (or Binbok, Pro Controller, etc.)",
+            "\u2022 Discovery scan seconds \u2014 increase if device isn\u2019t found",
+            "\u2022 Log HID input reports = enabled (recommended while mapping)",
+            "",
+            "UART pins set in firmware/esp32-hid-host-uart/main/config.h:",
+            "  TX = GPIO17,  RX = GPIO16,  baud = 115200",
+            "",
+            "## Step 3: Assemble the dongle",
+            "1) Unplug the ESP32 from its flashing USB.",
+            "2) Connect the wiring (see Wiring section above).",
+            "3) Plug only the ESP32-S3 into the PC.",
+            "4) The ESP32 boots from the ESP32-S3\u2019s power.",
+        ])
+
+        # ══════════════════════════════════════════════════════════════
+        # 6. FIRST TEST
+        # ══════════════════════════════════════════════════════════════
+        _add("\u2705  First End-to-End Test", [
+            "After wiring and flashing both boards:",
+            "",
+            "1) Plug the ESP32-S3 into the PC.",
+            "2) Open the helper app (this app) and connect to the COM port.",
+            "3) Put your controller into pairing mode.",
+            "4) Watch the Input Test tab \u2014 you should see events when you press buttons.",
+            "",
+            "## What to check",
+            "\u2022 ESP32-S3 enumerates as a USB keyboard (check Device Manager).",
+            "\u2022 A COM port appears (CDC-ACM) \u2014 this is what the helper app connects to.",
+            "\u2022 ESP32 power LED lights up (powered through VIN from the ESP32-S3).",
+            "\u2022 Controller connects via Bluetooth (check ESP32 monitor logs if available).",
+            "\u2022 Button presses produce HID report changes in the ESP32 logs.",
+            "",
+            "At this stage the default key mapping should already work \u2014 pressing buttons",
+            "on the controller should type keys on the PC.",
+        ])
+
+        # ══════════════════════════════════════════════════════════════
+        # 7. HELPER APP USAGE
+        # ══════════════════════════════════════════════════════════════
+        _add("\U0001f4bb  Using Bind Bandit (This App)", [
+            "## Connecting",
+            "\u2022 Select the correct COM port from the dropdown at the top of the window.",
+            "\u2022 Click Connect. The status bar will show \u201cConnected\u201d.",
+            "\u2022 If no COM port appears, check that the ESP32-S3 is plugged in and CDC is enabled.",
+            "",
+            "## Tabs overview",
+            "\u2022 Profile \u2014 JSON profile editor, slot quick-switch, rename/duplicate/reset.",
+            "\u2022 Macros \u2014 Record and edit macro sequences (key + delay steps).",
+            "\u2022 Stick \u2014 Deadzone / response curve for analog sticks (future analog support).",
+            "\u2022 Share \u2014 Export/import profile codes (compressed base64 strings).",
+            "\u2022 Overlay \u2014 Always-on-top translucent status window showing active keys.",
+            "\u2022 Controller \u2014 Joy-Con diagram + keymap editor + layers/chords/keyboard preview.",
+            "\u2022 Input Test \u2014 Live event log, timeline, and active-key display.",
+            "\u2022 Mouse (M913) \u2014 Configure Redragon M913 mice: buttons, DPI, LED, polling rate.",
+            "\u2022 Razer \u2014 Configure Razer mice: DPI stages, buttons, polling, idle timeout, battery.",
+            "\u2022 Help \u2014 This tab.",
+            "",
+            "## Profiles",
+            "\u2022 4 profile slots (0\u20133) stored on the ESP32-S3.",
+            "\u2022 Each profile contains: key mappings, remapping rules, macros, layers, chords.",
+            "\u2022 Profiles can be renamed, duplicated, and reset.",
+            "\u2022 Export/import via Share tab for backup or sharing with others.",
+            "",
+            "## Key mapping (Controller tab)",
+            "Click a button on the Joy-Con diagram to select it, then assign an action:",
+            "\u2022 Passthrough \u2014 use the default keymap.c mapping.",
+            "\u2022 Disable \u2014 ignore this button completely.",
+            "\u2022 Remap \u2014 map to a different logical action.",
+            "\u2022 Remap HID \u2014 map to any arbitrary USB HID keycode.",
+            "\u2022 Macro \u2014 trigger a recorded macro.",
+            "\u2022 Tap/Hold \u2014 different action for short tap vs long press.",
+            "\u2022 Chord \u2014 multi-button combo (press two buttons together for a different action).",
+            "",
+            "The keyboard preview shows which physical keys are currently mapped.",
+        ])
+
+        # ══════════════════════════════════════════════════════════════
+        # 8. DEFAULT KEY MAP
+        # ══════════════════════════════════════════════════════════════
+        _add("\u2328\ufe0f  Default Key Mapping", [
+            "## Movement (left stick)",
+            "  Forward  = W        Back     = S",
+            "  Left     = A        Right    = D",
+            "  Jump     = Space    Sprint   = Left Shift",
+            "  Crouch   = Left Ctrl",
+            "",
+            "## Face buttons",
+            "  A = E    B = Q    X = R    Y = F",
+            "",
+            "## Shoulders / triggers",
+            "  L = Tab     R = Enter",
+            "  ZL = Right Alt   ZR = Left Alt",
+            "",
+            "## System",
+            "  Plus = Escape   Minus = ` (Grave)",
+            "  Home = (unmapped)   Capture = G",
+            "",
+            "## Stick clicks",
+            "  LStick = Left Shift   RStick = V",
+            "",
+            "## Right stick directions",
+            "  Up = Arrow Up    Down = Arrow Down",
+            "  Left = Arrow Left   Right = Arrow Right",
+            "",
+            "## Motion / IMU gestures",
+            "  Shake = 1    Tilt Up = 2    Tilt Down = 3",
+            "  Tilt Left = 4    Tilt Right = 5    Flick = 6",
+            "",
+            "All mappings are fully customizable in the Controller tab.",
+        ])
+
+        # ══════════════════════════════════════════════════════════════
+        # 9. SERIAL PROTOCOL (summary)
+        # ══════════════════════════════════════════════════════════════
+        _add("\U0001f4e1  Serial Protocol (Reference)", [
+            "## Helper app \u2194 ESP32-S3 (USB serial / COM port)",
+            "Transport: USB serial, 115200 baud, 8N1, UTF-8 text.",
+            "Framing: NDJSON \u2014 one JSON object per line.",
+            "",
+            "Commands (PC \u2192 device):",
+            "  ping, write_profile, read_profile, set_active_profile,",
+            "  bt_set_target, bt_connect, fw_version, fw_update_begin/data/end/abort,",
+            "  set_stick_curve, calibration (save/clear)",
+            "",
+            "Events (device \u2192 PC):",
+            "  mapped_key (pressed, key_id), macro (id, state),",
+            "  layer (name, active), bt_status (state, name, bda)",
+            "",
+            "## ESP32 \u2194 ESP32-S3 (UART, 3.3V)",
+            "Binary framing:  AA 55 <len> <payload...> <checksum>",
+            "",
+            "Payload types:",
+            "  Key event:   bit7=pressed, bits6-0=key_id",
+            "  Extended key (0xFC): device_id, pressed, base_key_id",
+            "  Status (0xFD): state + BDA + name",
+            "  Debug (0xFF): raw HID report bytes",
+            "  Control (0xFE): set target, start discovery, stick curve, calibration",
+            "  OTA (0xFB): firmware update frames",
+            "",
+            "For full protocol details see docs/serial-protocol.md",
+        ])
+
+        # ══════════════════════════════════════════════════════════════
+        # 10. MOUSE CONFIG
+        # ══════════════════════════════════════════════════════════════
+        _add("\U0001f5b1\ufe0f  Mouse Configuration (M913 & Razer)", [
+            "Bind Bandit can also configure gaming mice over USB HID \u2014",
+            "no additional hardware needed, just plug the mouse in.",
+            "",
+            "## Redragon M913 (Mouse tab)",
+            "\u2022 16 programmable buttons (including 12 side buttons).",
+            "\u2022 DPI: up to 5 stages, separate X/Y resolution.",
+            "\u2022 LED: color, effect, brightness.",
+            "\u2022 Polling rate: 125 / 250 / 500 / 1000 Hz.",
+            "\u2022 IncediusMod variant supported (different side button layout).",
+            "\u2022 Profiles: save / load / delete / auto-link per device.",
+            "",
+            "## Razer mice (Razer tab)",
+            "\u2022 Basilisk X HyperSpeed and other supported models.",
+            "\u2022 DPI: 5 stages, X/Y independent, 100\u201326000 DPI.",
+            "\u2022 7 remappable buttons (keyboard keys, mouse buttons, DPI cycle, disable).",
+            "\u2022 Polling rate, idle timeout, battery readback.",
+            "\u2022 All settings written to onboard memory \u2014 no drivers needed, anti-cheat safe.",
+            "\u2022 Profiles: save / load / delete / auto-link per device.",
+            "",
+            "## How it works",
+            "Both use USB HID Feature Reports to read/write the mouse\u2019s onboard memory.",
+            "No special drivers, no Synapse, no RedragonSoftware.",
+        ])
+
+        # ══════════════════════════════════════════════════════════════
+        # 11. OTA FIRMWARE UPDATES
+        # ══════════════════════════════════════════════════════════════
+        _add("\U0001f504  OTA Firmware Updates", [
+            "The helper app can push firmware updates to both boards without re-flashing.",
+            "",
+            "## How to update",
+            "1) Connect to the ESP32-S3 via COM port.",
+            "2) Use the Profile tab \u2192 Firmware Update section.",
+            "3) Select the firmware binary (.bin) for the board you want to update.",
+            "4) Choose the target board (esp32s3 or esp32).",
+            "5) Click Update. The app sends the binary in chunks over serial.",
+            "",
+            "## Requirements",
+            "\u2022 Both firmwares must have OTA partitions configured (partitions.csv).",
+            "\u2022 The ESP32-S3 relays ESP32 updates over the UART link.",
+            "\u2022 Do NOT interrupt power during an OTA update.",
+        ])
+
+        # ══════════════════════════════════════════════════════════════
+        # 12. TROUBLESHOOTING
+        # ══════════════════════════════════════════════════════════════
+        _add("\U0001f527  Troubleshooting", [
+            "## No COM port found",
+            "\u2022 Check USB cable (some are charge-only, no data).",
+            "\u2022 Install the USB-to-UART driver (CP210x or CH340).",
+            "\u2022 Check Device Manager for the COM port number.",
+            "\u2022 Make sure CDC-ACM is enabled in the ESP32-S3 firmware.",
+            "",
+            "## ESP32-S3 doesn\u2019t show up as a keyboard",
+            "\u2022 Confirm you flashed firmware/esp32s3-usb-kbd/ (target esp32s3).",
+            "\u2022 If you changed TinyUSB descriptors, check enumeration matches expectations.",
+            "",
+            "## UART garbage / nothing received",
+            "\u2022 Confirm GND is connected between both boards.",
+            "\u2022 Confirm baud rate is 115200 on both ends.",
+            "\u2022 Confirm TX \u2192 RX (not TX \u2192 TX).",
+            "\u2022 Confirm correct GPIO numbers (Arduino Nano labels \u2260 ESP32-S3 GPIO numbers).",
+            "\u2022 For Nano ESP32: RX0 = GPIO44, TX0 = GPIO43.",
+            "",
+            "## Controller not found over Bluetooth",
+            "\u2022 Increase discovery scan time in menuconfig.",
+            "\u2022 Set \u201cTarget device name substring\u201d to match your controller\u2019s name.",
+            "\u2022 Confirm your controller uses Bluetooth Classic HID (not just BLE).",
+            "\u2022 Put the controller into pairing mode (hold sync button).",
+            "",
+            "## Helper app doesn\u2019t connect",
+            "\u2022 Select the correct COM port and click Connect.",
+            "\u2022 If the port is busy, close other apps using it (idf.py monitor, etc.).",
+            "\u2022 Try unplugging and re-plugging the ESP32-S3.",
+            "",
+            "## Random disconnects / missed key presses",
+            "\u2022 Check wiring: short UART wires, solid GND connection.",
+            "\u2022 Make sure you\u2019re not double-powering the ESP32 (USB + VIN both live).",
+            "\u2022 Check for EMI (keep UART wires away from motors/power cables).",
+        ])
+
+        # ══════════════════════════════════════════════════════════════
+        # 13. APP INSTALL / UPDATE
+        # ══════════════════════════════════════════════════════════════
+        _add("\U0001f4e6  Installing / Updating the Helper App", [
+            "## From source (development)",
+            "  python -m venv .venv",
+            "  .\\.venv\\Scripts\\Activate.ps1",
+            "  pip install -r requirements.txt",
+            "  python -m joycon_helper",
+            "",
+            "## Requirements",
+            "\u2022 Python 3.10 or later.",
+            "\u2022 Pillow (pip install Pillow) \u2014 for image compositing.",
+            "\u2022 pyserial (pip install pyserial) \u2014 for COM port communication.",
+            "\u2022 hidapi (pip install hidapi) \u2014 for M913/Razer mouse USB HID access.",
+            "",
+            "## Standalone executable",
+            "Pre-built .exe bundles are available from GitHub Releases.",
+            "The app auto-checks for updates on startup.",
+            "",
+            "## Themes",
+            "\u2022 Default theme: warm sketchbook / paper aesthetic (light).",
+            "\u2022 Dark theme: dark blue-grey with chalk accents.",
+            "\u2022 Toggle via the dark mode switch in the toolbar.",
+        ])
+
+        # ══════════════════════════════════════════════════════════════
+        # 14. QUICK REFERENCE CARD
+        # ══════════════════════════════════════════════════════════════
+        _add("\U0001f4cb  Quick Reference", [
+            "## Board pinouts",
+            "  ESP32 TX = GPIO17     ESP32 RX = GPIO16",
+            "  Nano RX0 = GPIO44    Nano TX0 = GPIO43",
+            "  UART baud = 115200",
+            "",
+            "## Minimum wiring",
+            "  ESP32-S3 5V/VUSB  \u2192  ESP32 VIN/5V",
+            "  ESP32-S3 GND      \u2192  ESP32 GND",
+            "  ESP32 GPIO17 (TX) \u2192  ESP32-S3 GPIO44 (RX)",
+            "",
+            "## Firmware flash commands",
+            "  ESP32-S3: idf.py set-target esp32s3 && idf.py build && idf.py flash monitor",
+            "  ESP32:    idf.py set-target esp32   && idf.py build && idf.py flash monitor",
+            "",
+            "## Helper app",
+            "  python -m joycon_helper",
+            "",
+            "## Key docs",
+            "  docs/wiring.md            \u2014 detailed wiring guide",
+            "  docs/firmware-install.md   \u2014 full flashing walkthrough",
+            "  docs/serial-protocol.md    \u2014 UART + serial protocol spec",
+            "  docs/keymap.md             \u2014 key_id \u2192 USB output mapping",
+            "  helper-app/protocol.md     \u2014 helper app NDJSON protocol",
+        ])
+
+        # ── Wire up search filtering ──────────────────────────────────
+        def _filter_sections(*_args: Any) -> None:
+            query = search_var.get().strip().lower()
+            for wrapper, title in zip(self._help_sections, self._help_section_titles):
+                if not query or query in title:
+                    wrapper.pack(fill=tk.X, padx=4, pady=(4, 0))
+                else:
+                    # Check body text labels too
+                    found = False
+                    for child in wrapper.winfo_children():
+                        for sub in child.winfo_children():
+                            try:
+                                txt = sub.cget("text").lower()
+                                if query in txt:
+                                    found = True
+                                    break
+                            except Exception:
+                                pass
+                        if found:
+                            break
+                    if found:
+                        wrapper.pack(fill=tk.X, padx=4, pady=(4, 0))
+                    else:
+                        wrapper.pack_forget()
+            content.update_idletasks()
+            help_canvas.configure(scrollregion=help_canvas.bbox("all"))
+
+        search_var.trace_add("write", _filter_sections)
+
+        # Bind mouse-wheel to all children after building
+        content.update_idletasks()
+        _bind_wheel(content)
 
     # ── M913 helpers ──
 
