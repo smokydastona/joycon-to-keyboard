@@ -11,6 +11,7 @@ Until then, entries are grouped by date.
 
 ### Added
 
+- **Hand-drawn button overlays**: all per-button highlight overlays (5 devices, 158 buttons) regenerated in pencil-sketch style — wobbly circle outlines with cross-hatch fill replacing the old smooth glow circles. Now generates both default (muted pencil strokes) and dark (bright chalk strokes) theme variants (316 total PNGs). Generator updated in `tools/generate_button_overlays.py`.
 - **Popup-based UI refactor**: Controller, Mouse, and Razer tabs now show the device canvas as the dominant visual (fills all available space). Button mapping, DPI, LED, layers, chords, and other controls moved into on-demand popup panels (`SketchPopup`) opened via compact toolbar buttons. This replaces the crowded inline layout where controls pushed the device image into a small fixed-height strip.
 - **SketchPopup class**: reusable themed popup (`tk.Toplevel`) with pencil-sketch aesthetic — hand-drawn title bar, themed background, toggle show/hide. Available for all tabs.
 - **Pencil sketch UI assets**: generated hand-drawn popup frames, toolbar backgrounds, dividers, and corner doodles for both light and dark themes (8 new PNGs in `docs/ui/*/misc/`).

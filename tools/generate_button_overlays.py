@@ -1,7 +1,11 @@
 """Generate per-button overlay PNGs for every device in the project.
 
 Each overlay is a transparent PNG (same size as the device image) with a
-glowing highlight circle at the button's hotspot position.
+hand-drawn pencil-sketch highlight circle at the button's hotspot position.
+Two variants are generated per button — one for each UI theme:
+
+  default/ — dark pencil strokes on a warm-paper background
+  dark/    — light chalk strokes on a dark background
 
 Devices and their highlight colours:
 
@@ -14,11 +18,15 @@ Devices and their highlight colours:
 Output layout:
 
     docs/ui/button_overlays/
-      joycon/    jc_ZL.png, jc_ZR.png, ...
+      joycon/    jc_ZL.png, jc_ZR.png, ...            (default theme)
       m913/      m913_left.png, m913_side1.png, ...
       incedius/  inc_left.png, inc_Thumb1.png, ...
       keyboard/  kbd_Esc.png, kbd_A.png, ...
       mouse/     mouse_Left.png, mouse_Right.png, ...
+      dark/
+        joycon/    jc_ZL.png, jc_ZR.png, ...           (dark theme)
+        m913/      m913_left.png, m913_side1.png, ...
+        ...
 
 Usage:
     python tools/generate_button_overlays.py
@@ -26,11 +34,13 @@ Usage:
 
 from __future__ import annotations
 
+import math
+import random
 import sys
 from pathlib import Path
 
 try:
-    from PIL import Image, ImageDraw, ImageFilter  # type: ignore
+    from PIL import Image, ImageDraw  # type: ignore
 except ImportError:
     print("Pillow is required: pip install Pillow", file=sys.stderr)
     raise SystemExit(1)
@@ -44,7 +54,67 @@ IMAGE_H = 1024
 
 RADIUS_NORMAL = 22
 RADIUS_WIDE = 30
-GLOW_EXTRA = 10  # extra pixels for the soft glow ring
+
+# Reproducible hand-drawn wobble
+RNG = random.Random(42)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Sketch drawing primitives
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+def _jitter(x: float, amount: float = 1.5) -> float:
+    """Add small random displacement to simulate hand-drawn imprecision."""
+    return x + RNG.uniform(-amount, amount)
+
+
+def _draw_sketchy_circle(
+    draw: ImageDraw.ImageDraw,
+    cx: float, cy: float, radius: float,
+    stroke: tuple[int, int, int, int],
+    width: int = 2,
+    passes: int = 3,
+) -> None:
+    """Draw a wobbly hand-drawn circle outline."""
+    segments = max(16, int(radius * 1.2))
+    for p in range(passes):
+        jit = 1.2 + p * 0.6
+        points: list[tuple[float, float]] = []
+        for i in range(segments + 1):
+            angle = (i / segments) * 2 * math.pi
+            px = cx + radius * math.cos(angle)
+            py = cy + radius * math.sin(angle)
+            if 0 < i < segments:
+                px = _jitter(px, jit)
+                py = _jitter(py, jit)
+            points.append((px, py))
+        alpha = stroke[3] - p * 30
+        col = (stroke[0], stroke[1], stroke[2], max(40, alpha))
+        for i in range(len(points) - 1):
+            draw.line([points[i], points[i + 1]], fill=col, width=width)
+
+
+def _draw_crosshatch_fill(
+    draw: ImageDraw.ImageDraw,
+    cx: float, cy: float, radius: float,
+    color: tuple[int, int, int, int],
+    density: int = 5,
+) -> None:
+    """Fill a circular area with sketchy cross-hatch lines."""
+    spacing = max(3, int(radius * 2 / density))
+    for offset in range(-int(radius), int(radius) + 1, spacing):
+        half = math.sqrt(max(0, radius ** 2 - offset ** 2))
+        if half < 2:
+            continue
+        # Diagonal hatching (/)
+        x0 = cx + offset - half * 0.5
+        y0 = cy - half
+        x1 = cx + offset + half * 0.5
+        y1 = cy + half
+        x0, y0 = _jitter(x0, 1.0), _jitter(y0, 1.0)
+        x1, y1 = _jitter(x1, 1.0), _jitter(y1, 1.0)
+        draw.line([(x0, y0), (x1, y1)], fill=color, width=1)
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Hotspot definitions — one list per device
@@ -263,37 +333,55 @@ MOUSE_HOTSPOTS: list[tuple[str, int, int]] = [
 MOUSE_WIDE = {"left", "right"}
 
 # ═══════════════════════════════════════════════════════════════════════════
+# Theme colour palettes
+# ═══════════════════════════════════════════════════════════════════════════
+
+# Per-device colours tuned for each theme.
+# "default" = dark strokes on light paper; "dark" = bright chalk on dark bg.
+THEME_COLORS: dict[str, dict[str, tuple[int, int, int, int]]] = {
+    "default": {
+        "joycon":  (160, 40, 40, 160),     # muted red pencil
+        "m913":    (150, 110, 30, 160),     # muted gold pencil
+        "incedius": (35, 140, 55, 160),     # muted green pencil
+        "keyboard": (50, 100, 150, 160),    # muted blue pencil
+        "mouse":   (130, 80, 150, 160),     # muted purple pencil
+    },
+    "dark": {
+        "joycon":  (240, 110, 100, 180),    # bright red chalk
+        "m913":    (230, 190, 90, 180),     # bright gold chalk
+        "incedius": (100, 230, 130, 180),   # bright green chalk
+        "keyboard": (110, 170, 230, 180),   # bright blue chalk
+        "mouse":   (210, 150, 240, 180),    # bright purple chalk
+    },
+}
+
+# ═══════════════════════════════════════════════════════════════════════════
 # Device registry
 # ═══════════════════════════════════════════════════════════════════════════
 
 DEVICES: dict[str, dict] = {
     "joycon": {
         "hotspots": JOYCON_HOTSPOTS,
-        "color": (224, 64, 64, 180),       # red
         "wide": JOYCON_WIDE,
         "prefix": "jc",
     },
     "m913": {
         "hotspots": M913_HOTSPOTS,
-        "color": (212, 160, 48, 180),      # gold
         "wide": M913_WIDE,
         "prefix": "m913",
     },
     "incedius": {
         "hotspots": INCEDIUS_HOTSPOTS,
-        "color": (64, 216, 96, 180),       # green
         "wide": INCEDIUS_WIDE,
         "prefix": "inc",
     },
     "keyboard": {
         "hotspots": KBD_HOTSPOTS,
-        "color": (74, 144, 208, 180),      # blue
         "wide": KBD_WIDE,
         "prefix": "kbd",
     },
     "mouse": {
         "hotspots": MOUSE_HOTSPOTS,
-        "color": (200, 128, 224, 180),     # purple
         "wide": MOUSE_WIDE,
         "prefix": "mouse",
     },
@@ -317,36 +405,25 @@ def _generate_overlay(
     wide_set: set[str],
     dst: Path,
 ) -> None:
-    """Generate a single button overlay image."""
+    """Generate a single button overlay image with hand-drawn sketch style."""
     r = RADIUS_WIDE if label in wide_set else RADIUS_NORMAL
-    gr = r + GLOW_EXTRA
 
     img = Image.new("RGBA", (IMAGE_W, IMAGE_H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # Outer glow ring (softer, larger)
-    glow_color = (color[0], color[1], color[2], color[3] // 3)
-    draw.ellipse([px - gr, py - gr, px + gr, py + gr], fill=glow_color)
+    # Seed per-button for reproducible wobble (but different per button)
+    RNG.seed(hash(label) & 0xFFFF_FFFF)
 
-    # Inner highlight circle
-    draw.ellipse(
-        [px - r, py - r, px + r, py + r],
-        fill=color,
-        outline=(255, 255, 255, 200),
-        width=2,
-    )
+    # Cross-hatch fill (lighter, semi-transparent)
+    fill_color = (color[0], color[1], color[2], color[3] // 3)
+    _draw_crosshatch_fill(draw, px, py, r - 2, fill_color, density=5)
 
-    # Gaussian blur for the glow
-    img = img.filter(ImageFilter.GaussianBlur(radius=4))
+    # Wobbly circle outlines (multi-pass pencil look)
+    _draw_sketchy_circle(draw, px, py, r, color, width=2, passes=3)
 
-    # Re-draw solid inner circle on top of blur
-    draw2 = ImageDraw.Draw(img)
-    draw2.ellipse(
-        [px - r, py - r, px + r, py + r],
-        fill=color,
-        outline=(255, 255, 255, 220),
-        width=2,
-    )
+    # Slightly larger faint outer ring for emphasis
+    faint = (color[0], color[1], color[2], color[3] // 4)
+    _draw_sketchy_circle(draw, px, py, r + 5, faint, width=1, passes=1)
 
     dst.parent.mkdir(parents=True, exist_ok=True)
     img.save(str(dst), format="PNG", optimize=True)
@@ -355,24 +432,30 @@ def _generate_overlay(
 def main() -> int:
     total = 0
 
-    for device_name, cfg in DEVICES.items():
-        out_dir = OUT_DIR / device_name
-        out_dir.mkdir(parents=True, exist_ok=True)
+    for theme, palette in THEME_COLORS.items():
+        for device_name, cfg in DEVICES.items():
+            # Default theme: docs/ui/button_overlays/{device}/
+            # Dark theme:    docs/ui/button_overlays/dark/{device}/
+            if theme == "default":
+                out_dir = OUT_DIR / device_name
+            else:
+                out_dir = OUT_DIR / theme / device_name
+            out_dir.mkdir(parents=True, exist_ok=True)
 
-        hotspots = cfg["hotspots"]
-        color = cfg["color"]
-        wide = cfg["wide"]
-        prefix = cfg["prefix"]
+            hotspots = cfg["hotspots"]
+            color = palette[device_name]
+            wide = cfg["wide"]
+            prefix = cfg["prefix"]
 
-        for label, px, py in hotspots:
-            fname = f"{prefix}_{_safe_filename(label)}.png"
-            dst = out_dir / fname
-            _generate_overlay(label, px, py, color, wide, dst)
-            total += 1
+            for label, px, py in hotspots:
+                fname = f"{prefix}_{_safe_filename(label)}.png"
+                dst = out_dir / fname
+                _generate_overlay(label, px, py, color, wide, dst)
+                total += 1
 
-        print(f"  [{device_name}] {len(hotspots)} overlays -> {out_dir.relative_to(REPO_ROOT)}")
+            print(f"  [{theme}/{device_name}] {len(hotspots)} overlays -> {out_dir.relative_to(REPO_ROOT)}")
 
-    print(f"[button-overlays] Generated {total} overlay PNGs across {len(DEVICES)} devices")
+    print(f"[button-overlays] Generated {total} overlay PNGs across {len(DEVICES)} devices × {len(THEME_COLORS)} themes")
     return 0
 
 
