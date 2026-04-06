@@ -126,6 +126,24 @@ Response IDs:
 - `0x03` — OTA end ACK
 - `0x04` — firmware version (data = UTF-8 version string)
 
+## Battery level frames (ESP32 → ESP32-S3)
+
+The ESP32 sends Joy-Con battery level updates using marker `0xFA`:
+
+- `payload[0]`: `0xFA` (battery marker)
+- `payload[1]`: `device_id` (0 = left, 1 = right)
+- `payload[2]`: battery level (0–4)
+
+Battery levels:
+
+- `0` — empty
+- `1` — critical
+- `2` — low
+- `3` — medium
+- `4` — full
+
+The ESP32-S3 forwards this to the helper app as an NDJSON event over CDC (see `helper-app/protocol.md`).
+
 ## Why this design
 
 - Keeps ESP32 code simple: it only needs to emit key_id up/down.

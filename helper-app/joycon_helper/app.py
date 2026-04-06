@@ -714,6 +714,7 @@ class App(tk.Tk):
         self._bt_target_substr = tk.StringVar(value="Joy-Con")
         self._bt_target_preset = tk.StringVar(value="Either (Joy-Con)")
         self._bt_status = tk.StringVar(value="BT: -")
+        self._battery_level: Optional[int] = None  # 0-4 from Joy-Con, None=unknown
 
         # Track which sides are connected so the UI can reflect Left/Right/Both.
         # Keyed by BDA string when available.
@@ -5147,7 +5148,8 @@ class App(tk.Tk):
             "",
             "Events (device \u2192 PC):",
             "  mapped_key (pressed, key_id), macro (id, state),",
-            "  layer (name, active), bt_status (state, name, bda)",
+            "  layer (name, active), bt_status (state, name, bda),",
+            "  battery (device_id, level 0\u20134)",
             "",
             "## ESP32 \u2194 ESP32-S3 (UART, 3.3V)",
             "Binary framing:  AA 55 <len> <payload...> <checksum>",
@@ -5156,6 +5158,7 @@ class App(tk.Tk):
             "  Key event:   bit7=pressed, bits6-0=key_id",
             "  Extended key (0xFC): device_id, pressed, base_key_id",
             "  Status (0xFD): state + BDA + name",
+            "  Battery (0xFA): device_id + level (0\u20134)",
             "  Debug (0xFF): raw HID report bytes",
             "  Control (0xFE): set target, start discovery, stick curve, calibration",
             "  OTA (0xFB): firmware update frames",
@@ -6073,6 +6076,11 @@ class App(tk.Tk):
         # Sandbox
         if self._sandbox_active.get():
             parts.append("PRACTICE RUN")
+
+        # Battery level
+        if self._battery_level is not None:
+            bars = "\u2588" * self._battery_level + "\u2591" * (4 - self._battery_level)
+            parts.append(f"\U0001f50b {bars}")
 
         # Latency indicator
         if self._perf_enabled and self._perf_redraw_times:
@@ -7258,6 +7266,10 @@ class App(tk.Tk):
                 suffix += f"  bda={bda}"
             self._bt_status.set(f"BT: {state}{suffix}")
 
+            # Reset battery on disconnect.
+            if state == "disconnected":
+                self._battery_level = None
+
             # Track side connectivity by BDA to drive the background.
             def _side_from_name(n: object) -> Optional[str]:
                 if not isinstance(n, str):
@@ -7300,6 +7312,14 @@ class App(tk.Tk):
                     self._bt_connected_right = False
 
             self._update_bt_background()
+
+        if evt == "battery":
+            try:
+                level = int(obj.get("level", -1))
+                if 0 <= level <= 4:
+                    self._battery_level = level
+            except (ValueError, TypeError):
+                pass
 
     def _current_profile(self) -> dict:
         return self._validate_profile()

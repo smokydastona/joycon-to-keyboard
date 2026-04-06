@@ -65,8 +65,13 @@ Set in `main/config.h`.
 - Initializes UART framing to match `docs/serial-protocol.md`.
 - Scans + connects to a Classic-BT HID device and forwards input reports to `main/joycon_mapper.c`.
 - Optionally accepts helper-app control commands over UART RX (requires the return UART wire).
+- **Joy-Con setup FSM** (`joycon_setup.c`): after BT connection, sends subcommands to the Joy-Con — request device info, read SPI flash calibration, set full report mode (0x30), enable IMU, set player LEDs. This replaces the passive wait-for-reports approach with an active handshake.
+- **SPI flash stick calibration**: reads factory and user calibration data from the Joy-Con's SPI flash. Sticks are accurate immediately after connection (no warm-up needed).
+- **Controller type detection**: identifies Joy-Con (L), Joy-Con (R), or Pro Controller from the device info reply.
+- **Battery level reporting**: parses battery level (0–4) from 0x30 reports and forwards to the ESP32-S3 via UART marker `0xFA`.
+- **Player LED control**: sets Player 1 LEDs on the Joy-Con after setup completes.
 - **Nintendo 0x30 button + stick parsing** (when enabled via menuconfig): fully parses all Joy-Con buttons (A/B/X/Y, L/R, ZL/ZR, Plus/Minus, Home, Capture, stick clicks) and both sticks.
-- **Stick auto-calibration**: per-axis min/center/max tracking adapts to individual controller characteristics instead of assuming a fixed center.
+- **Stick auto-calibration**: per-axis min/center/max tracking adapts to individual controller characteristics. SPI flash calibration is preferred when available.
 - **25 key_ids**: all Joy-Con inputs (left stick WASD, face buttons, shoulders, triggers, system buttons, stick clicks, right stick directions) are mapped to unique key_ids and emitted over UART.
 
 Next step is to capture real reports and verify the correct mappings in `main/joycon_mapper.c`.

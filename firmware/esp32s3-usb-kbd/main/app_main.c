@@ -18,6 +18,7 @@ static const char* TAG = "s3-kbd";
 
 #define STATUS_MARKER 0xFD
 #define KEY_EX_MARKER 0xFC
+#define BATTERY_MARKER 0xFA
 
 static const char* status_id_to_state(uint8_t id) {
     switch (id) {
@@ -105,6 +106,13 @@ void app_main(void) {
 
             if (f.type == UART_FRAME_OTA_RSP) {
                 bridge_serial_handle_ota_rsp(f.payload, f.length);
+                continue;
+            }
+
+            if (f.type == UART_FRAME_BATTERY && f.length >= 3 && f.payload[0] == BATTERY_MARKER) {
+                uint8_t device_id = f.payload[1];
+                uint8_t level = f.payload[2];
+                bridge_serial_emit_battery(device_id, level);
                 continue;
             }
         }

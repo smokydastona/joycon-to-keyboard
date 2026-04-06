@@ -388,6 +388,15 @@ BT host status events (optional):
 {"evt":"bt_status","state":"connected","bda":"aa:bb:cc:dd:ee:ff"}
 ```
 
+Battery level events (emitted when the Joy-Con reports its battery level):
+
+```json
+{"evt":"battery","device_id":0,"level":3}
+```
+
+- `device_id`: `0` = left, `1` = right
+- `level`: `0` = empty, `1` = critical, `2` = low, `3` = medium, `4` = full
+
 ## Share codes (helper app only)
 
 The helper app can export/import a single-string **profile share code** for offline sharing.

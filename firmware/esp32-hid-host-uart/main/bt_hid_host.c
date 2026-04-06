@@ -16,6 +16,7 @@
 
 #include "joycon_mapper.h"
 #include "uart_framing.h"
+#include "joycon_setup.h"
 
 static const char* TAG = "bt-hidh";
 
@@ -129,6 +130,11 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
 
             s_connecting = false;
 
+            // Start the Joy-Con setup FSM (sends subcommands to switch
+            // the controller to full 0x30 report mode with IMU, reads
+            // SPI flash calibration, sets player LEDs).
+            joycon_setup_start(param->open.handle, slot);
+
             // In dual-connect mode, keep scanning until we have both sides.
             if (dual_needs_more()) {
                 (void)bt_hid_host_start_discovery();
@@ -151,6 +157,7 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
                 if (s_dev[i].handle == param->close.handle) {
                     memcpy(closed_bda, s_dev[i].bda, sizeof(esp_bd_addr_t));
                     have_bda = true;
+                    joycon_setup_stop(s_dev[i].device_id);
                     memset(&s_dev[i], 0, sizeof(s_dev[i]));
                     break;
                 }
@@ -205,6 +212,18 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
                         device_id = s_dev[i].device_id;
                         break;
                     }
+                }
+
+                // During setup, route 0x21 (subcmd reply) reports to the
+                // setup FSM. It will consume them until setup is complete.
+                if (joycon_setup_on_report(device_id, param->data_ind.data,
+                                           param->data_ind.len)) {
+                    break;  // Consumed by setup FSM
+                }
+
+                // Once setup is complete, update battery from 0x30 reports.
+                if (param->data_ind.len >= 3 && param->data_ind.data[0] == 0x30) {
+                    joycon_setup_update_battery(device_id, param->data_ind.data[2]);
                 }
 
                 joycon_mapper_on_report_ex(device_id, param->data_ind.data, param->data_ind.len);

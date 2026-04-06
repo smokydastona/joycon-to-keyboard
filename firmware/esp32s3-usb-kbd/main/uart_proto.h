@@ -13,6 +13,7 @@ typedef enum {
 	UART_FRAME_DEBUG = 2,     // payload[0]==0xFF
 	UART_FRAME_STATUS = 3,    // payload[0]==0xFD
 	UART_FRAME_OTA_RSP = 5,  // payload[0]==0xFB, OTA response from ESP32
+	UART_FRAME_BATTERY = 6,   // payload[0]==0xFA, battery level from ESP32
 	UART_FRAME_UNKNOWN = 255,
 } uart_frame_type_t;
 

@@ -757,6 +757,20 @@ void bridge_serial_handle_ota_rsp(const uint8_t *payload, uint8_t length) {
     s_esp32_ota_rsp_ready = true;
 }
 
+void bridge_serial_emit_battery(uint8_t device_id, uint8_t level) {
+    if (!tud_cdc_connected() || !s_host_open) return;
+
+    cJSON *evt = cJSON_CreateObject();
+    if (!evt) return;
+
+    cJSON_AddStringToObject(evt, "evt", "battery");
+    cJSON_AddNumberToObject(evt, "device_id", device_id);
+    cJSON_AddNumberToObject(evt, "level", level);
+
+    cdc_write_json(evt);
+    cJSON_Delete(evt);
+}
+
 // Optional callback fired when the host opens/closes the serial port.
 void tud_cdc_line_state_cb(uint8_t itf, bool dtr, bool rts) {
     (void)itf;

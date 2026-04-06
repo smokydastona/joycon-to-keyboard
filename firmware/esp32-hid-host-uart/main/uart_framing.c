@@ -118,3 +118,12 @@ void bridge_send_ota_rsp(uint8_t rsp_id, uint8_t status, const uint8_t* data, ui
 
     bridge_send_frame(payload, (uint8_t)(3 + n));
 }
+
+void bridge_send_battery(uint8_t device_id, uint8_t level) {
+    // Battery payload: [0]=0xFA, [1]=device_id, [2]=level (0-4)
+    uint8_t payload[3];
+    payload[0] = 0xFA;
+    payload[1] = device_id;
+    payload[2] = level;
+    bridge_send_frame(payload, (uint8_t)sizeof(payload));
+}

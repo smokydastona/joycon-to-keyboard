@@ -52,6 +52,8 @@ The serial protocol is NDJSON (one JSON object per line). See:
 
 If you wire the *return UART* line (ESP32-S3 TX → ESP32 RX), the helper app can also send BT control commands (set target substring + trigger scan/connect) and receive BT status events.
 
+The ESP32-S3 also forwards **battery level** events from the ESP32 BT host as `{"evt":"battery","device_id":N,"level":N}` NDJSON events over CDC serial.
+
 ## UART settings
 
 Configured via `menuconfig`:

@@ -38,3 +38,10 @@ void bridge_send_bt_status(uint8_t status_id, const uint8_t* bda6, const char* n
 //   [3..] = optional data
 // rsp_ids: 0x01=begin, 0x02=data_ack (unused), 0x03=end, 0x04=version
 void bridge_send_ota_rsp(uint8_t rsp_id, uint8_t status, const uint8_t* data, uint8_t data_len);
+
+// Sends a battery level frame to the ESP32-S3.
+// Payload format:
+//   [0] = 0xFA (battery marker)
+//   [1] = device_id (0=left, 1=right)
+//   [2] = battery level (0=empty, 1-3=charging, 4=full)
+void bridge_send_battery(uint8_t device_id, uint8_t level);

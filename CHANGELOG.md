@@ -9,6 +9,15 @@ Until then, entries are grouped by date.
 
 - Capture real controller HID reports and implement evidence-based mapping in the ESP32 host mapper (no guessing report layouts).
 
+### Added
+
+- **Joy-Con setup FSM** (`joycon_setup.c/.h`): after BT connection, the ESP32 now sends a sequence of subcommands to the Joy-Con — request device info → read factory stick calibration from SPI flash → read user stick calibration → set full report mode (0x30) → enable IMU → set player LEDs → READY. Inspired by the `bluepad32` and `BlueCubeMod` open-source implementations.
+- **SPI flash stick calibration**: factory calibration data (addresses 0x603D/0x6046) and user calibration data (0x8010/0x801D, when magic bytes 0xB2/0xA1 are present) are read from the Joy-Con's onboard flash. This eliminates the warm-up period of the auto-calibration system — sticks are accurate immediately after connection.
+- **Controller type detection**: device info reply identifies the connected controller as Joy-Con (L), Joy-Con (R), or Pro Controller. Type is available via `joycon_setup_get_type()`.
+- **Player LED control**: after completing the setup handshake, the host sets Player 1 LEDs on the Joy-Con via subcommand 0x30.
+- **Battery level reporting**: battery level (0–4) is parsed from 0x30 input reports and forwarded to the ESP32-S3 via a new UART frame type (marker 0xFA). The ESP32-S3 emits it as an NDJSON `{"evt":"battery"}` event over CDC serial.
+- **Battery indicator in status bar** (helper app): the bottom status bar now shows a battery level indicator (🔋 with filled/empty bars) when battery data is available. Resets on disconnect.
+
 ### Changed
 
 - **3-panel "Heist Table" layout**: the Controller tab is now a three-panel view — Left: **Heist Library** (4 loadout cards with one-click switching, Import/Export buttons), Center: controller canvas (unchanged), Right: **Heist Tools** (context-sensitive panel showing the selected hotspot's name, current mapping, and one-click action buttons for Keyboard / Mouse / Trick / Mask Shift / Clear) plus a **Disguises** section with 5 quick-switch mask cards (Base Face + Mask 1–4). Panels stay synchronized: clicking a hotspot updates Heist Tools, clicking a mask card switches the active layer and redraws the canvas, clicking a loadout card switches slots and refreshes all panels.

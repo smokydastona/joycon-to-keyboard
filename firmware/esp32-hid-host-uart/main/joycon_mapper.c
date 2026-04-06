@@ -8,6 +8,7 @@
 #include "esp_timer.h"
 
 #include "uart_framing.h"
+#include "joycon_setup.h"
 
 #if CONFIG_JOYCON_HOST_TRY_NINTENDO_0X30
 #include "nintendo_candidate.h"
@@ -310,7 +311,36 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
 #if CONFIG_JOYCON_HOST_NINTENDO_0X30_EMIT_KEYS
         // --- Restore calibration from NVS on first report ---
         if (!s_cal_restored) {
-            cal_restore_from_nvs();
+            // Prefer SPI flash calibration from setup FSM (read from Joy-Con
+            // hardware) over our runtime auto-calibration or NVS data.
+            const joycon_stick_cal_t *spi_cal = joycon_setup_get_stick_cal(device_id);
+            if (spi_cal && spi_cal->valid) {
+                // Apply SPI flash calibration to our auto-cal structure.
+                s_cal.lx.min = (uint16_t)spi_cal->lx.min;
+                s_cal.lx.center = (uint16_t)spi_cal->lx.center;
+                s_cal.lx.max = (uint16_t)spi_cal->lx.max;
+                s_cal.lx.initialized = true;
+
+                s_cal.ly.min = (uint16_t)spi_cal->ly.min;
+                s_cal.ly.center = (uint16_t)spi_cal->ly.center;
+                s_cal.ly.max = (uint16_t)spi_cal->ly.max;
+                s_cal.ly.initialized = true;
+
+                s_cal.rx.min = (uint16_t)spi_cal->rx.min;
+                s_cal.rx.center = (uint16_t)spi_cal->rx.center;
+                s_cal.rx.max = (uint16_t)spi_cal->rx.max;
+                s_cal.rx.initialized = true;
+
+                s_cal.ry.min = (uint16_t)spi_cal->ry.min;
+                s_cal.ry.center = (uint16_t)spi_cal->ry.center;
+                s_cal.ry.max = (uint16_t)spi_cal->ry.max;
+                s_cal.ry.initialized = true;
+
+                s_cal.sample_count = CAL_WARMUP_SAMPLES;  // skip warmup
+                ESP_LOGI("joycon-mapper", "Using SPI flash calibration from setup FSM");
+            } else {
+                cal_restore_from_nvs();
+            }
             s_cal_restored = true;
         }
 
