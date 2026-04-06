@@ -18,6 +18,7 @@
 #include "bridge_serial.h"
 #include "keymap.h"
 #include "usb_kbd.h"
+#include "uart_proto.h"
 
 static const char *TAG = "profile";
 
@@ -456,6 +457,31 @@ static void load_profile_json(const char *json) {
     parse_macros(root);
     parse_mappings(root);
     parse_layers(root);
+
+    // --- Forward stick settings to ESP32 BT host ---
+    cJSON *stick = cJSON_GetObjectItemCaseSensitive(root, "stick");
+    if (cJSON_IsObject(stick)) {
+        cJSON *curve_j = cJSON_GetObjectItemCaseSensitive(stick, "curve");
+        cJSON *exp_j = cJSON_GetObjectItemCaseSensitive(stick, "exp");
+
+        uint8_t curve = 0;  // linear
+        if (cJSON_IsString(curve_j) && curve_j->valuestring) {
+            if (strcmp(curve_j->valuestring, "exponential") == 0) curve = 1;
+            else if (strcmp(curve_j->valuestring, "quadratic") == 0) curve = 2;
+        }
+
+        uint8_t exp_x100 = 100;
+        if (cJSON_IsNumber(exp_j)) {
+            int v = (int)(exp_j->valuedouble * 100.0);
+            if (v < 10) v = 10;
+            if (v > 250) v = 250;
+            exp_x100 = (uint8_t)v;
+        }
+
+        uint8_t payload[2] = {curve, exp_x100};
+        uart_proto_send_ctrl(0x03, payload, 2);
+        ESP_LOGI(TAG, "Forwarded stick curve=%u exp_x100=%u to ESP32", curve, exp_x100);
+    }
 
     cJSON_Delete(root);
 

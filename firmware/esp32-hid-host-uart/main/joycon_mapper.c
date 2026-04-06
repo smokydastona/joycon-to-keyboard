@@ -1,13 +1,21 @@
 #include "joycon_mapper.h"
 
 #include <string.h>
+#include <math.h>
 
 #include "esp_log.h"
+
+#include "esp_timer.h"
 
 #include "uart_framing.h"
 
 #if CONFIG_JOYCON_HOST_TRY_NINTENDO_0X30
 #include "nintendo_candidate.h"
+#endif
+
+#if CONFIG_JOYCON_HOST_NINTENDO_0X30_EMIT_KEYS
+#include "nvs.h"
+#include "nvs_flash.h"
 #endif
 
 // NOTE:
@@ -21,8 +29,49 @@
 
 static uint8_t s_threshold = 32;
 
+// --- Stick curve state ---
+static stick_curve_t s_curve = STICK_CURVE_LINEAR;
+static float s_exp = 1.0f;  // exponent for EXPONENTIAL curve
+
 void joycon_mapper_set_stick_threshold(uint8_t threshold) {
     s_threshold = threshold;
+}
+
+void joycon_mapper_set_stick_curve(uint8_t curve, uint8_t exp_x100) {
+    if (curve <= STICK_CURVE_QUADRATIC) {
+        s_curve = (stick_curve_t)curve;
+    }
+    if (exp_x100 > 0) {
+        s_exp = (float)exp_x100 / 100.0f;
+    }
+    ESP_LOGI("joycon-mapper", "Stick curve=%d exp=%.2f", (int)s_curve, (double)s_exp);
+}
+
+// Apply selected curve to a normalized stick value (-4096..+4096).
+// Returns a value in the same range with the curve applied.
+static int apply_stick_curve(int val) {
+    if (s_curve == STICK_CURVE_LINEAR || val == 0) {
+        return val;
+    }
+
+    float sign = (val > 0) ? 1.0f : -1.0f;
+    float abs_val = (float)(val > 0 ? val : -val);
+    float norm = abs_val / 4096.0f;  // 0..1
+
+    float result;
+    switch (s_curve) {
+        case STICK_CURVE_EXPONENTIAL:
+            result = powf(norm, s_exp);
+            break;
+        case STICK_CURVE_QUADRATIC:
+            result = norm * norm;
+            break;
+        default:
+            result = norm;
+            break;
+    }
+
+    return (int)(sign * result * 4096.0f);
 }
 
 static void emit_if_changed_ex(uint8_t device_id, uint8_t key_id, bool now_pressed, bool* prev_pressed) {
@@ -108,6 +157,114 @@ static int cal_normalize(const axis_cal_t* a, uint16_t raw) {
     // Normalize to 4096 scale
     return (val * 4096) / range;
 }
+
+// --- Calibration persistence (NVS) ---
+#define CAL_NVS_NS "stick_cal"
+#define CAL_NVS_KEY "cal_data"
+
+// Packed struct for NVS persistence.
+typedef struct {
+    uint16_t lx_min, lx_center, lx_max;
+    uint16_t ly_min, ly_center, ly_max;
+    uint16_t rx_min, rx_center, rx_max;
+    uint16_t ry_min, ry_center, ry_max;
+} cal_nvs_data_t;
+
+static void cal_save_axis(cal_nvs_data_t *d, const axis_cal_t *a,
+                          uint16_t *out_min, uint16_t *out_center, uint16_t *out_max) {
+    *out_min = a->min;
+    *out_center = a->center;
+    *out_max = a->max;
+}
+
+static void cal_restore_axis(axis_cal_t *a, uint16_t mn, uint16_t center, uint16_t mx) {
+    a->min = mn;
+    a->center = center;
+    a->max = mx;
+    a->initialized = true;
+}
+
+void joycon_mapper_save_calibration(void) {
+    cal_nvs_data_t d;
+    cal_save_axis(&d, &s_cal.lx, &d.lx_min, &d.lx_center, &d.lx_max);
+    cal_save_axis(&d, &s_cal.ly, &d.ly_min, &d.ly_center, &d.ly_max);
+    cal_save_axis(&d, &s_cal.rx, &d.rx_min, &d.rx_center, &d.rx_max);
+    cal_save_axis(&d, &s_cal.ry, &d.ry_min, &d.ry_center, &d.ry_max);
+
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(CAL_NVS_NS, NVS_READWRITE, &h);
+    if (err != ESP_OK) {
+        ESP_LOGW("joycon-mapper", "NVS open failed for cal save: %s", esp_err_to_name(err));
+        return;
+    }
+    err = nvs_set_blob(h, CAL_NVS_KEY, &d, sizeof(d));
+    if (err == ESP_OK) {
+        nvs_commit(h);
+        ESP_LOGI("joycon-mapper", "Calibration saved to NVS");
+    }
+    nvs_close(h);
+}
+
+void joycon_mapper_clear_calibration(void) {
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(CAL_NVS_NS, NVS_READWRITE, &h);
+    if (err != ESP_OK) return;
+    nvs_erase_key(h, CAL_NVS_KEY);
+    nvs_commit(h);
+    nvs_close(h);
+
+    memset(&s_cal, 0, sizeof(s_cal));
+    ESP_LOGI("joycon-mapper", "Calibration cleared");
+}
+
+static void cal_restore_from_nvs(void) {
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(CAL_NVS_NS, NVS_READONLY, &h);
+    if (err != ESP_OK) return;
+
+    cal_nvs_data_t d;
+    size_t len = sizeof(d);
+    err = nvs_get_blob(h, CAL_NVS_KEY, &d, &len);
+    nvs_close(h);
+
+    if (err != ESP_OK || len != sizeof(d)) return;
+
+    cal_restore_axis(&s_cal.lx, d.lx_min, d.lx_center, d.lx_max);
+    cal_restore_axis(&s_cal.ly, d.ly_min, d.ly_center, d.ly_max);
+    cal_restore_axis(&s_cal.rx, d.rx_min, d.rx_center, d.rx_max);
+    cal_restore_axis(&s_cal.ry, d.ry_min, d.ry_center, d.ry_max);
+    s_cal.sample_count = CAL_WARMUP_SAMPLES; // skip warmup
+    ESP_LOGI("joycon-mapper", "Calibration restored from NVS");
+}
+
+static bool s_cal_restored = false;
+
+// --- Motion / IMU gesture detection ---
+#define MOTION_SHAKE_THRESHOLD   12000  // accel magnitude for shake
+#define MOTION_TILT_THRESHOLD    3000   // accel tilt per-axis
+#define MOTION_FLICK_THRESHOLD   10000  // gyro magnitude for flick
+#define MOTION_COOLDOWN_MS       250    // minimum ms between gesture triggers
+
+typedef struct {
+    int64_t last_shake_ms;
+    int64_t last_tilt_up_ms;
+    int64_t last_tilt_down_ms;
+    int64_t last_tilt_left_ms;
+    int64_t last_tilt_right_ms;
+    int64_t last_flick_ms;
+    bool shake_pressed;
+    bool tilt_up_pressed;
+    bool tilt_down_pressed;
+    bool tilt_left_pressed;
+    bool tilt_right_pressed;
+    bool flick_pressed;
+} motion_state_t;
+
+static motion_state_t s_motion = {0};
+
+static int64_t get_time_ms(void) {
+    return (int64_t)(esp_timer_get_time() / 1000);
+}
 #endif /* CONFIG_JOYCON_HOST_NINTENDO_0X30_EMIT_KEYS */
 
 void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16_t len) {
@@ -144,16 +301,27 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
         }
 
 #if CONFIG_JOYCON_HOST_NINTENDO_0X30_EMIT_KEYS
+        // --- Restore calibration from NVS on first report ---
+        if (!s_cal_restored) {
+            cal_restore_from_nvs();
+            s_cal_restored = true;
+        }
+
         // --- Auto-calibration ---
         cal_update(&s_cal, &st);
+
+        // --- Auto-save calibration after warmup completes ---
+        if (s_cal.sample_count == CAL_WARMUP_SAMPLES + 1) {
+            joycon_mapper_save_calibration();
+        }
 
         // --- Deadzone (scaled from threshold) ---
         const int deadzone = ((int)s_threshold) << 5;  // 32 -> 1024 on 4096 scale
 
-        // --- Left stick → WASD ---
+        // --- Left stick -> WASD (with curve) ---
         {
-            int dx = cal_normalize(&s_cal.lx, st.lx);
-            int dy = cal_normalize(&s_cal.ly, st.ly);
+            int dx = apply_stick_curve(cal_normalize(&s_cal.lx, st.lx));
+            int dy = apply_stick_curve(cal_normalize(&s_cal.ly, st.ly));
 
             bool now_right = dx > deadzone;
             bool now_left  = dx < -deadzone;
@@ -166,13 +334,13 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
             emit_if_changed_ex(device_id, KEY_ID_RIGHT, now_right, &prev_right);
         }
 
-        // --- Right stick → virtual directions ---
+        // --- Right stick -> virtual directions (with curve) ---
         {
             static bool prev_rup = false, prev_rdn = false;
             static bool prev_rlt = false, prev_rrt = false;
 
-            int rdx = cal_normalize(&s_cal.rx, st.rx);
-            int rdy = cal_normalize(&s_cal.ry, st.ry);
+            int rdx = apply_stick_curve(cal_normalize(&s_cal.rx, st.rx));
+            int rdy = apply_stick_curve(cal_normalize(&s_cal.ry, st.ry));
 
             emit_if_changed_ex(device_id, KEY_ID_RSTICK_UP,    rdy < -deadzone, &prev_rup);
             emit_if_changed_ex(device_id, KEY_ID_RSTICK_DOWN,  rdy >  deadzone, &prev_rdn);
@@ -219,6 +387,64 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
 
             emit_if_changed_ex(device_id, KEY_ID_LSTICK_CLICK, (st.buttons2 & NIN_BTN2_LSTICK) != 0, &prev_ls);
             emit_if_changed_ex(device_id, KEY_ID_RSTICK_CLICK, (st.buttons2 & NIN_BTN2_RSTICK) != 0, &prev_rs);
+        }
+
+        // --- Motion / IMU gesture detection ---
+        if (st.has_imu) {
+            int64_t now = get_time_ms();
+
+            // Average acceleration across the 3 IMU samples
+            int32_t ax = 0, ay = 0, az = 0;
+            int32_t gx = 0, gy = 0, gz = 0;
+            for (int i = 0; i < 3; i++) {
+                ax += st.accel[i][0];
+                ay += st.accel[i][1];
+                az += st.accel[i][2];
+                gx += st.gyro[i][0];
+                gy += st.gyro[i][1];
+                gz += st.gyro[i][2];
+            }
+            ax /= 3; ay /= 3; az /= 3;
+            gx /= 3; gy /= 3; gz /= 3;
+
+            // Shake: high acceleration magnitude (subtract gravity ~4096 on one axis)
+            int32_t accel_mag = (int32_t)(sqrtf((float)(ax*ax + ay*ay + az*az)));
+            bool shake_now = (accel_mag > MOTION_SHAKE_THRESHOLD);
+            if (shake_now && !s_motion.shake_pressed &&
+                (now - s_motion.last_shake_ms) > MOTION_COOLDOWN_MS) {
+                s_motion.shake_pressed = true;
+                s_motion.last_shake_ms = now;
+                emit_if_changed_ex(device_id, KEY_ID_MOTION_SHAKE, true, &s_motion.shake_pressed);
+            } else if (!shake_now && s_motion.shake_pressed &&
+                       (now - s_motion.last_shake_ms) > MOTION_COOLDOWN_MS) {
+                s_motion.shake_pressed = false;
+                emit_if_changed_ex(device_id, KEY_ID_MOTION_SHAKE, false, &s_motion.shake_pressed);
+            }
+
+            // Tilt: sustained acceleration on a single axis beyond threshold
+            bool tilt_up    = (ay < -MOTION_TILT_THRESHOLD);
+            bool tilt_down  = (ay >  MOTION_TILT_THRESHOLD);
+            bool tilt_left  = (ax < -MOTION_TILT_THRESHOLD);
+            bool tilt_right = (ax >  MOTION_TILT_THRESHOLD);
+
+            emit_if_changed_ex(device_id, KEY_ID_MOTION_TILT_UP,    tilt_up,    &s_motion.tilt_up_pressed);
+            emit_if_changed_ex(device_id, KEY_ID_MOTION_TILT_DOWN,  tilt_down,  &s_motion.tilt_down_pressed);
+            emit_if_changed_ex(device_id, KEY_ID_MOTION_TILT_LEFT,  tilt_left,  &s_motion.tilt_left_pressed);
+            emit_if_changed_ex(device_id, KEY_ID_MOTION_TILT_RIGHT, tilt_right, &s_motion.tilt_right_pressed);
+
+            // Flick: high gyro magnitude (quick twist)
+            int32_t gyro_mag = (int32_t)(sqrtf((float)(gx*gx + gy*gy + gz*gz)));
+            bool flick_now = (gyro_mag > MOTION_FLICK_THRESHOLD);
+            if (flick_now && !s_motion.flick_pressed &&
+                (now - s_motion.last_flick_ms) > MOTION_COOLDOWN_MS) {
+                s_motion.flick_pressed = true;
+                s_motion.last_flick_ms = now;
+                emit_if_changed_ex(device_id, KEY_ID_MOTION_FLICK, true, &s_motion.flick_pressed);
+            } else if (!flick_now && s_motion.flick_pressed &&
+                       (now - s_motion.last_flick_ms) > MOTION_COOLDOWN_MS) {
+                s_motion.flick_pressed = false;
+                emit_if_changed_ex(device_id, KEY_ID_MOTION_FLICK, false, &s_motion.flick_pressed);
+            }
         }
 
         return;

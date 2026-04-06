@@ -50,6 +50,11 @@ typedef struct {
     uint16_t ly;
     uint16_t rx;
     uint16_t ry;
+    // IMU data: 3 samples of 6-axis (accel xyz, gyro xyz), each int16.
+    // Only valid when has_imu == true (report length >= 49).
+    bool has_imu;
+    int16_t accel[3][3];  // [sample][axis: x,y,z]
+    int16_t gyro[3][3];   // [sample][axis: x,y,z]
 } nintendo_0x30_state_t;
 
 // Try to parse a Nintendo-style 0x30 input report.

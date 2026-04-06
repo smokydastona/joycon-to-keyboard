@@ -43,6 +43,14 @@ enum {
     KEY_ID_RSTICK_DOWN  = 23,
     KEY_ID_RSTICK_LEFT  = 24,
     KEY_ID_RSTICK_RIGHT = 25,
+
+    // Motion / IMU gestures
+    KEY_ID_MOTION_SHAKE     = 26,  // Sharp accel spike (any axis)
+    KEY_ID_MOTION_TILT_UP   = 27,  // Sustained forward tilt
+    KEY_ID_MOTION_TILT_DOWN = 28,  // Sustained backward tilt
+    KEY_ID_MOTION_TILT_LEFT = 29,  // Sustained left tilt
+    KEY_ID_MOTION_TILT_RIGHT = 30, // Sustained right tilt
+    KEY_ID_MOTION_FLICK     = 31,  // Quick gyro flick (twist)
 };
 
 // Feed raw HID report bytes into the mapper.
@@ -56,3 +64,21 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
 
 // Allows overriding deadzone/thresholds later.
 void joycon_mapper_set_stick_threshold(uint8_t threshold);
+
+// Stick curve types applied to normalized stick values before the threshold test.
+typedef enum {
+    STICK_CURVE_LINEAR      = 0,
+    STICK_CURVE_EXPONENTIAL = 1,  // applies pow(abs(x), exp) * sign(x)
+    STICK_CURVE_QUADRATIC   = 2,  // applies x * abs(x)  (smooth ramp-up)
+} stick_curve_t;
+
+// Set the stick response curve.
+// curve: one of STICK_CURVE_* enum values.
+// exp_x100: exponent * 100 (e.g. 150 = 1.5). Only used for EXPONENTIAL.
+void joycon_mapper_set_stick_curve(uint8_t curve, uint8_t exp_x100);
+
+// Save current auto-calibration to NVS so it persists across reboots.
+void joycon_mapper_save_calibration(void);
+
+// Clear saved calibration from NVS (forces re-calibration on next boot).
+void joycon_mapper_clear_calibration(void);

@@ -98,6 +98,26 @@ bool keymap_lookup(uint8_t key_id, uint8_t* modifier, uint8_t* keycode) {
             *keycode = HID_KEY_ARROW_RIGHT;
             return true;
 
+        // --- Motion / IMU gestures ---
+        case 26: // Shake -> T (grenade throw / interact alt)
+            *keycode = HID_KEY_T;
+            return true;
+        case 27: // Tilt Up -> 1 (weapon slot 1)
+            *keycode = HID_KEY_1;
+            return true;
+        case 28: // Tilt Down -> 2 (weapon slot 2)
+            *keycode = HID_KEY_2;
+            return true;
+        case 29: // Tilt Left -> 3 (weapon slot 3)
+            *keycode = HID_KEY_3;
+            return true;
+        case 30: // Tilt Right -> 4 (weapon slot 4)
+            *keycode = HID_KEY_4;
+            return true;
+        case 31: // Flick -> X (special ability)
+            *keycode = HID_KEY_X;
+            return true;
+
         default:
             return false;
     }

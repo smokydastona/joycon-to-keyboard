@@ -35,6 +35,10 @@ static const char *TAG = "bridge-serial";
 #define CTRL_CMD_OTA_ABORT   0x13
 #define CTRL_CMD_FW_VERSION  0x14
 
+// Stick / calibration control commands relayed to ESP32
+#define CTRL_CMD_SET_STICK_CURVE 0x03
+#define CTRL_CMD_CALIBRATION     0x04
+
 // OTA response IDs received from ESP32 via UART
 #define OTA_RSP_MARKER  0xFB
 #define OTA_RSP_BEGIN   0x01
@@ -533,6 +537,58 @@ static void handle_fw_update_abort(cJSON *root) {
     respond_ok_simple("fw_update_abort");
 }
 
+static void handle_set_stick_curve(cJSON *root) {
+    // {"cmd":"set_stick_curve", "curve":"linear"|"exponential"|"quadratic", "exp":1.5}
+    cJSON *curve_j = cJSON_GetObjectItemCaseSensitive(root, "curve");
+    cJSON *exp_j = cJSON_GetObjectItemCaseSensitive(root, "exp");
+
+    uint8_t curve = 0;  // default linear
+    if (cJSON_IsString(curve_j) && curve_j->valuestring) {
+        if (strcmp(curve_j->valuestring, "exponential") == 0) curve = 1;
+        else if (strcmp(curve_j->valuestring, "quadratic") == 0) curve = 2;
+    }
+
+    uint8_t exp_x100 = 100;
+    if (cJSON_IsNumber(exp_j)) {
+        int v = (int)(exp_j->valuedouble * 100.0);
+        if (v < 10) v = 10;
+        if (v > 250) v = 250;
+        exp_x100 = (uint8_t)v;
+    }
+
+    uint8_t payload[2] = {curve, exp_x100};
+    if (!uart_proto_send_ctrl(CTRL_CMD_SET_STICK_CURVE, payload, 2)) {
+        respond_error("set_stick_curve", "uart_send_failed");
+        return;
+    }
+    respond_ok_simple("set_stick_curve");
+}
+
+static void handle_calibration(cJSON *root) {
+    // {"cmd":"calibration", "action":"save"|"clear"}
+    cJSON *action_j = cJSON_GetObjectItemCaseSensitive(root, "action");
+    if (!cJSON_IsString(action_j) || !action_j->valuestring) {
+        respond_error("calibration", "missing_action");
+        return;
+    }
+
+    uint8_t sub = 0;
+    if (strcmp(action_j->valuestring, "save") == 0) {
+        sub = 0x01;
+    } else if (strcmp(action_j->valuestring, "clear") == 0) {
+        sub = 0x02;
+    } else {
+        respond_error("calibration", "invalid_action");
+        return;
+    }
+
+    if (!uart_proto_send_ctrl(CTRL_CMD_CALIBRATION, &sub, 1)) {
+        respond_error("calibration", "uart_send_failed");
+        return;
+    }
+    respond_ok_simple("calibration");
+}
+
 static void handle_line(const char *line) {
     cJSON *root = cJSON_Parse(line);
     if (!root) {
@@ -569,6 +625,10 @@ static void handle_line(const char *line) {
         handle_fw_update_end(root);
     } else if (strcmp(cmd->valuestring, "fw_update_abort") == 0) {
         handle_fw_update_abort(root);
+    } else if (strcmp(cmd->valuestring, "set_stick_curve") == 0) {
+        handle_set_stick_curve(root);
+    } else if (strcmp(cmd->valuestring, "calibration") == 0) {
+        handle_calibration(root);
     } else {
         respond_error(cmd->valuestring, "unknown_cmd");
     }

@@ -59,6 +59,17 @@ This repo supports a full Joy-Con button set: movement, face buttons, shoulders/
 | `24`   | RStick Left  |
 | `25`   | RStick Right |
 
+### Motion / IMU gestures
+
+| key_id | Gesture     | Description                                      |
+|--------|-------------|--------------------------------------------------|
+| `26`   | Shake       | Sharp acceleration spike (any axis)              |
+| `27`   | Tilt Up     | Sustained forward tilt (accelerometer Y-)        |
+| `28`   | Tilt Down   | Sustained backward tilt (accelerometer Y+)       |
+| `29`   | Tilt Left   | Sustained left tilt (accelerometer X-)            |
+| `30`   | Tilt Right  | Sustained right tilt (accelerometer X+)           |
+| `31`   | Flick       | Quick gyroscope twist (high angular velocity)    |
+
 ## Default USB outputs
 
 | key_id | Action       | Default output |
@@ -88,6 +99,12 @@ This repo supports a full Joy-Con button set: movement, face buttons, shoulders/
 | 23     | RStick Down | `Arrow Down`   |
 | 24     | RStick Left | `Arrow Left`   |
 | 25     | RStick Right| `Arrow Right`  |
+| 26     | Shake       | `T`            |
+| 27     | Tilt Up     | `1`            |
+| 28     | Tilt Down   | `2`            |
+| 29     | Tilt Left   | `3`            |
+| 30     | Tilt Right  | `4`            |
+| 31     | Flick       | `X`            |
 
 ## Stick auto-calibration
 
@@ -97,6 +114,53 @@ The firmware tracks min / center / max per axis at runtime:
 - The first 8 samples establish the center (running average during warm-up).
 - Min and max expand as the stick reaches its physical limits.
 - Raw values are normalized to a ±4096 scale, then compared against a configurable deadzone.
+
+Calibration data is automatically saved to NVS (non-volatile storage) on the ESP32
+after the warm-up phase completes. On subsequent boots, saved calibration is restored
+so the controller is immediately usable without a new warm-up period.
+
+Use the `calibration` helper-app command to manually save or clear calibration data.
+
+## Stick response curves
+
+The profile `stick.curve` field controls how normalized stick values are mapped
+to key event thresholds. Available curves:
+
+| Curve         | Behavior                                           |
+|---------------|----------------------------------------------------|
+| `linear`      | Direct proportional mapping (default)              |
+| `exponential` | `pow(abs(x), exp) * sign(x)` — fine center control|
+| `quadratic`   | `x * abs(x)` — smooth ramp-up near center         |
+
+The `stick.exp` field sets the exponent for the `exponential` curve (default 1.0).
+Higher values increase the dead zone feel and give more precision for small movements.
+
+Example profile stick settings:
+```json
+{
+  "stick": {
+    "deadzone": 0.15,
+    "shape": "circle",
+    "curve": "exponential",
+    "exp": 1.5
+  }
+}
+```
+
+When a profile is loaded, stick curve settings are automatically forwarded
+to the ESP32 BT host over UART.
+
+## Motion / IMU gesture detection
+
+When the Joy-Con sends 0x30 reports with IMU data (bytes 13-48), the firmware
+detects motion gestures and emits them as key events:
+
+- **Shake**: high acceleration magnitude exceeding threshold (any axis).
+- **Tilt**: sustained acceleration offset on X or Y axis.
+- **Flick**: high gyroscope angular velocity (quick twist).
+
+All gestures use a cooldown timer (250ms default) to prevent rapid re-triggering.
+Motion key IDs (26-31) can be remapped like any other key.
 
 This approach adapts to individual controller stick drift and range variations (inspired by the `StickCal` pattern from GamepadPhoenix).
 

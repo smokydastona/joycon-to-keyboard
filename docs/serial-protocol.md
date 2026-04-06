@@ -87,6 +87,14 @@ Current control commands:
 - `cmd_id=0x02` — start discovery
 	- payload: optional 1-byte flags
 		- bit 0 (`0x01`): dual-connect mode (try connect both Joy-Con (L) and Joy-Con (R))
+- `cmd_id=0x03` — set stick response curve
+	- payload: 2 bytes
+		- `[0]`: curve type (`0`=linear, `1`=exponential, `2`=quadratic)
+		- `[1]`: exponent * 100 (only used for exponential; e.g. `150` = 1.5)
+- `cmd_id=0x04` — calibration management
+	- payload: 1 byte
+		- `0x01`: save current auto-calibration to NVS
+		- `0x02`: clear saved calibration from NVS
 
 ### OTA update control commands (ESP32-S3 → ESP32)
 

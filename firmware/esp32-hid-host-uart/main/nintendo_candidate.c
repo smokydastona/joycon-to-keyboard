@@ -39,5 +39,23 @@ bool nintendo_try_parse_0x30(const uint8_t* report, uint16_t len, nintendo_0x30_
     out->rx = (uint16_t)report[9] | ((uint16_t)(report[10] & 0x0F) << 8);
     out->ry = ((uint16_t)(report[10] >> 4)) | ((uint16_t)report[11] << 4);
 
+    // Parse IMU data if the report is long enough (49 bytes for full 0x30).
+    // Bytes 13-48: 3 IMU samples, each 12 bytes (accel xyz + gyro xyz, int16 LE).
+    out->has_imu = false;
+    if (len >= 49) {
+        out->has_imu = true;
+        for (int sample = 0; sample < 3; sample++) {
+            int base = 13 + sample * 12;
+            // Accelerometer: 3 axes as int16 LE
+            out->accel[sample][0] = (int16_t)((uint16_t)report[base + 0] | ((uint16_t)report[base + 1] << 8));
+            out->accel[sample][1] = (int16_t)((uint16_t)report[base + 2] | ((uint16_t)report[base + 3] << 8));
+            out->accel[sample][2] = (int16_t)((uint16_t)report[base + 4] | ((uint16_t)report[base + 5] << 8));
+            // Gyroscope: 3 axes as int16 LE
+            out->gyro[sample][0] = (int16_t)((uint16_t)report[base + 6] | ((uint16_t)report[base + 7] << 8));
+            out->gyro[sample][1] = (int16_t)((uint16_t)report[base + 8] | ((uint16_t)report[base + 9] << 8));
+            out->gyro[sample][2] = (int16_t)((uint16_t)report[base + 10] | ((uint16_t)report[base + 11] << 8));
+        }
+    }
+
     return true;
 }

@@ -11,6 +11,7 @@
 #include "bt_hid_host.h"
 #include "uart_framing.h"
 #include "fw_ota.h"
+#include "joycon_mapper.h"
 
 static const char *TAG = "bridge-ctrl";
 
@@ -21,6 +22,8 @@ static const char *TAG = "bridge-ctrl";
 
 #define CTRL_CMD_SET_TARGET_SUBSTR 0x01
 #define CTRL_CMD_START_DISCOVERY   0x02
+#define CTRL_CMD_SET_STICK_CURVE   0x03
+#define CTRL_CMD_CALIBRATION       0x04
 
 // OTA control commands (from ESP32-S3)
 #define CTRL_CMD_OTA_BEGIN   0x10
@@ -54,6 +57,23 @@ static void handle_ctrl_cmd(uint8_t cmd_id, const uint8_t *payload, uint8_t payl
             bool dual = (payload_len >= 1) && ((payload[0] & 0x01u) != 0);
             esp_err_t err = bt_hid_host_start_discovery_ex(dual);
             ESP_LOGI(TAG, "Start discovery requested (dual=%d): %s", (int)dual, esp_err_to_name(err));
+            break;
+        }
+        case CTRL_CMD_SET_STICK_CURVE: {
+            // payload[0] = curve type (0=linear, 1=exponential, 2=quadratic)
+            // payload[1] = exponent * 100 (only for exponential)
+            uint8_t curve = (payload_len >= 1) ? payload[0] : 0;
+            uint8_t exp_x100 = (payload_len >= 2) ? payload[1] : 100;
+            joycon_mapper_set_stick_curve(curve, exp_x100);
+            break;
+        }
+        case CTRL_CMD_CALIBRATION: {
+            // payload[0] = sub-command: 0x01=save, 0x02=clear
+            if (payload_len >= 1 && payload[0] == 0x01) {
+                joycon_mapper_save_calibration();
+            } else if (payload_len >= 1 && payload[0] == 0x02) {
+                joycon_mapper_clear_calibration();
+            }
             break;
         }
         case CTRL_CMD_FW_VERSION: {

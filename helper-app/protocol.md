@@ -297,6 +297,43 @@ For ESP32 relay:
 {"cmd":"fw_update_abort","board":"esp32"}
 ```
 
+### Set stick response curve
+
+Configure the stick-to-key response curve on the ESP32 BT host.
+
+```json
+{"cmd":"set_stick_curve","curve":"exponential","exp":1.5}
+```
+
+- `curve`: `"linear"` (default), `"exponential"`, or `"quadratic"`
+- `exp`: exponent for the exponential curve (0.1..2.5, default 1.0)
+
+Response:
+
+```json
+{"rsp":"set_stick_curve","ok":true}
+```
+
+### Calibration management
+
+Save or clear the stick auto-calibration data stored in NVS on the ESP32.
+
+```json
+{"cmd":"calibration","action":"save"}
+```
+
+```json
+{"cmd":"calibration","action":"clear"}
+```
+
+- `action`: `"save"` persists current auto-calibration, `"clear"` erases it
+
+Response:
+
+```json
+{"rsp":"calibration","ok":true}
+```
+
 ## Events (device -> PC)
 
 The device may emit events for:

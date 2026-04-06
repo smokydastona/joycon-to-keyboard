@@ -37,6 +37,7 @@ from . import fw_updater
 from . import hid_keycodes
 from . import m913_device
 from . import razer_device
+from . import app_switcher as app_switcher_mod
 
 log = logging.getLogger("joycon_helper.app")
 
@@ -751,6 +752,15 @@ class App(tk.Tk):
         self._perf_redraw_times: List[float] = []  # last N redraw durations
         self._perf_input_times: List[Tuple[float, float]] = []  # (recv_time, process_time)
 
+        # ── Per-app auto-profile switching ──
+        self._app_switcher = app_switcher_mod.AppSwitcher(
+            on_switch=self._on_app_switch,
+            poll_interval=1.0,
+        )
+        self._app_switcher_enabled = tk.BooleanVar(value=False)
+        self._app_switcher_rules: List[Dict[str, Any]] = app_switcher_mod.load_rules()
+        self._app_switcher.set_rules(self._app_switcher_rules)
+
         self._build_ui()
         self._load_background_image()
         self._apply_widget_theme()
@@ -1332,9 +1342,29 @@ class App(tk.Tk):
         ttk.Button(prof_btns, text="Load…", command=self._load_profile).pack(side=tk.LEFT)
         ttk.Button(prof_btns, text="Save…", command=self._save_profile).pack(side=tk.LEFT, padx=(6, 0))
         ttk.Button(prof_btns, text="Validate", command=self._validate_profile).pack(side=tk.LEFT, padx=(6, 0))
-        ttk.Button(prof_btns, text="Apply Stick→JSON", command=self._stick_apply_to_profile).pack(
+        ttk.Button(prof_btns, text="Apply Stick->JSON", command=self._stick_apply_to_profile).pack(
             side=tk.LEFT, padx=(6, 0)
         )
+
+        # ── Per-app auto-profile switching ──
+        app_switch_frame = ttk.LabelFrame(self.tab_profile, text="Per-App Auto-Profile Switching")
+        app_switch_frame.pack(fill=tk.X, pady=(6, 4))
+
+        switch_top = ttk.Frame(app_switch_frame)
+        switch_top.pack(fill=tk.X, padx=8, pady=(4, 2))
+        ttk.Checkbutton(
+            switch_top, text="Enable auto-switching",
+            variable=self._app_switcher_enabled,
+            command=self._toggle_app_switcher,
+        ).pack(side=tk.LEFT)
+        ttk.Button(switch_top, text="Add rule", command=self._app_switcher_add_rule).pack(side=tk.LEFT, padx=(12, 0))
+        ttk.Button(switch_top, text="Remove selected", command=self._app_switcher_remove_rule).pack(side=tk.LEFT, padx=(6, 0))
+        ttk.Button(switch_top, text="Detect active app", command=self._app_switcher_detect).pack(side=tk.LEFT, padx=(6, 0))
+
+        self._app_switch_list = tk.Listbox(app_switch_frame, height=4)
+        self._app_switch_list.pack(fill=tk.X, padx=8, pady=(2, 6))
+        self._theme_listbox(self._app_switch_list)
+        self._refresh_app_switch_list()
 
     def _build_macros_tab(self) -> None:
         row = ttk.Frame(self.tab_macros)
@@ -3177,6 +3207,77 @@ class App(tk.Tk):
         if 0 <= slot < len(self._slot_name_vars):
             display = name[:14] if name else f"Slot {slot}"
             self._slot_name_vars[slot].set(f"{slot}: {display}")
+
+    # ------------------------------------------------------------------
+    # Per-app auto-profile switching
+    # ------------------------------------------------------------------
+
+    def _on_app_switch(self, slot: int) -> None:
+        """Called from app-switcher background thread when a profile switch is needed."""
+        # Schedule on the main thread.
+        self.after(0, lambda: self._do_app_switch(slot))
+
+    def _do_app_switch(self, slot: int) -> None:
+        if not self.client.connected:
+            return
+        self._send_cmd({"cmd": "set_active_profile", "slot": slot})
+        self.slot_var.set(str(slot))
+        self._log_line(f"[auto-switch] Active app changed -> slot {slot}")
+
+    def _toggle_app_switcher(self) -> None:
+        enabled = self._app_switcher_enabled.get()
+        self._app_switcher.enabled = enabled
+        state = "enabled" if enabled else "disabled"
+        self._log_line(f"[host] App auto-switching {state}")
+
+    def _refresh_app_switch_list(self) -> None:
+        lb = getattr(self, "_app_switch_list", None)
+        if lb is None:
+            return
+        lb.delete(0, tk.END)
+        for rule in self._app_switcher_rules:
+            exe = rule.get("exe", "?")
+            slot = rule.get("slot", 0)
+            lb.insert(tk.END, f"{exe}  ->  slot {slot}")
+
+    def _app_switcher_add_rule(self) -> None:
+        exe = simpledialog.askstring("Add rule", "Executable name (e.g. game.exe):", parent=self)
+        if not exe:
+            return
+        slot = simpledialog.askinteger("Add rule", "Profile slot (0-3):", parent=self, minvalue=0, maxvalue=3)
+        if slot is None:
+            return
+        self._app_switcher_rules.append({"exe": exe.strip().lower(), "slot": slot})
+        self._app_switcher.set_rules(self._app_switcher_rules)
+        app_switcher_mod.save_rules(self._app_switcher_rules)
+        self._refresh_app_switch_list()
+
+    def _app_switcher_remove_rule(self) -> None:
+        lb = getattr(self, "_app_switch_list", None)
+        if lb is None:
+            return
+        sel = lb.curselection()
+        if not sel:
+            return
+        idx = sel[0]
+        if 0 <= idx < len(self._app_switcher_rules):
+            self._app_switcher_rules.pop(idx)
+            self._app_switcher.set_rules(self._app_switcher_rules)
+            app_switcher_mod.save_rules(self._app_switcher_rules)
+            self._refresh_app_switch_list()
+
+    def _app_switcher_detect(self) -> None:
+        """Detect the currently active application and show it."""
+        try:
+            exe = app_switcher_mod._get_foreground_exe()
+            title = app_switcher_mod._get_foreground_title()
+        except Exception:
+            exe = None
+            title = None
+        msg = f"Active: {exe or '(unknown)'}"
+        if title:
+            msg += f"\nTitle: {title}"
+        messagebox.showinfo("Active Application", msg, parent=self)
 
     # ------------------------------------------------------------------
     # Safe mode (reset active slot to defaults on device)
