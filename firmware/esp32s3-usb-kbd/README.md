@@ -58,6 +58,8 @@ The ESP32-S3 also forwards **controller info** events (type, serial, colors, sti
 
 The helper app can also send **rumble** and **home LED** commands, which are forwarded via UART to the ESP32 BT host.
 
+The ESP32-S3 also forwards **RSSI** (Bluetooth signal strength) events as `{"evt":"rssi","device_id":N,"rssi":N}` NDJSON events, polled every 5 seconds per connected device.
+
 ## UART settings
 
 Configured via `menuconfig`:

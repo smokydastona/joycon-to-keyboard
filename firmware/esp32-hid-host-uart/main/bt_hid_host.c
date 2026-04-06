@@ -13,6 +13,7 @@
 #include "esp_hidh_api.h"
 
 #include "esp_log.h"
+#include "esp_timer.h"
 
 #include "joycon_mapper.h"
 #include "uart_framing.h"
@@ -234,6 +235,17 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
     }
 }
 
+static esp_timer_handle_t s_rssi_timer = NULL;
+
+static void rssi_poll_cb(void *arg) {
+    (void)arg;
+    for (int i = 0; i < 2; i++) {
+        if (s_dev[i].connected) {
+            esp_bt_gap_read_rssi_delta(s_dev[i].bda);
+        }
+    }
+}
+
 static void gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t* param) {
     switch (event) {
         case ESP_BT_GAP_DISC_RES_EVT: {
@@ -301,6 +313,21 @@ static void gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t* param) {
         case ESP_BT_GAP_AUTH_CMPL_EVT:
             ESP_LOGI(TAG, "Auth complete: success=%d", param->auth_cmpl.stat == ESP_BT_STATUS_SUCCESS);
             break;
+        case ESP_BT_GAP_READ_RSSI_DELTA_EVT: {
+            if (param->read_rssi_delta.stat == ESP_BT_STATUS_SUCCESS) {
+                int8_t rssi = param->read_rssi_delta.rssi_delta;
+                // Find device_id by BDA
+                uint8_t dev_id = 0;
+                for (int i = 0; i < 2; i++) {
+                    if (s_dev[i].connected && bda_eq(s_dev[i].bda, param->read_rssi_delta.bda)) {
+                        dev_id = (uint8_t)i;
+                        break;
+                    }
+                }
+                bridge_send_rssi(dev_id, rssi);
+            }
+            break;
+        }
         default:
             break;
     }
@@ -366,6 +393,15 @@ esp_err_t bt_hid_host_start(void) {
 
     // Start discovery; Joy-Con should appear as a HID device.
     ESP_ERROR_CHECK(bt_hid_host_start_discovery());
+
+    // Start periodic RSSI polling (every 5 seconds).
+    esp_timer_create_args_t rssi_args = {
+        .callback = rssi_poll_cb,
+        .arg = NULL,
+        .name = "rssi_poll",
+    };
+    ESP_ERROR_CHECK(esp_timer_create(&rssi_args, &s_rssi_timer));
+    ESP_ERROR_CHECK(esp_timer_start_periodic(s_rssi_timer, 5000000));  // 5s
 
     return ESP_OK;
 }

@@ -26,6 +26,11 @@ Until then, entries are grouped by date.
 - **Player LED control**: after completing the setup handshake, the host sets Player 1 LEDs on the Joy-Con via subcommand 0x30.
 - **Battery level reporting**: battery level (0–4) is parsed from 0x30 input reports and forwarded to the ESP32-S3 via a new UART frame type (marker 0xFA). The ESP32-S3 emits it as an NDJSON `{"evt":"battery"}` event over CDC serial.
 - **Battery indicator in status bar** (helper app): the bottom status bar now shows a battery level indicator (🔋 with filled/empty bars) when battery data is available. Resets on disconnect.
+- **Double-tap mapping type**: new `MAP_DOUBLE_TAP` mapping mode (firmware + helper app). Single-tap sends one key, quick double-tap sends a different key. Configurable timeout (default 300 ms). Firmware implements a per-key state machine (DT_IDLE → DT_FIRST_DOWN → DT_ARMED → DT_SECOND_DOWN) with esp_timer one-shot timers. Up to 8 simultaneous double-tap keys.
+- **BT RSSI signal strength**: ESP32 periodically polls Bluetooth RSSI (every 5 s) via `esp_bt_gap_read_rssi_delta()`. Signal strength forwarded through the full stack: ESP32 → UART frame (marker 0xF8) → ESP32-S3 → NDJSON `{"evt":"rssi"}` → helper app status bar with signal bars (████/███░/██░░/█░░░) and dBm value.
+- **Latency round-trip test**: helper app records `time.monotonic()` before sending ping, measures RTT on pong response. Auto-pings every 10 seconds. Status bar shows ⏱ Nms RTT.
+- **Curated default profiles**: added Minecraft and Racing presets to the existing 3 (FPS/Shooter, Platformer, RPG/Action). Minecraft: WASD + Space/Shift/E/Q/1-4. Racing: arrows + N/B/R/M/Shift/Space.
+- **Calibration wizard**: 3-step guided calibration dialog (center stick, sweep edges, save/clear). Accessible via 🔧 Calibrate button in Controller Features. Sends `{"cmd":"calibration","action":"save"|"clear"}` to firmware. Includes quick deadzone/curve adjustment sliders.
 
 ### Changed
 

@@ -15,6 +15,7 @@ typedef enum {
 	UART_FRAME_OTA_RSP = 5,  // payload[0]==0xFB, OTA response from ESP32
 	UART_FRAME_BATTERY = 6,   // payload[0]==0xFA, battery level from ESP32
 	UART_FRAME_CONTROLLER_INFO = 7, // payload[0]==0xF9, controller info from ESP32
+	UART_FRAME_RSSI = 8,          // payload[0]==0xF8, BT RSSI from ESP32
 	UART_FRAME_UNKNOWN = 255,
 } uart_frame_type_t;
 

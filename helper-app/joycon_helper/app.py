@@ -715,6 +715,7 @@ class App(tk.Tk):
         self._bt_target_preset = tk.StringVar(value="Either (Joy-Con)")
         self._bt_status = tk.StringVar(value="BT: -")
         self._battery_level: Optional[int] = None  # 0-4 from Joy-Con, None=unknown
+        self._rssi_dbm: Optional[int] = None  # BT RSSI in dBm, None=unknown
 
         # Controller info from firmware (populated by controller_info event).
         self._ctrl_info_type = tk.StringVar(value="\u2014")
@@ -839,6 +840,10 @@ class App(tk.Tk):
         # ── Guided wizard state ──
         self._guided_window: Optional[tk.Toplevel] = None
 
+        # ── Calibration wizard state ──
+        self._cal_window: Optional[tk.Toplevel] = None
+        self._cal_step: int = 0
+
         # ── Lock critical inputs ──
         self._locked_hotspots: set[str] = set()  # hotspot names that require confirmation to unbind
 
@@ -871,6 +876,8 @@ class App(tk.Tk):
         self._perf_enabled: bool = False
         self._perf_redraw_times: List[float] = []  # last N redraw durations
         self._perf_input_times: List[Tuple[float, float]] = []  # (recv_time, process_time)
+        self._ping_sent_time: Optional[float] = None  # for round-trip latency measurement
+        self._latency_ms: Optional[float] = None  # last measured round-trip latency
 
         # ── Per-app auto-profile switching ──
         self._app_switcher = app_switcher_mod.AppSwitcher(
@@ -887,6 +894,7 @@ class App(tk.Tk):
         self._refresh_ports()
         self.after(50, self._drain_rx)
         self.after(80, self._pulse_tick)
+        self.after(10000, self._latency_ping_tick)
 
         # Bind undo/redo keyboard shortcuts
         self.bind("<Control-z>", lambda _e: self._undo())
@@ -1649,6 +1657,8 @@ class App(tk.Tk):
             ("FPS / Shooter", "WASD + Space jump, Shift sprint, R reload, E interact, mouse-like aiming"),
             ("Platformer", "Left/Right on D-pad, A jump, B attack, triggers for special"),
             ("RPG / Action", "WASD move, 1-4 hotbar, E interact, I inventory, Space roll"),
+            ("Minecraft", "WASD move, Space jump, Shift sneak, E inventory, Q drop, 1-4 hotbar"),
+            ("Racing", "Up/Down accelerate/brake, Left/Right steer, A nitro, B look-back"),
         ]:
             ttk.Button(preset_row, text=pname, command=lambda n=pname: self._apply_community_preset(n)).pack(
                 side=tk.LEFT, padx=(0, 6)
@@ -1697,6 +1707,32 @@ class App(tk.Tk):
                 "R": (0, 0xE0),       # Ctrl (block)
                 "ZL": (0, 0x1F),      # 2 (hotbar)
                 "ZR": (0, 0x20),      # 3 (hotbar)
+            },
+            "Minecraft": {
+                "DUp": (0, 0x1A),     # W
+                "DDown": (0, 0x16),   # S
+                "DLeft": (0, 0x04),   # A
+                "DRight": (0, 0x07),  # D
+                "A": (0, 0x2C),       # Space (jump)
+                "B": (0, 0x08),       # E (inventory)
+                "X": (0, 0x14),       # Q (drop)
+                "Y": (0, 0x1E),       # 1 (hotbar slot 1)
+                "L": (0, 0xE1),       # Shift (sneak)
+                "R": (0, 0x1F),       # 2 (hotbar slot 2)
+                "ZL": (0, 0x20),      # 3 (hotbar slot 3)
+                "ZR": (0, 0x21),      # 4 (hotbar slot 4)
+            },
+            "Racing": {
+                "DUp": (0, 0x52),     # Up arrow (accelerate)
+                "DDown": (0, 0x51),   # Down arrow (brake/reverse)
+                "DLeft": (0, 0x50),   # Left arrow (steer left)
+                "DRight": (0, 0x4F),  # Right arrow (steer right)
+                "A": (0, 0x11),       # N (nitro)
+                "B": (0, 0x05),       # B (look back)
+                "X": (0, 0x15),       # R (reset)
+                "Y": (0, 0x10),       # M (map)
+                "L": (0, 0xE1),       # Shift (drift)
+                "R": (0, 0x2C),       # Space (handbrake)
             },
         }
         preset = presets.get(name)
@@ -1857,6 +1893,9 @@ class App(tk.Tk):
         self._home_led_var = tk.IntVar(value=8)
         ttk.Scale(ctrl_row, variable=self._home_led_var, from_=0, to=15, orient=tk.HORIZONTAL, length=100).pack(side=tk.LEFT, padx=2)
         ttk.Button(ctrl_row, text="\U0001f4a1 Set", command=self._cmd_set_home_led, width=6).pack(side=tk.LEFT, padx=(4, 0))
+
+        # Calibration wizard button
+        ttk.Button(ctrl_row, text="\U0001f527 Calibrate", command=self._open_calibration_wizard, width=12).pack(side=tk.LEFT, padx=(16, 0))
 
         self._build_keymap_editor()
 
@@ -2196,6 +2235,8 @@ class App(tk.Tk):
             return f"Trick \u2192 {mid}"
         if et == "tap_hold":
             return "Tap / Hold"
+        if et == "double_tap":
+            return "Double-Tap"
         return f"Type: {et}"
 
     # Heist Tools action methods
@@ -3047,6 +3088,16 @@ class App(tk.Tk):
             if isinstance(hold, dict):
                 kc = hold.get("keycode", 0)
                 self._mapping_remap_to.set(f"0x{kc:02X}" if isinstance(kc, int) else "0")
+        elif et == "double_tap":
+            self._mapping_type.set("double_tap")
+            single = entry.get("single", {})
+            double = entry.get("double", {})
+            if isinstance(single, dict):
+                kc = single.get("keycode", 0)
+                self._mapping_remap_to.set(f"0x{kc:02X}" if isinstance(kc, int) else "0")
+            if isinstance(double, dict):
+                kc = double.get("keycode", 0)
+                self._mapping_macro_id.set(f"0x{kc:02X}" if isinstance(kc, int) else "0")
         else:
             self._mapping_type.set("passthrough")
 
@@ -3160,7 +3211,7 @@ class App(tk.Tk):
         ttk.Label(r, text="Type:").pack(side=tk.LEFT)
         ttk.Combobox(
             r, textvariable=self._mapping_type,
-            values=["passthrough", "disable", "remap", "remap_hid", "macro", "tap_hold"],
+            values=["passthrough", "disable", "remap", "remap_hid", "macro", "tap_hold", "double_tap"],
             width=14, state="readonly",
         ).pack(side=tk.LEFT, padx=(6, 12))
 
@@ -3289,6 +3340,14 @@ class App(tk.Tk):
                 return hid_keycodes.DEFAULT_KEYMAP.get(to)
         elif et == "disable":
             return None
+        elif et == "double_tap":
+            # Show single-tap output for keyboard preview
+            single = entry.get("single", {})
+            if isinstance(single, dict):
+                mod = single.get("mod", 0)
+                kc = single.get("keycode", 0)
+                if isinstance(mod, int) and isinstance(kc, int):
+                    return (mod, kc)
         return None
 
     def _invalidate_caches(self) -> None:
@@ -3459,6 +3518,14 @@ class App(tk.Tk):
                             hkc = hold.get("keycode", 0) if isinstance(hold, dict) else 0
                             hmod = hold.get("mod", 0) if isinstance(hold, dict) else 0
                             mapping_label = f"T/H:{hid_keycodes.hid_to_name(hmod, hkc)}"
+                        elif et == "double_tap":
+                            s = entry.get("single", {})
+                            d = entry.get("double", {})
+                            skc = s.get("keycode", 0) if isinstance(s, dict) else 0
+                            smod = s.get("mod", 0) if isinstance(s, dict) else 0
+                            dkc = d.get("keycode", 0) if isinstance(d, dict) else 0
+                            dmod = d.get("mod", 0) if isinstance(d, dict) else 0
+                            mapping_label = f"DT:{hid_keycodes.hid_to_name(smod, skc)}/{hid_keycodes.hid_to_name(dmod, dkc)}"
                     else:
                         # Passthrough
                         dk = hid_keycodes.DEFAULT_KEYMAP.get(bound_key_id)
@@ -3605,6 +3672,8 @@ class App(tk.Tk):
                         tip_parts.append(f"Macro {entry.get('id', '?')}")
                     elif et == "tap_hold":
                         tip_parts.append("Tap/Hold")
+                    elif et == "double_tap":
+                        tip_parts.append("Double-Tap")
                 else:
                     dk = hid_keycodes.DEFAULT_KEYMAP.get(kid)
                     if dk:
@@ -5143,6 +5212,27 @@ class App(tk.Tk):
             "\u2022 Click the + button in the mask tab bar to add a new mask.",
             "\u2022 Base mask is always present and cannot be removed.",
             "",
+            "## Mapping types",
+            "\u2022 Passthrough \u2014 forward the button\u2019s default key.",
+            "\u2022 Remap / Remap HID \u2014 send a different keyboard key.",
+            "\u2022 Trick (macro) \u2014 play a sequence of keys with delays.",
+            "\u2022 Double-tap \u2014 single-tap sends one key, quick double-tap sends another.",
+            "  Set single keycode in \u2018Remap to\u2019 and double-tap keycode in \u2018Trick id\u2019.",
+            "",
+            "## Presets (Community profiles)",
+            "Five built-in presets are available in the Controller tab:",
+            "  FPS/Shooter, Platformer, RPG/Action, Minecraft, Racing.",
+            "Click a preset button to apply the mapping instantly.",
+            "",
+            "## Calibration wizard",
+            "Click the \U0001f527 Calibrate button in Controller Features to open a",
+            "3-step calibration wizard: center stick, sweep edges, save/clear.",
+            "The wizard also offers quick deadzone/curve adjustments.",
+            "",
+            "## Status bar indicators",
+            "\u2022 Signal bars \u2014 BT RSSI strength of the connected controller.",
+            "\u2022 \u23f1 RTT \u2014 round-trip latency to the device (auto-pinged every 10 s).",
+            "",
             "## Safety",
             "\u2022 Restore \u2014 The toolbar has a Restore\u2026 button that reverts to the last config that was",
             "  successfully written to the device. Useful if you make changes you want to undo.",
@@ -5203,7 +5293,8 @@ class App(tk.Tk):
             "  mapped_key (pressed, key_id), macro (id, state),",
             "  layer (name, active), bt_status (state, name, bda),",
             "  battery (device_id, level 0\u20134),",
-            "  controller_info (type, serial, colors, stick params, IMU cal)",
+            "  controller_info (type, serial, colors, stick params, IMU cal),",
+            "  rssi (device_id, rssi dBm)",
             "",
             "## ESP32 \u2194 ESP32-S3 (UART, 3.3V)",
             "Binary framing:  AA 55 <len> <payload...> <checksum>",
@@ -5214,6 +5305,7 @@ class App(tk.Tk):
             "  Status (0xFD): state + BDA + name",
             "  Battery (0xFA): device_id + level (0\u20134)",
             "  Controller info (0xF9): type, serial, colors, stick params, IMU cal",
+            "  RSSI (0xF8): device_id + rssi (dBm)",
             "  Debug (0xFF): raw HID report bytes",
             "  Control (0xFE): set target, discovery, stick curve, calibration, rumble, home LED",
             "  OTA (0xFB): firmware update frames",
@@ -6137,7 +6229,22 @@ class App(tk.Tk):
             bars = "\u2588" * self._battery_level + "\u2591" * (4 - self._battery_level)
             parts.append(f"\U0001f50b {bars}")
 
+        # BT signal strength
+        if self._rssi_dbm is not None:
+            rssi = self._rssi_dbm
+            if rssi >= -50:
+                signal = "\u2588\u2588\u2588\u2588"  # excellent
+            elif rssi >= -65:
+                signal = "\u2588\u2588\u2588\u2591"  # good
+            elif rssi >= -80:
+                signal = "\u2588\u2588\u2591\u2591"  # fair
+            else:
+                signal = "\u2588\u2591\u2591\u2591"  # weak
+            parts.append(f"\U0001f4f6 {signal} {rssi}dBm")
+
         # Latency indicator
+        if self._latency_ms is not None:
+            parts.append(f"\u23f1 {self._latency_ms:.0f}ms RTT")
         if self._perf_enabled and self._perf_redraw_times:
             avg_ms = sum(self._perf_redraw_times[-10:]) / min(len(self._perf_redraw_times), 10) * 1000
             parts.append(f"⏱ {avg_ms:.0f}ms")
@@ -6154,6 +6261,12 @@ class App(tk.Tk):
     def _mode_indicator_tick(self) -> None:
         self._update_mode_indicator()
         self.after(300, self._mode_indicator_tick)
+
+    def _latency_ping_tick(self) -> None:
+        """Periodically send a ping to measure round-trip latency."""
+        if self._ser and self._ser.is_open:
+            self._cmd_ping()
+        self.after(10000, self._latency_ping_tick)
 
     # ------------------------------------------------------------------
     # Adaptive UI — simple / advanced mode
@@ -6444,6 +6557,232 @@ class App(tk.Tk):
             pass
 
     # ------------------------------------------------------------------
+    # Calibration Wizard
+    # ------------------------------------------------------------------
+
+    def _open_calibration_wizard(self) -> None:
+        """Open the stick calibration wizard."""
+        if self._cal_window is not None:
+            try:
+                self._cal_window.lift()
+            except Exception:
+                self._cal_window = None
+            if self._cal_window is not None:
+                return
+
+        win = tk.Toplevel(self)
+        win.title("Stick Calibration Wizard")
+        win.geometry("520x440")
+        win.attributes("-topmost", True)
+        win.protocol("WM_DELETE_WINDOW", lambda: self._close_cal_wizard(win))
+        self._cal_window = win
+
+        colors = self._colors
+        win.configure(bg=colors["bg"])
+
+        self._cal_step = 0
+
+        tk.Label(
+            win, text="\U0001f3af Stick Calibration",
+            bg=colors["bg"], fg=colors["text"],
+            font=(self._typo.get("font_family", "Segoe UI"), 14, "bold"),
+        ).pack(pady=(16, 4))
+
+        # Current stick info display
+        info_frame = tk.Frame(win, bg=colors["bg"])
+        info_frame.pack(fill=tk.X, padx=20, pady=(4, 8))
+
+        tk.Label(
+            info_frame, text="Current stick parameters from controller:",
+            bg=colors["bg"], fg=colors["muted"],
+            font=(self._typo.get("font_family", "Segoe UI"), 9),
+        ).pack(anchor="w")
+
+        params_frame = tk.Frame(info_frame, bg=colors["bg"])
+        params_frame.pack(fill=tk.X, pady=(2, 0))
+        tk.Label(params_frame, text=f"Deadzone: ", bg=colors["bg"], fg=colors["text"]).pack(side=tk.LEFT)
+        self._cal_dz_label = tk.Label(params_frame, textvariable=self._ctrl_info_deadzone, bg=colors["bg"], fg=colors["accent2"])
+        self._cal_dz_label.pack(side=tk.LEFT, padx=(0, 16))
+        tk.Label(params_frame, text=f"Range: ", bg=colors["bg"], fg=colors["text"]).pack(side=tk.LEFT)
+        self._cal_range_label = tk.Label(params_frame, textvariable=self._ctrl_info_range, bg=colors["bg"], fg=colors["accent2"])
+        self._cal_range_label.pack(side=tk.LEFT)
+
+        # Step progress
+        self._cal_progress_var = tk.StringVar(value="Step 1 of 3")
+        tk.Label(
+            win, textvariable=self._cal_progress_var,
+            bg=colors["bg"], fg=colors["muted"],
+            font=(self._typo.get("font_family", "Segoe UI"), 9),
+        ).pack()
+
+        # Prompt
+        self._cal_prompt_var = tk.StringVar(value="")
+        tk.Label(
+            win, textvariable=self._cal_prompt_var,
+            bg=colors["bg"], fg=colors["text"],
+            font=(self._typo.get("font_family", "Segoe UI"), 12),
+            wraplength=460,
+        ).pack(pady=(16, 6))
+
+        # Details / instructions
+        self._cal_detail_var = tk.StringVar(value="")
+        tk.Label(
+            win, textvariable=self._cal_detail_var,
+            bg=colors["bg"], fg=colors["muted"],
+            font=(self._typo.get("font_family", "Segoe UI"), 9),
+            wraplength=460,
+            justify="left",
+        ).pack(pady=(0, 10))
+
+        # Status
+        self._cal_status_var = tk.StringVar(value="")
+        tk.Label(
+            win, textvariable=self._cal_status_var,
+            bg=colors["bg"], fg=colors["accent2"],
+            font=(self._typo.get("font_family", "Segoe UI"), 10),
+        ).pack(pady=(6, 0))
+
+        # Deadzone / curve quick-adjust section
+        adj_frame = ttk.LabelFrame(win, text="Quick adjust (applied to profile)")
+        adj_frame.pack(fill=tk.X, padx=20, pady=(10, 6))
+        adj_row = ttk.Frame(adj_frame)
+        adj_row.pack(fill=tk.X, padx=8, pady=4)
+
+        ttk.Label(adj_row, text="Deadzone:").pack(side=tk.LEFT)
+        self._cal_dz_scale = tk.Scale(
+            adj_row, from_=0.0, to=0.5, resolution=0.01, orient="horizontal",
+            variable=self._stick_deadzone, length=100,
+        )
+        self._cal_dz_scale.pack(side=tk.LEFT, padx=(4, 12))
+
+        ttk.Label(adj_row, text="Curve:").pack(side=tk.LEFT)
+        self._cal_curve_combo = ttk.Combobox(
+            adj_row, textvariable=self._stick_curve,
+            values=["linear", "exponential", "soft", "hard"], width=10, state="readonly",
+        )
+        self._cal_curve_combo.pack(side=tk.LEFT, padx=(4, 12))
+
+        ttk.Label(adj_row, text="Exp:").pack(side=tk.LEFT)
+        self._cal_exp_scale = tk.Scale(
+            adj_row, from_=0.5, to=3.0, resolution=0.1, orient="horizontal",
+            variable=self._stick_curve_exp, length=80,
+        )
+        self._cal_exp_scale.pack(side=tk.LEFT, padx=(4, 0))
+
+        # Buttons
+        btn_frame = tk.Frame(win, bg=colors["bg"])
+        btn_frame.pack(side=tk.BOTTOM, pady=(0, 16))
+        self._cal_next_btn = ttk.Button(btn_frame, text="Next \u25B6", command=self._cal_next_step)
+        self._cal_next_btn.pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(btn_frame, text="Cancel", command=lambda: self._close_cal_wizard(win)).pack(side=tk.LEFT)
+
+        self._cal_show_step()
+
+    def _cal_show_step(self) -> None:
+        """Update wizard UI for the current calibration step."""
+        steps = [
+            (
+                "Center your stick",
+                "Release the analog stick and let it rest at the center position. "
+                "The firmware auto-calibration captures the center point.",
+                "Let the stick rest at center for a few seconds, then click Next.",
+            ),
+            (
+                "Move stick to all edges",
+                "Slowly rotate the stick around the full edge of its range — "
+                "a full 360\u00B0 circle. This teaches the firmware the stick's full range of motion.",
+                "Move the stick slowly in all directions, then click Next.",
+            ),
+            (
+                "Save or clear calibration",
+                "Choose an action:\n"
+                "\u2022 Save — persist the current auto-calibration to NVS (survives reboot)\n"
+                "\u2022 Clear — erase saved calibration (return to factory defaults)\n"
+                "\u2022 Skip — leave calibration as-is",
+                "Use the buttons below to save or clear, or click Done to finish.",
+            ),
+        ]
+
+        if self._cal_step >= len(steps):
+            return
+
+        title, prompt, detail = steps[self._cal_step]
+        self._cal_progress_var.set(f"Step {self._cal_step + 1} of {len(steps)}")
+        self._cal_prompt_var.set(f"{title}")
+        self._cal_detail_var.set(detail)
+
+        if self._cal_step < 2:
+            self._cal_status_var.set("Follow the instructions, then click Next.")
+            self._cal_next_btn.configure(text="Next \u25B6")
+        else:
+            self._cal_status_var.set("")
+            self._cal_next_btn.configure(text="Done \u2714")
+            # Add save/clear buttons
+            self._cal_add_action_buttons()
+
+    def _cal_add_action_buttons(self) -> None:
+        """Add Save / Clear calibration buttons for the final step."""
+        if self._cal_window is None:
+            return
+        colors = self._colors
+
+        action_frame = tk.Frame(self._cal_window, bg=colors["bg"])
+        action_frame.pack(pady=(4, 0))
+        self._cal_action_frame = action_frame
+
+        ttk.Button(
+            action_frame, text="\U0001f4be Save Calibration",
+            command=self._cal_cmd_save, width=18,
+        ).pack(side=tk.LEFT, padx=(0, 8))
+
+        ttk.Button(
+            action_frame, text="\U0001f5d1 Clear Calibration",
+            command=self._cal_cmd_clear, width=18,
+        ).pack(side=tk.LEFT)
+
+    def _cal_cmd_save(self) -> None:
+        """Send calibration save command to firmware."""
+        self._send_cmd({"cmd": "calibration", "action": "save"})
+        if self._cal_window:
+            self._cal_status_var.set("\u2705 Calibration saved to NVS!")
+        self._log_line("[host] Calibration saved via wizard")
+
+    def _cal_cmd_clear(self) -> None:
+        """Send calibration clear command to firmware."""
+        self._send_cmd({"cmd": "calibration", "action": "clear"})
+        if self._cal_window:
+            self._cal_status_var.set("\u2705 Calibration cleared (factory defaults).")
+        self._log_line("[host] Calibration cleared via wizard")
+
+    def _cal_next_step(self) -> None:
+        """Advance to the next calibration step or finish."""
+        self._cal_step += 1
+        if self._cal_step >= 3:
+            self._cal_finish()
+            return
+        # Clean up action buttons if present from previous step
+        if hasattr(self, "_cal_action_frame"):
+            try:
+                self._cal_action_frame.destroy()
+            except Exception:
+                pass
+        self._cal_show_step()
+
+    def _cal_finish(self) -> None:
+        """Close the calibration wizard."""
+        if self._cal_window is None:
+            return
+        self._log_line("[host] Calibration wizard completed")
+        self._close_cal_wizard(self._cal_window)
+
+    def _close_cal_wizard(self, win: tk.Toplevel) -> None:
+        self._cal_window = None
+        try:
+            win.destroy()
+        except Exception:
+            pass
+
+    # ------------------------------------------------------------------
     # Intent-Based Mapping
     # ------------------------------------------------------------------
 
@@ -6644,6 +6983,19 @@ class App(tk.Tk):
                     hmod = hold.get("mod", 0)
                     lines.append(f"   Output (hold >={hold_ms}ms): {hid_keycodes.hid_to_name(hmod, hkc)}")
                 lines.append("   Status: OK — dual-action mapping")
+            elif et == "double_tap":
+                single = entry.get("single", {})
+                double = entry.get("double", {})
+                timeout = entry.get("timeout_ms", 300)
+                if isinstance(single, dict):
+                    skc = single.get("keycode", 0)
+                    smod = single.get("mod", 0)
+                    lines.append(f"3. Output (single tap): {hid_keycodes.hid_to_name(smod, skc)}")
+                if isinstance(double, dict):
+                    dkc = double.get("keycode", 0)
+                    dmod = double.get("mod", 0)
+                    lines.append(f"   Output (double tap <{timeout}ms): {hid_keycodes.hid_to_name(dmod, dkc)}")
+                lines.append("   Status: OK — double-tap mapping")
 
         # Check for conflicts
         conflicts = self._detect_conflicts()
@@ -7131,6 +7483,7 @@ class App(tk.Tk):
             messagebox.showerror("Save failed", str(e))
 
     def _cmd_ping(self) -> None:
+        self._ping_sent_time = time.monotonic()
         self._send_cmd({"cmd": "ping"})
 
     def _cmd_bt_connect(self) -> None:
@@ -7229,6 +7582,11 @@ class App(tk.Tk):
 
         # Handle command responses (rsp)
         rsp = obj.get("rsp")
+        if rsp == "pong":
+            if self._ping_sent_time is not None:
+                rtt = (time.monotonic() - self._ping_sent_time) * 1000
+                self._latency_ms = rtt
+                self._ping_sent_time = None
         if rsp == "read_profile":
             slot = obj.get("slot")
             profile = obj.get("profile")
@@ -7333,6 +7691,7 @@ class App(tk.Tk):
             # Reset battery and controller info on disconnect.
             if state == "disconnected":
                 self._battery_level = None
+                self._rssi_dbm = None
                 self._ctrl_info_type.set("\u2014")
                 self._ctrl_info_serial.set("\u2014")
                 self._ctrl_info_deadzone.set("\u2014")
@@ -7427,6 +7786,13 @@ class App(tk.Tk):
                 pass
 
             self._log_line(f"[device] Controller info: {ctrl_type} serial={serial} body={body_color} btn={button_color}")
+
+        if evt == "rssi":
+            try:
+                rssi = int(obj.get("rssi", 0))
+                self._rssi_dbm = rssi
+            except (ValueError, TypeError):
+                pass
 
     def _current_profile(self) -> dict:
         return self._validate_profile()
@@ -7699,6 +8065,29 @@ class App(tk.Tk):
                 "tap": {"type": "passthrough"},
                 "hold": {"type": "remap_hid", "mod": 0, "keycode": kc},
                 "hold_ms": hold_ms,
+            }
+        elif mtype == "double_tap":
+            # Single-tap keycode in "Remap to", double-tap keycode in "Trick id"
+            rto_s = self._mapping_remap_to.get().strip()
+            rto_d = self._mapping_macro_id.get().strip()
+            try:
+                kc_single = int(rto_s, 0)
+            except ValueError:
+                messagebox.showerror("Bad keycode", "Remap-to (single-tap keycode) must be a HID keycode")
+                return
+            try:
+                kc_double = int(rto_d, 0)
+            except ValueError:
+                messagebox.showerror("Bad keycode", "Trick id (double-tap keycode) must be a HID keycode")
+                return
+            if kc_single < 0 or kc_single > 255 or kc_double < 0 or kc_double > 255:
+                messagebox.showerror("Bad keycode", "HID keycodes must be 0..255")
+                return
+            mappings[key] = {
+                "type": "double_tap",
+                "single": {"mod": 0, "keycode": kc_single},
+                "double": {"mod": 0, "keycode": kc_double},
+                "timeout_ms": 300,
             }
 
         self._set_profile_obj(prof, undo_label="apply mapping")

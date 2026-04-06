@@ -120,6 +120,13 @@ void app_main(void) {
                 bridge_serial_emit_controller_info(f.payload, f.length);
                 continue;
             }
+
+            if (f.type == UART_FRAME_RSSI && f.length >= 3) {
+                uint8_t device_id = f.payload[1];
+                int8_t rssi = (int8_t)f.payload[2];
+                bridge_serial_emit_rssi(device_id, rssi);
+                continue;
+            }
         }
 
         // esp_tinyusb runs tud_task() in its own internal task;

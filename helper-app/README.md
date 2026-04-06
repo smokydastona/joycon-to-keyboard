@@ -52,10 +52,12 @@ Current UI tabs:
   - **Rainbow colour picker**: 🎨 dropdown in the toolbar — choose from red, orange, yellow, green, blue, indigo, or violet for hotspot highlights
   - **Mask system**: select Base or Mask 1–4 to edit overlay heist plans; masks are activated by holding/toggling a controller button
   - **Tap-hold heist plan**: a single button can produce different actions for quick tap vs long hold
+  - **Double-tap heist plan**: single-tap sends one key, quick double-tap sends another (configurable timeout)
   - **Chording**: define multi-button combos that trigger a single action when pressed simultaneously
   - Case mode, clear steal, and reset-to-passthrough
   - **Undo / Redo** (Ctrl+Z / Ctrl+Y): up to 50 levels of loadout change history
   - **Guided Setup wizard**: step-by-step walkthrough that auto-steals WASD/Space/Shift/Ctrl by pressing controller buttons
+  - **Calibration wizard**: 3-step guided stick calibration (center, sweep edges, save/clear) with quick deadzone/curve adjustment
   - **Intent-based heist plan**: right-click → "What should this button do?" with 14 common game actions
   - **Quick Job**: auto-applies sensible WASD heist plans when a controller connects and loadout is empty
   - **Smart Search**: filter hotspots by name, output, or heist plan type with highlighted matches on the diagram
@@ -73,6 +75,8 @@ Current UI tabs:
   - **Adaptive UI**: toggle between Simple and Advanced modes; Simple hides masks, chords, tricks tabs
   - **Mode indicator**: always-visible status bar showing slot, mask, mode, practice run, and undo depth
 - **Input Test**: live event log showing controller button presses/releases with timestamps, a summary of currently active keys, a **visual event timeline** showing the last 5 seconds of input events as colored marks, and an optional **latency profiling** display (toggle checkbox) showing real-time redraw and input processing stats
+- **Status bar diagnostics**: BT signal strength (RSSI with signal bars), round-trip latency (auto-pinged every 10 s), battery level
+- **Community presets**: 5 built-in profiles (FPS/Shooter, Platformer, RPG/Action, Minecraft, Racing) for one-click setup
 - **Mouse** (M913 Impact Elite): configure Redragon M913 mice over USB HID — the tab shows a **dominant M913 device canvas** (fills available space for easy button selection) with controls in **popup panels**: button remapping (16 buttons), DPI (5 slots, 100–16000), LED modes, polling rate — each opened via toolbar buttons. Supports **multiple mice** simultaneously with independent loadouts. **Sister loadouts** link M913 configs to Joy-Con slots so mouse and controller settings travel together. All settings are written to the mouse's onboard memory (anti-cheat safe). **Layout mode** selector lets users switch between "Stock M913" (Side 1–12) and "IncediusMod" (Thumb 1–6 / Finger 1–6) button labels for the [Incedius M913 physical mod](https://www.printables.com/model/1191307-red-dragon-m913-mod). Because each IncediusMod rewiring is unique, the **"Edit Heist Plan…"** button lets users reassign which M913 side button corresponds to each Thumb/Finger position (saved per-loadout, with duplicate detection). The tab displays a sketchbook-ink M913 overlay image that switches between connected and disconnected states (matching the Joy-Con overlay style). Requires `hidapi` (`pip install hidapi`).
 - **Razer** (Basilisk X HyperSpeed): configure Razer mice over USB HID Feature Reports — **dominant device canvas** with compact toolbar and **popup panels** for DPI stages (5 levels, X/Y independent), button remapping, polling rate, idle timeout, and loadouts.
 - **Help**: comprehensive setup & usage guide with 14 collapsible sections — project overview, hardware requirements, wiring diagrams, pinout image (scrollable `pinouts.png`), firmware installation walkthrough, first end-to-end test procedure, app usage guide (all tabs), default key mapping reference, serial protocol summary, mouse configuration guide, OTA firmware updates, troubleshooting, app install/update instructions, and a quick reference card. Includes a search bar that filters sections by keyword.

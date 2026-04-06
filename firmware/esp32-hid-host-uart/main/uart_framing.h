@@ -68,3 +68,10 @@ void bridge_send_controller_info(uint8_t device_id, uint8_t controller_type,
                                  const joycon_colors_t *colors,
                                  const joycon_stick_params_t *stick_params,
                                  const joycon_imu_cal_t *imu_cal);
+
+// Sends a BT RSSI (signal strength) frame to the ESP32-S3.
+// Payload format:
+//   [0] = 0xF8 (RSSI marker)
+//   [1] = device_id (0=left, 1=right)
+//   [2] = rssi (int8_t, dBm, signed)
+void bridge_send_rssi(uint8_t device_id, int8_t rssi);

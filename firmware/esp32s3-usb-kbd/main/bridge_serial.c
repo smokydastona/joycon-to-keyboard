@@ -944,6 +944,20 @@ void bridge_serial_emit_controller_info(const uint8_t *payload, uint8_t length) 
     cJSON_Delete(evt);
 }
 
+void bridge_serial_emit_rssi(uint8_t device_id, int8_t rssi) {
+    if (!tud_cdc_connected() || !s_host_open) return;
+
+    cJSON *evt = cJSON_CreateObject();
+    if (!evt) return;
+
+    cJSON_AddStringToObject(evt, "evt", "rssi");
+    cJSON_AddNumberToObject(evt, "device_id", device_id);
+    cJSON_AddNumberToObject(evt, "rssi", rssi);
+
+    cdc_write_json(evt);
+    cJSON_Delete(evt);
+}
+
 // Optional callback fired when the host opens/closes the serial port.
 void tud_cdc_line_state_cb(uint8_t itf, bool dtr, bool rts) {
     (void)itf;

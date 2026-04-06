@@ -99,6 +99,7 @@ Notes:
 | `macro` | A macro is triggered on press. |
 | `remap_hid` | **Bypasses keymap.c entirely.** Sends an arbitrary HID modifier+keycode. `mod` is a bitmask (0x01=LCtrl, 0x02=LShift, 0x04=LAlt, 0x08=LGUI). `keycode` is a USB HID usage code (e.g. 0x04=A, 0x1A=W, 0x2C=Space). |
 | `tap_hold` | Differentiates tap (quick press) from hold (long press). Contains `tap` and `hold` sub-mappings plus a `hold_ms` threshold. See below. |
+| `double_tap` | Single-tap sends one key, quick double-tap sends another. Contains `single_mod`/`single_keycode`, `double_mod`/`double_keycode`, and `timeout_ms`. See below. |
 
 ### Tap-hold mapping
 
@@ -118,6 +119,31 @@ The `tap_hold` type lets a single button produce different actions for a quick t
 | `tap` | object | Mapping applied on quick press (< hold_ms). Any mapping type except `tap_hold`. |
 | `hold` | object | Mapping applied on long press (>= hold_ms). Any mapping type except `tap_hold`. |
 | `hold_ms` | int | Threshold in milliseconds. Default 300. |
+
+### Double-tap mapping
+
+The `double_tap` type sends one key on a single tap and a different key when double-tapped quickly:
+
+```json
+{
+	"type": "double_tap",
+	"single_mod": 0,
+	"single_keycode": 4,
+	"double_mod": 2,
+	"double_keycode": 22,
+	"timeout_ms": 300
+}
+```
+
+| field | type | description |
+|-------|------|-------------|
+| `single_mod` | int | HID modifier bitmask for single-tap action. |
+| `single_keycode` | int | HID keycode for single-tap action. |
+| `double_mod` | int | HID modifier bitmask for double-tap action. |
+| `double_keycode` | int | HID keycode for double-tap action. |
+| `timeout_ms` | int | Maximum gap between taps to register as double-tap. Default 300. |
+
+State machine: first press starts tracking → first release arms the timer → second press within `timeout_ms` fires the double-tap action → if the timer expires without a second press, the single-tap action fires.
 
 ### Chords (optional)
 
@@ -436,6 +462,17 @@ Controller info events (emitted once per controller after the setup FSM complete
 - `stick_deadzone`, `stick_range_ratio`: raw SPI stick parameters (present when available)
 - `imu_cal`: accelerometer/gyroscope calibration data (present when available)
   - `acc_origin`, `acc_sens`, `gyro_origin`, `gyro_sens`: arrays of 3 int16 values each
+
+### RSSI events
+
+Bluetooth signal strength, polled every 5 seconds per connected device:
+
+```json
+{"evt":"rssi","device_id":0,"rssi":-55}
+```
+
+- `device_id`: `0` = left, `1` = right
+- `rssi`: RSSI in dBm (int8, typically -30 to -100; higher = stronger)
 
 ## Share codes (helper app only)
 

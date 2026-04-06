@@ -203,3 +203,11 @@ void bridge_send_controller_info(uint8_t device_id, uint8_t controller_type,
 
     bridge_send_frame(payload, pos);
 }
+
+void bridge_send_rssi(uint8_t device_id, int8_t rssi) {
+    uint8_t payload[3];
+    payload[0] = 0xF8;  // RSSI marker
+    payload[1] = device_id;
+    payload[2] = (uint8_t)rssi;  // signed, reinterpret on receiver
+    bridge_send_frame(payload, (uint8_t)sizeof(payload));
+}

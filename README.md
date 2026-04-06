@@ -106,5 +106,5 @@ cosign verify-blob --signature .\BindBandit.exe.sig --certificate .\BindBandit.e
 4) Edit key mapping in `docs/keymap.md` (then update the ESP32 mapping table)
 5) Use the helper app's **click-to-bind** feature to remap any controller button to any keyboard key — single click a hotspot and press a key (see `docs/keymap.md` / `remap_hid`)
 6) Define up to 4 **layers** for alternate mappings activated by a controller button (see `helper-app/protocol.md`)
-7) Use **Guided Setup** to walk through binding common game actions step-by-step, or load a community preset (FPS / Platformer / RPG)
+7) Use **Guided Setup** to walk through binding common game actions step-by-step, or load a community preset (FPS / Platformer / RPG / Minecraft / Racing)
 8) **Undo/Redo** (Ctrl+Z/Y) any profile change; use **Sandbox mode** to experiment safely

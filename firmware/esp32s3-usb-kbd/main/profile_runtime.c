@@ -7,6 +7,8 @@
 #include "esp_err.h"
 #include "esp_log.h"
 
+#include "esp_timer.h"
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
@@ -62,6 +64,7 @@ typedef enum {
     MAP_REMAP = 2,
     MAP_MACRO = 3,
     MAP_REMAP_HID = 4,
+    MAP_DOUBLE_TAP = 5,
 } map_mode_t;
 
 typedef struct {
@@ -70,6 +73,12 @@ typedef struct {
     int8_t macro_index;  // -1 when none
     uint8_t hid_mod;     // for MAP_REMAP_HID
     uint8_t hid_keycode; // for MAP_REMAP_HID
+    // Double-tap fields (MAP_DOUBLE_TAP)
+    uint8_t dt_single_mod;
+    uint8_t dt_single_keycode;
+    uint8_t dt_double_mod;
+    uint8_t dt_double_keycode;
+    uint16_t dt_timeout_ms;    // default 300
 } map_entry_t;
 
 // --- Layer system ---
@@ -111,7 +120,78 @@ typedef struct {
     int8_t macro_index;
 } macro_req_t;
 
+// --- Double-tap state machine ---
+
+#define MAX_DOUBLE_TAP_KEYS 8
+
+typedef enum {
+    DT_IDLE = 0,
+    DT_FIRST_DOWN,   // first keydown seen, awaiting keyup
+    DT_ARMED,        // first tap complete, timer running
+    DT_SECOND_DOWN,  // second keydown (double-tap confirmed)
+} dt_state_t;
+
+typedef struct {
+    uint8_t key_id;
+    dt_state_t state;
+    esp_timer_handle_t timer;
+    // Cached single-tap values for the timeout callback
+    uint8_t armed_single_mod;
+    uint8_t armed_single_keycode;
+} dt_tracker_t;
+
+static dt_tracker_t s_dt_trackers[MAX_DOUBLE_TAP_KEYS];
+static size_t s_dt_count = 0;
+
+static dt_tracker_t *find_dt_tracker(uint8_t key_id) {
+    for (size_t i = 0; i < s_dt_count; i++) {
+        if (s_dt_trackers[i].key_id == key_id) return &s_dt_trackers[i];
+    }
+    return NULL;
+}
+
+static void dt_timeout_cb(void *arg) {
+    dt_tracker_t *dt = (dt_tracker_t *)arg;
+    if (dt->state != DT_ARMED) return;
+    // Timeout expired: fire single-tap press then immediate release.
+    usb_kbd_set_key(dt->armed_single_mod, dt->armed_single_keycode, true);
+    usb_kbd_set_key(dt->armed_single_mod, dt->armed_single_keycode, false);
+    dt->state = DT_IDLE;
+}
+
+static void register_dt_tracker(uint8_t key_id) {
+    if (find_dt_tracker(key_id)) return;
+    if (s_dt_count >= MAX_DOUBLE_TAP_KEYS) {
+        ESP_LOGW(TAG, "Max double-tap keys reached (%d)", MAX_DOUBLE_TAP_KEYS);
+        return;
+    }
+    dt_tracker_t *dt = &s_dt_trackers[s_dt_count];
+    memset(dt, 0, sizeof(*dt));
+    dt->key_id = key_id;
+    dt->state = DT_IDLE;
+    esp_timer_create_args_t args = {
+        .callback = dt_timeout_cb,
+        .arg = dt,
+        .name = "dt",
+    };
+    if (esp_timer_create(&args, &dt->timer) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create double-tap timer for key %u", key_id);
+        return;
+    }
+    s_dt_count++;
+}
+
 static void free_profile(void) {
+    // Clean up double-tap timers.
+    for (size_t i = 0; i < s_dt_count; i++) {
+        if (s_dt_trackers[i].timer) {
+            esp_timer_stop(s_dt_trackers[i].timer);
+            esp_timer_delete(s_dt_trackers[i].timer);
+        }
+    }
+    memset(s_dt_trackers, 0, sizeof(s_dt_trackers));
+    s_dt_count = 0;
+
     for (size_t i = 0; i < s_macro_count; i++) {
         free(s_macros[i].steps);
         s_macros[i].steps = NULL;
@@ -335,6 +415,30 @@ static void parse_mappings(cJSON *root) {
             }
             continue;
         }
+
+        if (strcmp(type->valuestring, "double_tap") == 0) {
+            cJSON *single = cJSON_GetObjectItemCaseSensitive(entry, "single");
+            cJSON *dbl = cJSON_GetObjectItemCaseSensitive(entry, "double");
+            cJSON *timeout = cJSON_GetObjectItemCaseSensitive(entry, "timeout_ms");
+            if (!cJSON_IsObject(single) || !cJSON_IsObject(dbl)) continue;
+            cJSON *s_mod = cJSON_GetObjectItemCaseSensitive(single, "mod");
+            cJSON *s_kc = cJSON_GetObjectItemCaseSensitive(single, "keycode");
+            cJSON *d_mod = cJSON_GetObjectItemCaseSensitive(dbl, "mod");
+            cJSON *d_kc = cJSON_GetObjectItemCaseSensitive(dbl, "keycode");
+            if (!cJSON_IsNumber(s_mod) || !cJSON_IsNumber(s_kc)) continue;
+            if (!cJSON_IsNumber(d_mod) || !cJSON_IsNumber(d_kc)) continue;
+            s_map[key_id].mode = MAP_DOUBLE_TAP;
+            s_map[key_id].dt_single_mod = (uint8_t)s_mod->valueint;
+            s_map[key_id].dt_single_keycode = (uint8_t)s_kc->valueint;
+            s_map[key_id].dt_double_mod = (uint8_t)d_mod->valueint;
+            s_map[key_id].dt_double_keycode = (uint8_t)d_kc->valueint;
+            s_map[key_id].dt_timeout_ms = 300;
+            if (cJSON_IsNumber(timeout) && timeout->valueint >= 100 && timeout->valueint <= 1000) {
+                s_map[key_id].dt_timeout_ms = (uint16_t)timeout->valueint;
+            }
+            register_dt_tracker((uint8_t)key_id);
+            continue;
+        }
     }
 }
 
@@ -380,6 +484,27 @@ static void parse_layer_mappings(cJSON *mappings_obj, layer_t *layer) {
             if (idx < 0) continue;
             ov->entry.mode = MAP_MACRO;
             ov->entry.macro_index = idx;
+        } else if (strcmp(type->valuestring, "double_tap") == 0) {
+            cJSON *single = cJSON_GetObjectItemCaseSensitive(entry, "single");
+            cJSON *dbl = cJSON_GetObjectItemCaseSensitive(entry, "double");
+            cJSON *timeout = cJSON_GetObjectItemCaseSensitive(entry, "timeout_ms");
+            if (!cJSON_IsObject(single) || !cJSON_IsObject(dbl)) continue;
+            cJSON *s_mod = cJSON_GetObjectItemCaseSensitive(single, "mod");
+            cJSON *s_kc = cJSON_GetObjectItemCaseSensitive(single, "keycode");
+            cJSON *d_mod = cJSON_GetObjectItemCaseSensitive(dbl, "mod");
+            cJSON *d_kc = cJSON_GetObjectItemCaseSensitive(dbl, "keycode");
+            if (!cJSON_IsNumber(s_mod) || !cJSON_IsNumber(s_kc)) continue;
+            if (!cJSON_IsNumber(d_mod) || !cJSON_IsNumber(d_kc)) continue;
+            ov->entry.mode = MAP_DOUBLE_TAP;
+            ov->entry.dt_single_mod = (uint8_t)s_mod->valueint;
+            ov->entry.dt_single_keycode = (uint8_t)s_kc->valueint;
+            ov->entry.dt_double_mod = (uint8_t)d_mod->valueint;
+            ov->entry.dt_double_keycode = (uint8_t)d_kc->valueint;
+            ov->entry.dt_timeout_ms = 300;
+            if (cJSON_IsNumber(timeout) && timeout->valueint >= 100 && timeout->valueint <= 1000) {
+                ov->entry.dt_timeout_ms = (uint16_t)timeout->valueint;
+            }
+            register_dt_tracker((uint8_t)key_id);
         } else {
             continue;
         }
@@ -645,6 +770,45 @@ static void dispatch_mapping(map_entry_t *m, bool pressed, uint8_t key_id) {
                 (void)xQueueSend(s_macro_q, &req, 0);
             }
             return;
+
+        case MAP_DOUBLE_TAP: {
+            dt_tracker_t *dt = find_dt_tracker(key_id);
+            if (!dt) {
+                // Fallback: fire single action directly.
+                usb_kbd_set_key(m->dt_single_mod, m->dt_single_keycode, pressed);
+                return;
+            }
+            switch (dt->state) {
+                case DT_IDLE:
+                    if (pressed) dt->state = DT_FIRST_DOWN;
+                    break;
+                case DT_FIRST_DOWN:
+                    if (!pressed) {
+                        dt->state = DT_ARMED;
+                        dt->armed_single_mod = m->dt_single_mod;
+                        dt->armed_single_keycode = m->dt_single_keycode;
+                        esp_timer_start_once(dt->timer,
+                                             (uint64_t)m->dt_timeout_ms * 1000);
+                    }
+                    break;
+                case DT_ARMED:
+                    if (pressed) {
+                        esp_timer_stop(dt->timer);
+                        dt->state = DT_SECOND_DOWN;
+                        usb_kbd_set_key(m->dt_double_mod,
+                                        m->dt_double_keycode, true);
+                    }
+                    break;
+                case DT_SECOND_DOWN:
+                    if (!pressed) {
+                        usb_kbd_set_key(m->dt_double_mod,
+                                        m->dt_double_keycode, false);
+                        dt->state = DT_IDLE;
+                    }
+                    break;
+            }
+            return;
+        }
 
         case MAP_PASSTHROUGH:
         default:

@@ -174,6 +174,16 @@ Then optional tagged sections (presence gated by `has_*` flag byte):
 
 The ESP32-S3 forwards this to the helper app as an NDJSON `controller_info` event over CDC.
 
+## RSSI frames (ESP32 → ESP32-S3)
+
+The ESP32 periodically polls Bluetooth RSSI and sends signal strength using marker `0xF8`:
+
+- `payload[0]`: `0xF8` (RSSI marker)
+- `payload[1]`: `device_id` (0 or 1)
+- `payload[2]`: `rssi` (int8, dBm, transmitted as uint8)
+
+The poll timer fires every 5 seconds for each connected device. The ESP32-S3 forwards this to the helper app as an NDJSON `rssi` event: `{"evt":"rssi","device_id":N,"rssi":N}`.
+
 ## Why this design
 
 - Keeps ESP32 code simple: it only needs to emit key_id up/down.

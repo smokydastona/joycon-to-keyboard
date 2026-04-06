@@ -77,6 +77,7 @@ Set in `main/config.h`.
 - **HD Rumble**: accepts rumble commands from the helper app (frequency 41–1253 Hz, amplitude 0–100%). Full log2-based frequency/amplitude encoding per Nintendo specification.
 - **Home LED control**: accepts brightness commands (0–15) for the Home button LED (right Joy-Con / Pro Controller only).
 - **Player LED control**: sets Player 1 LEDs on the Joy-Con after setup completes.
+- **BT RSSI polling**: periodically reads Bluetooth RSSI (every 5 s) for connected devices and forwards to the ESP32-S3 via UART marker `0xF8`.
 - **Nintendo 0x30 button + stick parsing** (when enabled via menuconfig): fully parses all Joy-Con buttons (A/B/X/Y, L/R, ZL/ZR, Plus/Minus, Home, Capture, stick clicks) and both sticks.
 - **Stick auto-calibration**: per-axis min/center/max tracking adapts to individual controller characteristics. SPI flash calibration is preferred when available.
 - **25 key_ids**: all Joy-Con inputs (left stick WASD, face buttons, shoulders, triggers, system buttons, stick clicks, right stick directions) are mapped to unique key_ids and emitted over UART.

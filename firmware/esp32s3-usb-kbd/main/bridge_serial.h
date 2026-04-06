@@ -32,3 +32,6 @@ void bridge_serial_emit_battery(uint8_t device_id, uint8_t level);
 // Emit a controller info event (serial, colors, stick params, IMU cal).
 // payload/length: raw UART frame payload starting with 0xF9 marker.
 void bridge_serial_emit_controller_info(const uint8_t *payload, uint8_t length);
+
+// Emit a BT RSSI (signal strength) event as NDJSON.
+void bridge_serial_emit_rssi(uint8_t device_id, int8_t rssi);
