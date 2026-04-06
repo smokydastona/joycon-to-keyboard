@@ -48,7 +48,8 @@ Current UI tabs:
   - **Right-click context menu**: Learn, Bind, Reset to passthrough, Clear binding, or Disable on any hotspot
   - **Live input visualization**: hotspots light up green and pulse when the corresponding controller button is physically pressed
   - **Conflict detection + auto-fix**: hotspots that produce the same output key are highlighted red; a one-click auto-fix button resolves duplicates
-  - **Color-coded hotspots**: green = active, red = conflict, blue = selected, yellow = has custom mapping
+  - **Color-coded hotspots**: green = active, red = conflict, blue = selected; custom mappings use the user's chosen rainbow colour (default violet)
+  - **Rainbow colour picker**: 🎨 dropdown in the toolbar — choose from red, orange, yellow, green, blue, indigo, or violet for hotspot highlights
   - **Layer system**: select Base or Layer 1–4 to edit overlay mappings; layers are activated by holding/toggling a controller button
   - **Tap-hold mapping**: a single button can produce different actions for quick tap vs long hold
   - **Chording**: define multi-button combos that trigger a single action when pressed simultaneously

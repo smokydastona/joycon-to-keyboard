@@ -2,30 +2,25 @@
 
 Each overlay is a transparent PNG (same size as the device image) with a
 hand-drawn pencil-sketch highlight circle at the button's hotspot position.
-Two variants are generated per button — one for each UI theme:
+Seven rainbow colour variants are generated per button so the user can choose
+their preferred highlight colour at runtime:
 
-  default/ — dark pencil strokes on a warm-paper background
-  dark/    — light chalk strokes on a dark background
+  red/ orange/ yellow/ green/ blue/ indigo/ violet/
 
-Devices and their highlight colours:
-
-  - joycon   — red   (#e04040)   — Joy-Con controller buttons
-  - m913     — gold  (#d4a030)   — Stock Redragon M913 mouse
-  - incedius — green (#40d860)   — IncediusMod M913 variant
-  - keyboard — blue  (#4a90d0)   — Full-size keyboard keys
-  - mouse    — purple (#c880e0)  — Generic mouse (future-proof)
+The default colour is **violet**.
 
 Output layout:
 
     docs/ui/button_overlays/
-      joycon/    jc_ZL.png, jc_ZR.png, ...            (default theme)
-      m913/      m913_left.png, m913_side1.png, ...
-      incedius/  inc_left.png, inc_Thumb1.png, ...
-      keyboard/  kbd_Esc.png, kbd_A.png, ...
-      mouse/     mouse_Left.png, mouse_Right.png, ...
-      dark/
-        joycon/    jc_ZL.png, jc_ZR.png, ...           (dark theme)
+      red/
+        joycon/    jc_ZL.png, jc_ZR.png, ...
         m913/      m913_left.png, m913_side1.png, ...
+        incedius/  inc_left.png, inc_Thumb1.png, ...
+        keyboard/  kbd_Esc.png, kbd_A.png, ...
+        mouse/     mouse_Left.png, mouse_Right.png, ...
+      orange/
+        ...
+      yellow/ green/ blue/ indigo/ violet/
         ...
 
 Usage:
@@ -333,27 +328,21 @@ MOUSE_HOTSPOTS: list[tuple[str, int, int]] = [
 MOUSE_WIDE = {"left", "right"}
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Theme colour palettes
+# Rainbow colour palettes — one uniform colour per rainbow hue, all devices
 # ═══════════════════════════════════════════════════════════════════════════
 
-# Per-device colours tuned for each theme.
-# "default" = dark strokes on light paper; "dark" = bright chalk on dark bg.
-THEME_COLORS: dict[str, dict[str, tuple[int, int, int, int]]] = {
-    "default": {
-        "joycon":  (160, 40, 40, 160),     # muted red pencil
-        "m913":    (150, 110, 30, 160),     # muted gold pencil
-        "incedius": (35, 140, 55, 160),     # muted green pencil
-        "keyboard": (50, 100, 150, 160),    # muted blue pencil
-        "mouse":   (130, 80, 150, 160),     # muted purple pencil
-    },
-    "dark": {
-        "joycon":  (240, 110, 100, 180),    # bright red chalk
-        "m913":    (230, 190, 90, 180),     # bright gold chalk
-        "incedius": (100, 230, 130, 180),   # bright green chalk
-        "keyboard": (110, 170, 230, 180),   # bright blue chalk
-        "mouse":   (210, 150, 240, 180),    # bright purple chalk
-    },
+# Each entry maps a rainbow colour name → single RGBA used for every device.
+RAINBOW_COLORS: dict[str, tuple[int, int, int, int]] = {
+    "red":    (220, 60,  60, 170),
+    "orange": (230, 140, 40, 170),
+    "yellow": (210, 190, 40, 170),
+    "green":  (60,  185, 80, 170),
+    "blue":   (60,  120, 220, 170),
+    "indigo": (90,  60,  180, 170),
+    "violet": (160, 60,  200, 170),
 }
+
+DEFAULT_RAINBOW = "violet"
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Device registry
@@ -432,18 +421,13 @@ def _generate_overlay(
 def main() -> int:
     total = 0
 
-    for theme, palette in THEME_COLORS.items():
+    for color_name, color in RAINBOW_COLORS.items():
         for device_name, cfg in DEVICES.items():
-            # Default theme: docs/ui/button_overlays/{device}/
-            # Dark theme:    docs/ui/button_overlays/dark/{device}/
-            if theme == "default":
-                out_dir = OUT_DIR / device_name
-            else:
-                out_dir = OUT_DIR / theme / device_name
+            # docs/ui/button_overlays/{color}/{device}/
+            out_dir = OUT_DIR / color_name / device_name
             out_dir.mkdir(parents=True, exist_ok=True)
 
             hotspots = cfg["hotspots"]
-            color = palette[device_name]
             wide = cfg["wide"]
             prefix = cfg["prefix"]
 
@@ -453,9 +437,9 @@ def main() -> int:
                 _generate_overlay(label, px, py, color, wide, dst)
                 total += 1
 
-            print(f"  [{theme}/{device_name}] {len(hotspots)} overlays -> {out_dir.relative_to(REPO_ROOT)}")
+            print(f"  [{color_name}/{device_name}] {len(hotspots)} overlays -> {out_dir.relative_to(REPO_ROOT)}")
 
-    print(f"[button-overlays] Generated {total} overlay PNGs across {len(DEVICES)} devices × {len(THEME_COLORS)} themes")
+    print(f"[button-overlays] Generated {total} overlay PNGs across {len(DEVICES)} devices × {len(RAINBOW_COLORS)} colours (default: {DEFAULT_RAINBOW})")
     return 0
 
 
