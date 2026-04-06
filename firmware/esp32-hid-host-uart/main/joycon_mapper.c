@@ -21,17 +21,8 @@
 
 static uint8_t s_threshold = 32;
 
-static const char* TAG = "joycon-mapper";
-
 void joycon_mapper_set_stick_threshold(uint8_t threshold) {
     s_threshold = threshold;
-}
-
-static void emit_if_changed(uint8_t key_id, bool now_pressed, bool* prev_pressed) {
-    if (now_pressed != *prev_pressed) {
-        bridge_send_key_event(key_id, now_pressed);
-        *prev_pressed = now_pressed;
-    }
 }
 
 static void emit_if_changed_ex(uint8_t device_id, uint8_t key_id, bool now_pressed, bool* prev_pressed) {
@@ -45,6 +36,7 @@ static void emit_if_changed_ex(uint8_t device_id, uint8_t key_id, bool now_press
     *prev_pressed = now_pressed;
 }
 
+#if CONFIG_JOYCON_HOST_NINTENDO_0X30_EMIT_KEYS
 // --- Stick auto-calibration ---
 // Tracks min/center/max per axis and maps raw values to a normalized
 // -1.0..+1.0 range. Inspired by GamepadPhoenix's StickCal approach.
@@ -116,6 +108,7 @@ static int cal_normalize(const axis_cal_t* a, uint16_t raw) {
     // Normalize to 4096 scale
     return (val * 4096) / range;
 }
+#endif /* CONFIG_JOYCON_HOST_NINTENDO_0X30_EMIT_KEYS */
 
 void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16_t len) {
     (void)s_threshold;
@@ -143,7 +136,7 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
         static bool have_last = false;
 
         if (!have_last || memcmp(&last, &st, sizeof(st)) != 0) {
-            ESP_LOGI(TAG, "nintendo 0x30: btn=%02X %02X %02X  LX=%u LY=%u  RX=%u RY=%u",
+            ESP_LOGI("joycon-mapper", "nintendo 0x30: btn=%02X %02X %02X  LX=%u LY=%u  RX=%u RY=%u",
                      st.buttons1, st.buttons2, st.buttons3,
                      (unsigned)st.lx, (unsigned)st.ly, (unsigned)st.rx, (unsigned)st.ry);
             last = st;
