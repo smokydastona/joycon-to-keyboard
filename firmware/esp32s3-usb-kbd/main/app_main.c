@@ -115,6 +115,11 @@ void app_main(void) {
                 bridge_serial_emit_battery(device_id, level);
                 continue;
             }
+
+            if (f.type == UART_FRAME_CONTROLLER_INFO && f.length >= 4) {
+                bridge_serial_emit_controller_info(f.payload, f.length);
+                continue;
+            }
         }
 
         // esp_tinyusb runs tud_task() in its own internal task;

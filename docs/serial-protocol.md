@@ -95,6 +95,15 @@ Current control commands:
 	- payload: 1 byte
 		- `0x01`: save current auto-calibration to NVS
 		- `0x02`: clear saved calibration from NVS
+- `cmd_id=0x05` — HD rumble
+	- payload: 4 bytes
+		- `[0]`: device_id (0 or 1)
+		- `[1..2]`: frequency in Hz (uint16 LE, clamped 41–1253)
+		- `[3]`: amplitude percentage (0–100)
+- `cmd_id=0x06` — Home LED brightness
+	- payload: 2 bytes
+		- `[0]`: device_id (0 or 1)
+		- `[1]`: brightness (0–15; 0 = off)
 
 ### OTA update control commands (ESP32-S3 → ESP32)
 
@@ -143,6 +152,27 @@ Battery levels:
 - `4` — full
 
 The ESP32-S3 forwards this to the helper app as an NDJSON event over CDC (see `helper-app/protocol.md`).
+
+## Controller info frames (ESP32 → ESP32-S3)
+
+The ESP32 sends detailed controller information after the Joy-Con setup FSM reaches READY, using marker `0xF9`:
+
+- `payload[0]`: `0xF9` (controller info marker)
+- `payload[1]`: `device_id` (0 = left, 1 = right)
+- `payload[2]`: `ctrl_type` (1 = Joy-Con (L), 2 = Joy-Con (R), 3 = Pro Controller)
+- `payload[3]`: `serial_len` (0–15)
+- `payload[4 .. 4+serial_len-1]`: serial number (ASCII)
+
+Then optional tagged sections (presence gated by `has_*` flag byte):
+
+- `has_colors` (1 byte: 0 or 1)
+  - If 1: 6 bytes — body R, G, B, button R, G, B
+- `has_stick_params` (1 byte: 0 or 1)
+  - If 1: 4 bytes — deadzone (uint16 LE), range_ratio (uint16 LE)
+- `has_imu_cal` (1 byte: 0 or 1)
+  - If 1: 24 bytes — acc_origin[3] (int16 LE), acc_sens[3] (int16 LE), gyro_origin[3] (int16 LE), gyro_sens[3] (int16 LE)
+
+The ESP32-S3 forwards this to the helper app as an NDJSON `controller_info` event over CDC.
 
 ## Why this design
 

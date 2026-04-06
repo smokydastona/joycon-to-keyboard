@@ -334,6 +334,29 @@ Response:
 {"rsp":"calibration","ok":true}
 ```
 
+### HD Rumble
+
+Trigger a rumble pulse on the connected controller. Forwarded via UART to the ESP32 BT host.
+
+```json
+{"cmd":"rumble","device_id":0,"freq":160,"amp":50}
+```
+
+- `device_id`: `0` or `1` (left / right controller)
+- `freq`: vibration frequency in Hz (41–1253)
+- `amp`: amplitude percentage (0–100)
+
+### Home LED brightness
+
+Set the brightness of the Home button LED (right Joy-Con / Pro Controller only; left Joy-Con has no Home button).
+
+```json
+{"cmd":"home_led","device_id":0,"brightness":8}
+```
+
+- `device_id`: `0` or `1`
+- `brightness`: 0–15 (0 = off, 15 = max)
+
 ## Events (device -> PC)
 
 The device may emit events for:
@@ -396,6 +419,23 @@ Battery level events (emitted when the Joy-Con reports its battery level):
 
 - `device_id`: `0` = left, `1` = right
 - `level`: `0` = empty, `1` = critical, `2` = low, `3` = medium, `4` = full
+
+Controller info events (emitted once per controller after the setup FSM completes):
+
+```json
+{"evt":"controller_info","device_id":0,"type":"joycon_l","serial":"XKJN402719474",
+ "body_color":"#0AB9E6","button_color":"#001E1E",
+ "stick_deadzone":200,"stick_range_ratio":3500,
+ "imu_cal":{"acc_origin":[0,0,16384],"acc_sens":[16384,16384,16384],
+            "gyro_origin":[0,0,0],"gyro_sens":[13371,13371,13371]}}
+```
+
+- `type`: `"joycon_l"`, `"joycon_r"`, `"pro"`, or `"unknown"`
+- `serial`: controller serial number (may be empty)
+- `body_color`, `button_color`: `#RRGGBB` hex strings (present when colors are available)
+- `stick_deadzone`, `stick_range_ratio`: raw SPI stick parameters (present when available)
+- `imu_cal`: accelerometer/gyroscope calibration data (present when available)
+  - `acc_origin`, `acc_sens`, `gyro_origin`, `gyro_sens`: arrays of 3 int16 values each
 
 ## Share codes (helper app only)
 

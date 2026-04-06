@@ -716,6 +716,14 @@ class App(tk.Tk):
         self._bt_status = tk.StringVar(value="BT: -")
         self._battery_level: Optional[int] = None  # 0-4 from Joy-Con, None=unknown
 
+        # Controller info from firmware (populated by controller_info event).
+        self._ctrl_info_type = tk.StringVar(value="\u2014")
+        self._ctrl_info_serial = tk.StringVar(value="\u2014")
+        self._ctrl_info_body_color: Optional[str] = None
+        self._ctrl_info_btn_color: Optional[str] = None
+        self._ctrl_info_deadzone = tk.StringVar(value="\u2014")
+        self._ctrl_info_range = tk.StringVar(value="\u2014")
+
         # Track which sides are connected so the UI can reflect Left/Right/Both.
         # Keyed by BDA string when available.
         self._bt_conn_by_bda: Dict[str, str] = {}
@@ -1805,6 +1813,50 @@ class App(tk.Tk):
             "Your controller may still need to be put into pairing mode (e.g. Joy-Con sync button)."
         )
         ttk.Label(self._controller_center, text=note, wraplength=900, justify="left").pack(anchor="w", padx=12, pady=(4, 0))
+
+        # ── Controller Info Bar ──
+        info_box = ttk.LabelFrame(self._controller_center, text="Controller info")
+        info_box.pack(fill=tk.X, padx=8, pady=(6, 2))
+
+        info_row = ttk.Frame(info_box)
+        info_row.pack(fill=tk.X, padx=8, pady=4)
+        ttk.Label(info_row, text="Type:").pack(side=tk.LEFT)
+        ttk.Label(info_row, textvariable=self._ctrl_info_type, width=10).pack(side=tk.LEFT, padx=(2, 10))
+        ttk.Label(info_row, text="Serial:").pack(side=tk.LEFT)
+        ttk.Label(info_row, textvariable=self._ctrl_info_serial, width=18).pack(side=tk.LEFT, padx=(2, 10))
+        ttk.Label(info_row, text="Deadzone:").pack(side=tk.LEFT)
+        ttk.Label(info_row, textvariable=self._ctrl_info_deadzone, width=6).pack(side=tk.LEFT, padx=(2, 10))
+        ttk.Label(info_row, text="Range:").pack(side=tk.LEFT)
+        ttk.Label(info_row, textvariable=self._ctrl_info_range, width=6).pack(side=tk.LEFT, padx=(2, 10))
+
+        # Color swatches
+        ttk.Label(info_row, text="Body:").pack(side=tk.LEFT)
+        self._ctrl_body_swatch = tk.Canvas(info_row, width=18, height=18, highlightthickness=1, highlightbackground="#555")
+        self._ctrl_body_swatch.pack(side=tk.LEFT, padx=(2, 8))
+        ttk.Label(info_row, text="Btn:").pack(side=tk.LEFT)
+        self._ctrl_btn_swatch = tk.Canvas(info_row, width=18, height=18, highlightthickness=1, highlightbackground="#555")
+        self._ctrl_btn_swatch.pack(side=tk.LEFT, padx=(2, 0))
+
+        # ── Rumble & Home LED Controls ──
+        ctrl_box = ttk.LabelFrame(self._controller_center, text="Controller features")
+        ctrl_box.pack(fill=tk.X, padx=8, pady=(2, 6))
+
+        ctrl_row = ttk.Frame(ctrl_box)
+        ctrl_row.pack(fill=tk.X, padx=8, pady=4)
+
+        ttk.Label(ctrl_row, text="Rumble:").pack(side=tk.LEFT)
+        ttk.Label(ctrl_row, text="Freq (Hz):").pack(side=tk.LEFT, padx=(8, 0))
+        self._rumble_freq_var = tk.IntVar(value=160)
+        ttk.Spinbox(ctrl_row, textvariable=self._rumble_freq_var, from_=41, to=1253, width=5).pack(side=tk.LEFT, padx=2)
+        ttk.Label(ctrl_row, text="Amp (%):").pack(side=tk.LEFT, padx=(6, 0))
+        self._rumble_amp_var = tk.IntVar(value=50)
+        ttk.Spinbox(ctrl_row, textvariable=self._rumble_amp_var, from_=0, to=100, width=4).pack(side=tk.LEFT, padx=2)
+        ttk.Button(ctrl_row, text="\U0001f4f3 Test", command=self._cmd_test_rumble, width=8).pack(side=tk.LEFT, padx=(6, 16))
+
+        ttk.Label(ctrl_row, text="Home LED:").pack(side=tk.LEFT)
+        self._home_led_var = tk.IntVar(value=8)
+        ttk.Scale(ctrl_row, variable=self._home_led_var, from_=0, to=15, orient=tk.HORIZONTAL, length=100).pack(side=tk.LEFT, padx=2)
+        ttk.Button(ctrl_row, text="\U0001f4a1 Set", command=self._cmd_set_home_led, width=6).pack(side=tk.LEFT, padx=(4, 0))
 
         self._build_keymap_editor()
 
@@ -5144,12 +5196,14 @@ class App(tk.Tk):
             "Commands (PC \u2192 device):",
             "  ping, write_profile, read_profile, set_active_profile,",
             "  bt_set_target, bt_connect, fw_version, fw_update_begin/data/end/abort,",
-            "  set_stick_curve, calibration (save/clear)",
+            "  set_stick_curve, calibration (save/clear),",
+            "  rumble (device_id, freq, amp), home_led (device_id, brightness)",
             "",
             "Events (device \u2192 PC):",
             "  mapped_key (pressed, key_id), macro (id, state),",
             "  layer (name, active), bt_status (state, name, bda),",
-            "  battery (device_id, level 0\u20134)",
+            "  battery (device_id, level 0\u20134),",
+            "  controller_info (type, serial, colors, stick params, IMU cal)",
             "",
             "## ESP32 \u2194 ESP32-S3 (UART, 3.3V)",
             "Binary framing:  AA 55 <len> <payload...> <checksum>",
@@ -5159,8 +5213,9 @@ class App(tk.Tk):
             "  Extended key (0xFC): device_id, pressed, base_key_id",
             "  Status (0xFD): state + BDA + name",
             "  Battery (0xFA): device_id + level (0\u20134)",
+            "  Controller info (0xF9): type, serial, colors, stick params, IMU cal",
             "  Debug (0xFF): raw HID report bytes",
-            "  Control (0xFE): set target, start discovery, stick curve, calibration",
+            "  Control (0xFE): set target, discovery, stick curve, calibration, rumble, home LED",
             "  OTA (0xFB): firmware update frames",
             "",
             "For full protocol details see docs/serial-protocol.md",
@@ -7084,6 +7139,15 @@ class App(tk.Tk):
         both = (self._bt_target_preset.get().strip() == "Both (Joy-Con (L+R))")
         self._send_cmd({"cmd": "bt_connect", "both": both})
 
+    def _cmd_test_rumble(self) -> None:
+        freq = max(41, min(1253, self._rumble_freq_var.get()))
+        amp = max(0, min(100, self._rumble_amp_var.get()))
+        self._send_cmd({"cmd": "rumble", "device_id": 0, "freq": freq, "amp": amp})
+
+    def _cmd_set_home_led(self) -> None:
+        brightness = max(0, min(15, self._home_led_var.get()))
+        self._send_cmd({"cmd": "home_led", "device_id": 0, "brightness": brightness})
+
     def _cmd_upload_and_set_active(self) -> None:
         try:
             profile = self._validate_profile()
@@ -7266,9 +7330,22 @@ class App(tk.Tk):
                 suffix += f"  bda={bda}"
             self._bt_status.set(f"BT: {state}{suffix}")
 
-            # Reset battery on disconnect.
+            # Reset battery and controller info on disconnect.
             if state == "disconnected":
                 self._battery_level = None
+                self._ctrl_info_type.set("\u2014")
+                self._ctrl_info_serial.set("\u2014")
+                self._ctrl_info_deadzone.set("\u2014")
+                self._ctrl_info_range.set("\u2014")
+                self._ctrl_info_body_color = None
+                self._ctrl_info_btn_color = None
+                try:
+                    if hasattr(self, "_ctrl_body_swatch"):
+                        self._ctrl_body_swatch.configure(bg=self._colors.get("bg", "#d4c5a0"))
+                    if hasattr(self, "_ctrl_btn_swatch"):
+                        self._ctrl_btn_swatch.configure(bg=self._colors.get("bg", "#d4c5a0"))
+                except Exception:
+                    pass
 
             # Track side connectivity by BDA to drive the background.
             def _side_from_name(n: object) -> Optional[str]:
@@ -7320,6 +7397,36 @@ class App(tk.Tk):
                     self._battery_level = level
             except (ValueError, TypeError):
                 pass
+
+        if evt == "controller_info":
+            ctrl_type = obj.get("type", "unknown")
+            serial = obj.get("serial", "")
+            body_color = obj.get("body_color")
+            button_color = obj.get("button_color")
+            deadzone = obj.get("stick_deadzone")
+            range_ratio = obj.get("stick_range_ratio")
+
+            type_labels = {"joycon_l": "Joy-Con (L)", "joycon_r": "Joy-Con (R)", "pro": "Pro Controller"}
+            self._ctrl_info_type.set(type_labels.get(ctrl_type, ctrl_type))
+            self._ctrl_info_serial.set(serial if serial else "\u2014")
+
+            if isinstance(deadzone, (int, float)):
+                self._ctrl_info_deadzone.set(str(int(deadzone)))
+            if isinstance(range_ratio, (int, float)):
+                self._ctrl_info_range.set(str(int(range_ratio)))
+
+            # Update color swatches.
+            self._ctrl_info_body_color = body_color
+            self._ctrl_info_btn_color = button_color
+            try:
+                if body_color and hasattr(self, "_ctrl_body_swatch"):
+                    self._ctrl_body_swatch.configure(bg=body_color)
+                if button_color and hasattr(self, "_ctrl_btn_swatch"):
+                    self._ctrl_btn_swatch.configure(bg=button_color)
+            except Exception:
+                pass
+
+            self._log_line(f"[device] Controller info: {ctrl_type} serial={serial} body={body_color} btn={button_color}")
 
     def _current_profile(self) -> dict:
         return self._validate_profile()

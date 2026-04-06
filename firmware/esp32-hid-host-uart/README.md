@@ -65,10 +65,17 @@ Set in `main/config.h`.
 - Initializes UART framing to match `docs/serial-protocol.md`.
 - Scans + connects to a Classic-BT HID device and forwards input reports to `main/joycon_mapper.c`.
 - Optionally accepts helper-app control commands over UART RX (requires the return UART wire).
-- **Joy-Con setup FSM** (`joycon_setup.c`): after BT connection, sends subcommands to the Joy-Con — request device info, read SPI flash calibration, set full report mode (0x30), enable IMU, set player LEDs. This replaces the passive wait-for-reports approach with an active handshake.
+- **Joy-Con setup FSM** (`joycon_setup.c`): after BT connection, sends subcommands to the Joy-Con — request device info, read SPI flash calibration, set full report mode (0x30), enable IMU, enable vibration, set player LEDs. This replaces the passive wait-for-reports approach with an active handshake.
 - **SPI flash stick calibration**: reads factory and user calibration data from the Joy-Con's SPI flash. Sticks are accurate immediately after connection (no warm-up needed).
 - **Controller type detection**: identifies Joy-Con (L), Joy-Con (R), or Pro Controller from the device info reply.
+- **Serial number readback**: reads the controller serial number from SPI flash (0x6000).
+- **Controller colors**: reads body and button RGB colors from SPI flash (0x6050).
+- **Stick deadzone parameters**: reads deadzone and range ratio from SPI flash (0x6086).
+- **IMU calibration**: reads factory (0x6020) and user (0x8026) accelerometer/gyroscope calibration data.
+- **Controller info broadcast**: sends all discovered controller metadata (type, serial, colors, stick params, IMU cal) to the ESP32-S3 via UART marker `0xF9`.
 - **Battery level reporting**: parses battery level (0–4) from 0x30 reports and forwards to the ESP32-S3 via UART marker `0xFA`.
+- **HD Rumble**: accepts rumble commands from the helper app (frequency 41–1253 Hz, amplitude 0–100%). Full log2-based frequency/amplitude encoding per Nintendo specification.
+- **Home LED control**: accepts brightness commands (0–15) for the Home button LED (right Joy-Con / Pro Controller only).
 - **Player LED control**: sets Player 1 LEDs on the Joy-Con after setup completes.
 - **Nintendo 0x30 button + stick parsing** (when enabled via menuconfig): fully parses all Joy-Con buttons (A/B/X/Y, L/R, ZL/ZR, Plus/Minus, Home, Capture, stick clicks) and both sticks.
 - **Stick auto-calibration**: per-axis min/center/max tracking adapts to individual controller characteristics. SPI flash calibration is preferred when available.

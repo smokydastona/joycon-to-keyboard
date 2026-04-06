@@ -3,6 +3,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "joycon_setup.h"  // For joycon_colors_t, joycon_stick_params_t, joycon_imu_cal_t
+
 // Sends a single key event to the USB-keyboard-side device (ESP32-S3).
 // key_id: 0..127
 // pressed: true=down, false=up
@@ -45,3 +47,24 @@ void bridge_send_ota_rsp(uint8_t rsp_id, uint8_t status, const uint8_t* data, ui
 //   [1] = device_id (0=left, 1=right)
 //   [2] = battery level (0=empty, 1-3=charging, 4=full)
 void bridge_send_battery(uint8_t device_id, uint8_t level);
+
+// Sends a controller info frame to the ESP32-S3.
+// Contains: controller type, serial number, body/button colors,
+//   stick deadzone parameters, IMU calibration data.
+// Payload format:
+//   [0] = 0xF9 (controller info marker)
+//   [1] = device_id (0=left, 1=right)
+//   [2] = controller_type (1=JCL, 2=JCR, 3=Pro)
+//   [3] = serial_len (0 if no serial)
+//   [4..4+serial_len-1] = serial ASCII (max 15)
+//   next 1 byte: has_colors (0/1)
+//   if has_colors: 6 bytes (body_rgb + button_rgb)
+//   next 1 byte: has_stick_params (0/1)
+//   if has_stick_params: 4 bytes (deadzone u16le, range_ratio u16le)
+//   next 1 byte: has_imu_cal (0/1)
+//   if has_imu_cal: 24 bytes (12 Int16LE values)
+void bridge_send_controller_info(uint8_t device_id, uint8_t controller_type,
+                                 const char *serial,
+                                 const joycon_colors_t *colors,
+                                 const joycon_stick_params_t *stick_params,
+                                 const joycon_imu_cal_t *imu_cal);

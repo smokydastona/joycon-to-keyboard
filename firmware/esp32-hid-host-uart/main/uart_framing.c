@@ -127,3 +127,79 @@ void bridge_send_battery(uint8_t device_id, uint8_t level) {
     payload[2] = level;
     bridge_send_frame(payload, (uint8_t)sizeof(payload));
 }
+
+void bridge_send_controller_info(uint8_t device_id, uint8_t controller_type,
+                                 const char *serial,
+                                 const joycon_colors_t *colors,
+                                 const joycon_stick_params_t *stick_params,
+                                 const joycon_imu_cal_t *imu_cal) {
+    // Build variable-length payload.
+    // Max size: 1+1+1+1+15 + 1+6 + 1+4 + 1+24 = 56 bytes (well under 220)
+    uint8_t payload[64];
+    uint8_t pos = 0;
+
+    payload[pos++] = 0xF9;  // Controller info marker
+    payload[pos++] = device_id;
+    payload[pos++] = controller_type;
+
+    // Serial number
+    uint8_t serial_len = 0;
+    if (serial) {
+        const char *s = serial;
+        while (*s && serial_len < 15) { serial_len++; s++; }
+    }
+    payload[pos++] = serial_len;
+    if (serial_len > 0) {
+        memcpy(&payload[pos], serial, serial_len);
+        pos += serial_len;
+    }
+
+    // Colors
+    if (colors) {
+        payload[pos++] = 1;  // has_colors
+        payload[pos++] = colors->body_r;
+        payload[pos++] = colors->body_g;
+        payload[pos++] = colors->body_b;
+        payload[pos++] = colors->button_r;
+        payload[pos++] = colors->button_g;
+        payload[pos++] = colors->button_b;
+    } else {
+        payload[pos++] = 0;
+    }
+
+    // Stick parameters
+    if (stick_params) {
+        payload[pos++] = 1;  // has_stick_params
+        payload[pos++] = (uint8_t)(stick_params->deadzone & 0xFF);
+        payload[pos++] = (uint8_t)((stick_params->deadzone >> 8) & 0xFF);
+        payload[pos++] = (uint8_t)(stick_params->range_ratio & 0xFF);
+        payload[pos++] = (uint8_t)((stick_params->range_ratio >> 8) & 0xFF);
+    } else {
+        payload[pos++] = 0;
+    }
+
+    // IMU calibration
+    if (imu_cal) {
+        payload[pos++] = 1;  // has_imu_cal
+        for (int i = 0; i < 3; i++) {
+            payload[pos++] = (uint8_t)(imu_cal->acc_origin[i] & 0xFF);
+            payload[pos++] = (uint8_t)((imu_cal->acc_origin[i] >> 8) & 0xFF);
+        }
+        for (int i = 0; i < 3; i++) {
+            payload[pos++] = (uint8_t)(imu_cal->acc_sens[i] & 0xFF);
+            payload[pos++] = (uint8_t)((imu_cal->acc_sens[i] >> 8) & 0xFF);
+        }
+        for (int i = 0; i < 3; i++) {
+            payload[pos++] = (uint8_t)(imu_cal->gyro_origin[i] & 0xFF);
+            payload[pos++] = (uint8_t)((imu_cal->gyro_origin[i] >> 8) & 0xFF);
+        }
+        for (int i = 0; i < 3; i++) {
+            payload[pos++] = (uint8_t)(imu_cal->gyro_sens[i] & 0xFF);
+            payload[pos++] = (uint8_t)((imu_cal->gyro_sens[i] >> 8) & 0xFF);
+        }
+    } else {
+        payload[pos++] = 0;
+    }
+
+    bridge_send_frame(payload, pos);
+}

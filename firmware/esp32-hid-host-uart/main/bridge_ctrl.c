@@ -12,6 +12,7 @@
 #include "uart_framing.h"
 #include "fw_ota.h"
 #include "joycon_mapper.h"
+#include "joycon_setup.h"
 
 static const char *TAG = "bridge-ctrl";
 
@@ -24,6 +25,8 @@ static const char *TAG = "bridge-ctrl";
 #define CTRL_CMD_START_DISCOVERY   0x02
 #define CTRL_CMD_SET_STICK_CURVE   0x03
 #define CTRL_CMD_CALIBRATION       0x04
+#define CTRL_CMD_RUMBLE            0x05
+#define CTRL_CMD_HOME_LED          0x06
 
 // OTA control commands (from ESP32-S3)
 #define CTRL_CMD_OTA_BEGIN   0x10
@@ -73,6 +76,26 @@ static void handle_ctrl_cmd(uint8_t cmd_id, const uint8_t *payload, uint8_t payl
                 joycon_mapper_save_calibration();
             } else if (payload_len >= 1 && payload[0] == 0x02) {
                 joycon_mapper_clear_calibration();
+            }
+            break;
+        }
+        case CTRL_CMD_RUMBLE: {
+            // payload[0] = device_id (0=left, 1=right)
+            // payload[1..2] = freq_hz (uint16 LE)
+            // payload[3] = amp_100 (0-100)
+            if (payload_len >= 4) {
+                uint8_t dev = payload[0];
+                uint16_t freq = (uint16_t)(payload[1] | (payload[2] << 8));
+                uint8_t amp = payload[3];
+                joycon_setup_send_rumble(dev, freq, amp);
+            }
+            break;
+        }
+        case CTRL_CMD_HOME_LED: {
+            // payload[0] = device_id
+            // payload[1] = brightness (0-15)
+            if (payload_len >= 2) {
+                joycon_setup_set_home_led(payload[0], payload[1]);
             }
             break;
         }

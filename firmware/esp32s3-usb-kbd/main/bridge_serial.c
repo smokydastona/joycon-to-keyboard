@@ -38,6 +38,8 @@ static const char *TAG = "bridge-serial";
 // Stick / calibration control commands relayed to ESP32
 #define CTRL_CMD_SET_STICK_CURVE 0x03
 #define CTRL_CMD_CALIBRATION     0x04
+#define CTRL_CMD_RUMBLE          0x05
+#define CTRL_CMD_HOME_LED        0x06
 
 // OTA response IDs received from ESP32 via UART
 #define OTA_RSP_MARKER  0xFB
@@ -589,6 +591,71 @@ static void handle_calibration(cJSON *root) {
     respond_ok_simple("calibration");
 }
 
+static void handle_rumble(cJSON *root) {
+    // {"cmd":"rumble", "device_id":0, "freq":160, "amp":50}
+    cJSON *dev_j = cJSON_GetObjectItemCaseSensitive(root, "device_id");
+    cJSON *freq_j = cJSON_GetObjectItemCaseSensitive(root, "freq");
+    cJSON *amp_j = cJSON_GetObjectItemCaseSensitive(root, "amp");
+
+    uint8_t device_id = 0;
+    if (cJSON_IsNumber(dev_j)) device_id = (uint8_t)dev_j->valueint;
+
+    uint16_t freq = 160;
+    if (cJSON_IsNumber(freq_j)) {
+        int f = freq_j->valueint;
+        if (f < 41) f = 41;
+        if (f > 1253) f = 1253;
+        freq = (uint16_t)f;
+    }
+
+    uint8_t amp = 50;
+    if (cJSON_IsNumber(amp_j)) {
+        int a = amp_j->valueint;
+        if (a < 0) a = 0;
+        if (a > 100) a = 100;
+        amp = (uint8_t)a;
+    }
+
+    uint8_t payload[4];
+    payload[0] = device_id;
+    payload[1] = (uint8_t)(freq & 0xFF);
+    payload[2] = (uint8_t)((freq >> 8) & 0xFF);
+    payload[3] = amp;
+
+    if (!uart_proto_send_ctrl(CTRL_CMD_RUMBLE, payload, 4)) {
+        respond_error("rumble", "uart_send_failed");
+        return;
+    }
+    respond_ok_simple("rumble");
+}
+
+static void handle_home_led(cJSON *root) {
+    // {"cmd":"home_led", "device_id":0, "brightness":8}
+    cJSON *dev_j = cJSON_GetObjectItemCaseSensitive(root, "device_id");
+    cJSON *bright_j = cJSON_GetObjectItemCaseSensitive(root, "brightness");
+
+    uint8_t device_id = 0;
+    if (cJSON_IsNumber(dev_j)) device_id = (uint8_t)dev_j->valueint;
+
+    uint8_t brightness = 8;
+    if (cJSON_IsNumber(bright_j)) {
+        int b = bright_j->valueint;
+        if (b < 0) b = 0;
+        if (b > 15) b = 15;
+        brightness = (uint8_t)b;
+    }
+
+    uint8_t payload[2];
+    payload[0] = device_id;
+    payload[1] = brightness;
+
+    if (!uart_proto_send_ctrl(CTRL_CMD_HOME_LED, payload, 2)) {
+        respond_error("home_led", "uart_send_failed");
+        return;
+    }
+    respond_ok_simple("home_led");
+}
+
 static void handle_line(const char *line) {
     cJSON *root = cJSON_Parse(line);
     if (!root) {
@@ -629,6 +696,10 @@ static void handle_line(const char *line) {
         handle_set_stick_curve(root);
     } else if (strcmp(cmd->valuestring, "calibration") == 0) {
         handle_calibration(root);
+    } else if (strcmp(cmd->valuestring, "rumble") == 0) {
+        handle_rumble(root);
+    } else if (strcmp(cmd->valuestring, "home_led") == 0) {
+        handle_home_led(root);
     } else {
         respond_error(cmd->valuestring, "unknown_cmd");
     }
@@ -766,6 +837,108 @@ void bridge_serial_emit_battery(uint8_t device_id, uint8_t level) {
     cJSON_AddStringToObject(evt, "evt", "battery");
     cJSON_AddNumberToObject(evt, "device_id", device_id);
     cJSON_AddNumberToObject(evt, "level", level);
+
+    cdc_write_json(evt);
+    cJSON_Delete(evt);
+}
+
+void bridge_serial_emit_controller_info(const uint8_t *payload, uint8_t length) {
+    if (!tud_cdc_connected() || !s_host_open) return;
+    // payload[0]=0xF9, [1]=device_id, [2]=ctrl_type, [3]=serial_len, [4..]=serial, ...
+    if (length < 4) return;
+
+    uint8_t pos = 1;
+    uint8_t device_id = payload[pos++];
+    uint8_t ctrl_type = payload[pos++];
+    uint8_t serial_len = payload[pos++];
+
+    char serial[16] = {0};
+    if (serial_len > 0 && serial_len <= 15 && pos + serial_len <= length) {
+        memcpy(serial, &payload[pos], serial_len);
+        serial[serial_len] = '\0';
+        pos += serial_len;
+    }
+
+    cJSON *evt = cJSON_CreateObject();
+    if (!evt) return;
+    cJSON_AddStringToObject(evt, "evt", "controller_info");
+    cJSON_AddNumberToObject(evt, "device_id", device_id);
+
+    const char *type_str = "unknown";
+    if (ctrl_type == 1) type_str = "joycon_l";
+    else if (ctrl_type == 2) type_str = "joycon_r";
+    else if (ctrl_type == 3) type_str = "pro";
+    cJSON_AddStringToObject(evt, "type", type_str);
+
+    if (serial_len > 0) {
+        cJSON_AddStringToObject(evt, "serial", serial);
+    }
+
+    // Colors
+    if (pos < length) {
+        uint8_t has_colors = payload[pos++];
+        if (has_colors && pos + 6 <= length) {
+            char body_hex[8], btn_hex[8];
+            snprintf(body_hex, sizeof(body_hex), "#%02X%02X%02X",
+                     payload[pos], payload[pos + 1], payload[pos + 2]);
+            snprintf(btn_hex, sizeof(btn_hex), "#%02X%02X%02X",
+                     payload[pos + 3], payload[pos + 4], payload[pos + 5]);
+            cJSON_AddStringToObject(evt, "body_color", body_hex);
+            cJSON_AddStringToObject(evt, "button_color", btn_hex);
+            pos += 6;
+        }
+    }
+
+    // Stick params
+    if (pos < length) {
+        uint8_t has_params = payload[pos++];
+        if (has_params && pos + 4 <= length) {
+            uint16_t deadzone = (uint16_t)(payload[pos] | (payload[pos + 1] << 8));
+            uint16_t range_ratio = (uint16_t)(payload[pos + 2] | (payload[pos + 3] << 8));
+            cJSON_AddNumberToObject(evt, "stick_deadzone", deadzone);
+            cJSON_AddNumberToObject(evt, "stick_range_ratio", range_ratio);
+            pos += 4;
+        }
+    }
+
+    // IMU cal
+    if (pos < length) {
+        uint8_t has_imu = payload[pos++];
+        if (has_imu && pos + 24 <= length) {
+            cJSON *imu = cJSON_CreateObject();
+            if (imu) {
+                cJSON *acc_o = cJSON_CreateArray();
+                cJSON *acc_s = cJSON_CreateArray();
+                cJSON *gyro_o = cJSON_CreateArray();
+                cJSON *gyro_s = cJSON_CreateArray();
+                for (int i = 0; i < 3; i++) {
+                    int16_t v = (int16_t)(payload[pos] | (payload[pos + 1] << 8));
+                    cJSON_AddItemToArray(acc_o, cJSON_CreateNumber(v));
+                    pos += 2;
+                }
+                for (int i = 0; i < 3; i++) {
+                    int16_t v = (int16_t)(payload[pos] | (payload[pos + 1] << 8));
+                    cJSON_AddItemToArray(acc_s, cJSON_CreateNumber(v));
+                    pos += 2;
+                }
+                for (int i = 0; i < 3; i++) {
+                    int16_t v = (int16_t)(payload[pos] | (payload[pos + 1] << 8));
+                    cJSON_AddItemToArray(gyro_o, cJSON_CreateNumber(v));
+                    pos += 2;
+                }
+                for (int i = 0; i < 3; i++) {
+                    int16_t v = (int16_t)(payload[pos] | (payload[pos + 1] << 8));
+                    cJSON_AddItemToArray(gyro_s, cJSON_CreateNumber(v));
+                    pos += 2;
+                }
+                cJSON_AddItemToObject(imu, "acc_origin", acc_o);
+                cJSON_AddItemToObject(imu, "acc_sens", acc_s);
+                cJSON_AddItemToObject(imu, "gyro_origin", gyro_o);
+                cJSON_AddItemToObject(imu, "gyro_sens", gyro_s);
+                cJSON_AddItemToObject(evt, "imu_cal", imu);
+            }
+        }
+    }
 
     cdc_write_json(evt);
     cJSON_Delete(evt);

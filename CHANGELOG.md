@@ -11,9 +11,18 @@ Until then, entries are grouped by date.
 
 ### Added
 
-- **Joy-Con setup FSM** (`joycon_setup.c/.h`): after BT connection, the ESP32 now sends a sequence of subcommands to the Joy-Con — request device info → read factory stick calibration from SPI flash → read user stick calibration → set full report mode (0x30) → enable IMU → set player LEDs → READY. Inspired by the `bluepad32` and `BlueCubeMod` open-source implementations.
+- **Joy-Con setup FSM** (`joycon_setup.c/.h`): after BT connection, the ESP32 now sends a sequence of subcommands to the Joy-Con — request device info → read factory stick calibration from SPI flash → read user stick calibration → set full report mode (0x30) → enable IMU → enable vibration → set player LEDs → READY. Inspired by the `bluepad32` and `BlueCubeMod` open-source implementations.
 - **SPI flash stick calibration**: factory calibration data (addresses 0x603D/0x6046) and user calibration data (0x8010/0x801D, when magic bytes 0xB2/0xA1 are present) are read from the Joy-Con's onboard flash. This eliminates the warm-up period of the auto-calibration system — sticks are accurate immediately after connection.
 - **Controller type detection**: device info reply identifies the connected controller as Joy-Con (L), Joy-Con (R), or Pro Controller. Type is available via `joycon_setup_get_type()`.
+- **Serial number readback**: reads the controller serial number from SPI flash (address 0x6000, 16 bytes). Available via `joycon_setup_get_serial()`.
+- **Controller colors**: reads body and button RGB colors from SPI flash (address 0x6050, 6 bytes). Forwarded to the helper app as hex `#RRGGBB` strings. Available via `joycon_setup_get_colors()`.
+- **Stick deadzone parameters**: reads raw deadzone and range ratio from SPI flash (address 0x6086). Available via `joycon_setup_get_stick_params()`.
+- **IMU calibration readback**: reads factory (0x6020) and user (0x8026) accelerometer/gyroscope calibration data from SPI flash. User calibration takes priority when magic bytes (0xB2 0xA1) are present. Available via `joycon_setup_get_imu_cal()`.
+- **Controller info UART frame** (marker 0xF9): after setup FSM completes, the ESP32 sends a composite frame with all controller metadata (type, serial, colors, stick params, IMU cal) to the ESP32-S3. The ESP32-S3 emits this as an NDJSON `{"evt":"controller_info",...}` event over CDC serial.
+- **HD Rumble support**: the helper app can send `{"cmd":"rumble","device_id":0,"freq":160,"amp":50}` to trigger vibration on the connected controller. Full log2-based frequency (41–1253 Hz) and amplitude (0–100%) encoding per the Nintendo specification. Safety clamp at 0xC8 to protect the linear resonant actuator.
+- **Home LED control**: the helper app can send `{"cmd":"home_led","device_id":0,"brightness":8}` to set the Home button LED brightness (0–15). Left Joy-Con guard (has no Home button) returns a warning log.
+- **Controller info bar** (helper app): the Controller tab now shows a compact info bar displaying controller type, serial number, body/button color swatches, stick deadzone, and range ratio. Data populates automatically when a controller connects. Resets on disconnect.
+- **Rumble & Home LED controls** (helper app): the Controller tab now includes a "Controller features" section with a frequency/amplitude rumble test button and a Home LED brightness slider.
 - **Player LED control**: after completing the setup handshake, the host sets Player 1 LEDs on the Joy-Con via subcommand 0x30.
 - **Battery level reporting**: battery level (0–4) is parsed from 0x30 input reports and forwarded to the ESP32-S3 via a new UART frame type (marker 0xFA). The ESP32-S3 emits it as an NDJSON `{"evt":"battery"}` event over CDC serial.
 - **Battery indicator in status bar** (helper app): the bottom status bar now shows a battery level indicator (🔋 with filled/empty bars) when battery data is available. Resets on disconnect.

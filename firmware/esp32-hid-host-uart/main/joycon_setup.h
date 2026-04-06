@@ -23,6 +23,29 @@ typedef struct {
     bool valid;
 } joycon_stick_cal_t;
 
+// Controller body/button colors read from SPI flash.
+typedef struct {
+    uint8_t body_r, body_g, body_b;
+    uint8_t button_r, button_g, button_b;
+    bool valid;
+} joycon_colors_t;
+
+// Stick device parameters (deadzone/range) read from SPI flash.
+typedef struct {
+    uint16_t deadzone;
+    uint16_t range_ratio;
+    bool valid;
+} joycon_stick_params_t;
+
+// IMU calibration data read from SPI flash (factory or user).
+typedef struct {
+    int16_t acc_origin[3];   // Accelerometer XYZ origin
+    int16_t acc_sens[3];     // Accelerometer XYZ sensitivity coefficient
+    int16_t gyro_origin[3];  // Gyroscope XYZ origin
+    int16_t gyro_sens[3];    // Gyroscope XYZ sensitivity coefficient
+    bool valid;
+} joycon_imu_cal_t;
+
 // Called when a BT HID connection opens. Starts the setup FSM for this slot.
 // handle: the HID host connection handle (used for sending output reports).
 // device_id: 0=left, 1=right.
@@ -42,6 +65,18 @@ joycon_controller_type_t joycon_setup_get_type(uint8_t device_id);
 // Returns SPI flash stick calibration (valid after calibration reads complete).
 const joycon_stick_cal_t *joycon_setup_get_stick_cal(uint8_t device_id);
 
+// Returns controller body/button colors (valid after color read).
+const joycon_colors_t *joycon_setup_get_colors(uint8_t device_id);
+
+// Returns stick deadzone parameters (valid after param read).
+const joycon_stick_params_t *joycon_setup_get_stick_params(uint8_t device_id);
+
+// Returns IMU calibration data (valid after cal reads).
+const joycon_imu_cal_t *joycon_setup_get_imu_cal(uint8_t device_id);
+
+// Returns the serial number string (up to 15 chars), or NULL if not read.
+const char *joycon_setup_get_serial(uint8_t device_id);
+
 // Returns battery level 0-4 (or -1 if unknown). Updated with every 0x30 report.
 int joycon_setup_get_battery(uint8_t device_id);
 
@@ -50,3 +85,11 @@ void joycon_setup_update_battery(uint8_t device_id, uint8_t bat_con);
 
 // Returns true when setup is complete and the controller is ready for input.
 bool joycon_setup_is_ready(uint8_t device_id);
+
+// Send an HD Rumble command to the controller.
+// freq_hz: frequency in Hz (40-1253), amp_100: amplitude * 100 (0-100).
+void joycon_setup_send_rumble(uint8_t device_id, uint16_t freq_hz, uint8_t amp_100);
+
+// Set the Home LED pattern on a Right Joy-Con.
+// brightness: 0-15 (0=off, 15=max).
+void joycon_setup_set_home_led(uint8_t device_id, uint8_t brightness);

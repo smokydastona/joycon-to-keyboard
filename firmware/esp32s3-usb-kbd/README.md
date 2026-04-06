@@ -54,6 +54,10 @@ If you wire the *return UART* line (ESP32-S3 TX → ESP32 RX), the helper app ca
 
 The ESP32-S3 also forwards **battery level** events from the ESP32 BT host as `{"evt":"battery","device_id":N,"level":N}` NDJSON events over CDC serial.
 
+The ESP32-S3 also forwards **controller info** events (type, serial, colors, stick params, IMU calibration) as `{"evt":"controller_info",...}` NDJSON events. The helper app receives these to display controller details, color swatches, and calibration data.
+
+The helper app can also send **rumble** and **home LED** commands, which are forwarded via UART to the ESP32 BT host.
+
 ## UART settings
 
 Configured via `menuconfig`:

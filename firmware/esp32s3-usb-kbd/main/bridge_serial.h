@@ -28,3 +28,7 @@ void bridge_serial_handle_ota_rsp(const uint8_t *payload, uint8_t length);
 // Emit a battery level event for the helper app UI.
 // device_id: 0=left, 1=right. level: 0=empty, 1-3=mid, 4=full.
 void bridge_serial_emit_battery(uint8_t device_id, uint8_t level);
+
+// Emit a controller info event (serial, colors, stick params, IMU cal).
+// payload/length: raw UART frame payload starting with 0xF9 marker.
+void bridge_serial_emit_controller_info(const uint8_t *payload, uint8_t length);
