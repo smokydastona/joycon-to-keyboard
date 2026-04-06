@@ -301,6 +301,7 @@ JOYCONS_IMAGE_H = 1024
 JOYCONS_IMAGE_STATE_NAMES = ("none", "left", "right", "both")
 
 M913_IMAGE_STATE_NAMES = ("none", "connected")
+RAZER_IMAGE_STATE_NAMES = ("none", "connected")
 
 KEYBOARD_IMAGE_W = 1536
 KEYBOARD_IMAGE_H = 1024
@@ -650,6 +651,16 @@ class App(tk.Tk):
         self._m913_img_scaled = None  # tk.PhotoImage or ImageTk.PhotoImage
         self._m913_pil_base = None  # PIL Image for Pillow composite path
         self._m913_is_composite = False  # True when using pre-baked composited PNG
+
+        # Razer mouse overlay image (Razer tab)
+        self._razer_overlay_canvas: Optional[tk.Canvas] = None
+        self._razer_img_state: str = "none"
+        self._razer_img_paths: Dict[str, Path] = {}
+        self._razer_img_path: Optional[Path] = None
+        self._razer_img_base: Optional[tk.PhotoImage] = None
+        self._razer_img_scaled = None  # tk.PhotoImage or ImageTk.PhotoImage
+        self._razer_pil_base = None  # PIL Image for Pillow composite path
+        self._razer_is_composite = False  # True when using pre-baked composited PNG
 
         # Keyboard preview canvas (Controller tab — shows mapped PC keys)
         self._kbd_canvas: Optional[tk.Canvas] = None
@@ -1855,6 +1866,101 @@ class App(tk.Tk):
         ox = (w - img_w) / 2.0
         oy = (h - img_h) / 2.0
         c.create_image(ox, oy, image=self._m913_img_scaled, anchor="nw")
+
+    # ------------------------------------------------------------------
+    # Razer overlay image helpers
+    # ------------------------------------------------------------------
+
+    def _find_razer_png_variants(self) -> Dict[str, Path]:
+        """Locate themed mouse.png / mouse-none.png for the Razer tab."""
+        prefer_dark = self._detect_dark_preference()
+        theme = "dark" if prefer_dark else "default"
+        variant_names = {
+            "connected": "mouse.png",
+            "none": "mouse-none.png",
+        }
+        search_roots = _joycons_search_roots(theme)
+        found: Dict[str, Path] = {}
+        is_composite = False
+        for state, file_name in variant_names.items():
+            for root in search_roots:
+                candidate = root / file_name
+                try:
+                    if candidate.exists():
+                        found[state] = candidate
+                        if "backgrounds" in str(candidate):
+                            is_composite = True
+                        break
+                except Exception:
+                    continue
+        self._razer_is_composite = is_composite
+        if "connected" in found and "none" not in found:
+            found["none"] = found["connected"]
+        elif "none" in found and "connected" not in found:
+            found["connected"] = found["none"]
+        return found
+
+    def _razer_set_image_state(self, state: str = "none") -> None:
+        if state not in RAZER_IMAGE_STATE_NAMES:
+            state = "none"
+        path = self._razer_img_paths.get(state)
+        has_image = self._razer_pil_base is not None or self._razer_img_base is not None
+        if path == self._razer_img_path and has_image:
+            self._razer_img_state = state
+            return
+        self._razer_img_state = state
+        self._razer_img_path = path
+        self._razer_img_base = None
+        self._razer_img_scaled = None
+        self._razer_pil_base = None
+        if self._razer_img_path:
+            if _HAS_PIL:
+                try:
+                    self._razer_pil_base = PILImage.open(str(self._razer_img_path)).convert("RGBA")
+                except Exception:
+                    self._razer_pil_base = None
+            if self._razer_pil_base is None:
+                try:
+                    self._razer_img_base = tk.PhotoImage(file=str(self._razer_img_path))
+                except Exception:
+                    self._razer_img_base = None
+        self._razer_redraw_overlay()
+
+    def _razer_redraw_overlay(self) -> None:
+        c = self._razer_overlay_canvas
+        if not c:
+            return
+        c.delete("all")
+        w = max(c.winfo_width(), 1)
+        h = max(c.winfo_height(), 1)
+        if not self._razer_pil_base and not self._razer_img_base:
+            msg = "Mouse image not found" if not self._razer_img_path else "Failed to load mouse image"
+            c.create_text(w // 2, h // 2, text=msg, fill=self._colors.get("muted", "#666"))
+            return
+        if self._razer_pil_base is not None:
+            if getattr(self, "_razer_is_composite", False):
+                photo, _ox, _oy, _ow, _oh = self._scale_composite_to_canvas(
+                    self._razer_pil_base, w, h,
+                )
+            else:
+                photo, _ox, _oy, _ow, _oh = self._composite_bg_overlay(
+                    self._razer_pil_base, w, h,
+                )
+            self._razer_img_scaled = photo
+            c.create_image(0, 0, image=photo, anchor="nw")
+            return
+        base_w = self._razer_img_base.width()
+        base_h = self._razer_img_base.height()
+        factor = max(1, int(math.ceil(base_w / max(1, w))), int(math.ceil(base_h / max(1, h))))
+        try:
+            self._razer_img_scaled = self._razer_img_base.subsample(factor, factor)
+        except Exception:
+            self._razer_img_scaled = self._razer_img_base
+        img_w = self._razer_img_scaled.width()
+        img_h = self._razer_img_scaled.height()
+        ox = (w - img_w) / 2.0
+        oy = (h - img_h) / 2.0
+        c.create_image(ox, oy, image=self._razer_img_scaled, anchor="nw")
 
     # ------------------------------------------------------------------
     # Keyboard preview image helpers (Controller tab)
@@ -3920,6 +4026,20 @@ class App(tk.Tk):
             ttk.Label(dev_frame, text="⚠ hidapi not installed — install with: pip install hidapi",
                       foreground=self._colors.get("danger", "red")).pack(padx=6, pady=2)
 
+        # ── Mouse overlay image ──
+        self._razer_overlay_canvas = tk.Canvas(parent, height=220, highlightthickness=1)
+        self._razer_overlay_canvas.pack(fill=tk.X, padx=6, pady=(3, 3))
+        try:
+            self._razer_overlay_canvas.configure(
+                bg=self._colors.get("panel2", "#f2e8d0"),
+                highlightbackground=self._colors.get("border", "#b09878"),
+            )
+        except Exception:
+            pass
+        self._razer_overlay_canvas.bind("<Configure>", lambda _e: self._razer_redraw_overlay())
+        self._razer_img_paths = self._find_razer_png_variants()
+        self._razer_set_image_state("none")
+
         # ── Device info / battery row ──
         info_frame = ttk.LabelFrame(parent, text="Device Info")
         info_frame.pack(fill=tk.X, padx=6, pady=(3, 3))
@@ -4049,9 +4169,11 @@ class App(tk.Tk):
         if names:
             self._razer_dev_combo.current(0)
             self._razer_status_var.set(f"Found {len(names)} Razer device(s)")
+            self._razer_set_image_state("connected")
         else:
             self._razer_dev_var.set("")
             self._razer_status_var.set("No supported Razer devices found")
+            self._razer_set_image_state("none")
 
     def _razer_on_device_selected(self) -> None:
         """Load saved profile when a device is selected."""
