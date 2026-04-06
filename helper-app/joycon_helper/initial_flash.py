@@ -8,6 +8,8 @@ Supports:
  - Single merged binary  (bootloader + partition table + app at offset 0x0)
  - App-only binary       (flashed at the standard app offset 0x10000)
  - Full 3-file flash     (bootloader + partition table + app at correct offsets)
+ - Flash-back verification after writing (esptool --verify)
+ - Firmware backup (read_flash) before erasing
 
 The board type (ESP32 vs ESP32-S3) is auto-detected from the connected chip.
 """
@@ -20,6 +22,12 @@ import sys
 import threading
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
+
+try:
+    import esptool  # noqa: F401 — availability check at import time
+    _ESPTOOL_AVAILABLE = True
+except ImportError:
+    _ESPTOOL_AVAILABLE = False
 
 log = logging.getLogger("joycon_helper.initial_flash")
 
@@ -47,12 +55,45 @@ _CHIP_MAP: Dict[str, str] = {
     "ESP32": "esp32",
 }
 
+# Default flash size to read back for backup (4 MB — covers most dev boards).
+_DEFAULT_FLASH_SIZE = 0x400000
+
+
+def _require_esptool() -> None:
+    """Raise a friendly error if esptool is not installed."""
+    if not _ESPTOOL_AVAILABLE:
+        raise RuntimeError(
+            "esptool is not installed.\n\n"
+            "Install it with:  pip install esptool>=4.7\n\n"
+            "If you're using the standalone .exe, this feature requires a "
+            "build that bundles esptool."
+        )
+
+
+def _validate_port(port: str) -> None:
+    """Check that *port* looks like a valid serial port that exists."""
+    if not port:
+        raise RuntimeError("No COM port specified.")
+    try:
+        import serial.tools.list_ports
+        available = [p.device for p in serial.tools.list_ports.comports()]
+        if port not in available:
+            raise RuntimeError(
+                f"Port {port} not found.\n\n"
+                f"Available ports: {', '.join(available) or '(none)'}\n\n"
+                "Make sure the board is connected and the USB cable supports data."
+            )
+    except ImportError:
+        pass  # pyserial may not be installed; esptool will validate itself
+
 
 def detect_chip(port: str) -> Optional[str]:
     """Connect to the ROM bootloader and return the chip type.
 
     Returns ``"esp32s3"`` or ``"esp32"`` on success, ``None`` on failure.
     """
+    _require_esptool()
+    _validate_port(port)
     try:
         import esptool
         # Capture esptool's stdout chatter.
@@ -66,6 +107,7 @@ def detect_chip(port: str) -> Optional[str]:
             pass
         finally:
             output = sys.stdout.getvalue()
+            err_output = sys.stderr.getvalue()
             sys.stdout, sys.stderr = old_stdout, old_stderr
 
         for line in output.splitlines():
@@ -73,6 +115,14 @@ def detect_chip(port: str) -> Optional[str]:
                 if chip_str in line:
                     log.info("Detected chip: %s → %s", chip_str, board)
                     return board
+
+        # If we got output but no chip match, log it for debugging.
+        if output.strip():
+            log.warning("chip_id output did not match known chips: %s", output.strip())
+        if err_output.strip():
+            log.warning("chip_id stderr: %s", err_output.strip())
+    except RuntimeError:
+        raise  # re-raise _require_esptool / _validate_port errors
     except Exception:
         log.warning("Chip detection failed", exc_info=True)
     return None
@@ -102,7 +152,7 @@ def flash_firmware(
 
     Raises ``RuntimeError`` on failure.
     """
-    import esptool  # deferred to keep import cost low
+    _require_esptool()
 
     def _status(msg: str) -> None:
         log.info(msg)
@@ -116,11 +166,18 @@ def flash_firmware(
     # Auto-detect chip if needed.
     if not chip:
         _status("Detecting chip…")
+        _validate_port(port)
         chip = detect_chip(port)
         if not chip:
             raise RuntimeError(
-                "Could not detect chip type. Make sure the board is in download mode "
-                "(hold BOOT + press RESET, then release BOOT)."
+                "Could not detect chip type.\n\n"
+                "Checklist:\n"
+                "• Make sure the board is in download mode "
+                "(hold BOOT, press RESET, release BOOT).\n"
+                "• Check the USB cable — some cables are charge-only (no data).\n"
+                "• Make sure no other app is using the COM port "
+                "(close idf.py monitor, PuTTY, etc.).\n"
+                "• Try a different USB port or cable."
             )
     _status(f"Chip: {chip}")
 
@@ -136,8 +193,8 @@ def flash_firmware(
         _run_esptool(args + ["erase_flash"])
         _status("Flash erased.")
 
-    # Build write_flash command.
-    write_args = args + ["write_flash", "--flash_mode", "dio", "--flash_size", "detect"]
+    # Build write_flash command (--verify reads back after writing to confirm).
+    write_args = args + ["write_flash", "--verify", "--flash_mode", "dio", "--flash_size", "detect"]
 
     if merged_bin:
         # Merged binary: everything at offset 0.
@@ -159,11 +216,12 @@ def flash_firmware(
         raise RuntimeError("Invalid file combination")
 
     _run_esptool(write_args)
-    _status("Flash complete! Reset the board to run the new firmware.")
+    _status("Flash complete (verified)! Reset the board to run the new firmware.")
 
 
 def _run_esptool(args: List[str]) -> None:
     """Run esptool.main() with the given args.  Raises RuntimeError on failure."""
+    _require_esptool()
     import esptool
 
     log.info("esptool args: %s", args)
@@ -178,10 +236,10 @@ def _run_esptool(args: List[str]) -> None:
     except SystemExit as e:
         if e.code not in (None, 0):
             err_text = captured_err.getvalue() or captured_out.getvalue()
-            raise RuntimeError(f"esptool failed (exit {e.code}): {err_text.strip()}")
+            raise RuntimeError(_friendly_esptool_error(e.code, err_text.strip()))
     except Exception as e:
         err_text = captured_err.getvalue()
-        raise RuntimeError(f"esptool error: {e}\n{err_text.strip()}")
+        raise RuntimeError(_friendly_esptool_error(None, f"{e}\n{err_text.strip()}"))
     finally:
         output = captured_out.getvalue()
         sys.stdout, sys.stderr = old_stdout, old_stderr
@@ -189,6 +247,77 @@ def _run_esptool(args: List[str]) -> None:
     if output:
         for line in output.strip().splitlines():
             log.debug("esptool: %s", line)
+
+
+def _friendly_esptool_error(code: Any, raw: str) -> str:
+    """Translate common esptool errors into user-friendly messages."""
+    lower = raw.lower()
+    if "failed to connect" in lower or "no serial data" in lower:
+        return (
+            f"Could not connect to the board (esptool exit {code}).\n\n"
+            "• Is the board in download mode? (hold BOOT, press RESET, release BOOT)\n"
+            "• Is another program using this COM port?\n"
+            "• Try a different USB cable or port."
+        )
+    if "permission" in lower or "access is denied" in lower:
+        return (
+            f"Permission denied on COM port (esptool exit {code}).\n\n"
+            "• Close any other app using the port (idf.py monitor, PuTTY, etc.).\n"
+            "• On Linux, you may need to add your user to the 'dialout' group."
+        )
+    if "verification" in lower and "fail" in lower:
+        return (
+            f"Flash verification failed (esptool exit {code}).\n\n"
+            "The data written to flash does not match the source file.\n"
+            "• The flash chip may be damaged or the USB connection unstable.\n"
+            "• Try again with a shorter USB cable."
+        )
+    if "timeout" in lower:
+        return (
+            f"Communication timed out (esptool exit {code}).\n\n"
+            "• The board may have exited download mode — try the BOOT+RESET sequence again.\n"
+            "• USB hub or extension cable may be causing issues."
+        )
+    return f"esptool failed (exit {code}):\n{raw}"
+
+
+def backup_firmware(
+    port: str,
+    output_path: str,
+    *,
+    chip: Optional[str] = None,
+    size: int = _DEFAULT_FLASH_SIZE,
+    progress_cb: Optional[Callable[[str], None]] = None,
+) -> str:
+    """Read the current flash contents and save to *output_path*.
+
+    Returns the path written.  Useful before erasing a board so the user
+    can restore later if something goes wrong.
+
+    ``size`` defaults to 4 MB (0x400000).  Set to 0 to auto-detect.
+    """
+    _require_esptool()
+
+    def _status(msg: str) -> None:
+        log.info(msg)
+        if progress_cb:
+            progress_cb(msg)
+
+    if not chip:
+        _status("Detecting chip for backup…")
+        _validate_port(port)
+        chip = detect_chip(port)
+        if not chip:
+            raise RuntimeError("Could not detect chip for backup.")
+
+    _status(f"Backing up flash ({size // 1024} KB) — this may take a minute…")
+    args = [
+        "--port", port, "--chip", chip, "--baud", "921600",
+        "read_flash", "0x0", hex(size), output_path,
+    ]
+    _run_esptool(args)
+    _status(f"Backup saved to {Path(output_path).name}")
+    return output_path
 
 
 def download_and_flash_initial(
@@ -207,6 +336,7 @@ def download_and_flash_initial(
 
     Raises ``RuntimeError`` on failure.
     """
+    _require_esptool()
     from . import fw_updater
 
     def _status(msg: str) -> None:
@@ -216,11 +346,16 @@ def download_and_flash_initial(
 
     # Detect chip first.
     _status("Detecting chip…")
+    _validate_port(port)
     chip = detect_chip(port)
     if not chip:
         raise RuntimeError(
-            "Could not detect chip. Ensure the board is in download mode "
-            "(hold BOOT + press RESET, then release BOOT)."
+            "Could not detect chip.\n\n"
+            "Checklist:\n"
+            "\u2022 Board must be in download mode (hold BOOT, press RESET, release BOOT).\n"
+            "\u2022 Check USB cable \u2014 some cables are charge-only.\n"
+            "\u2022 Close any app using the COM port.\n"
+            "\u2022 Try a different USB port or cable."
         )
     _status(f"Detected: {chip}")
 
@@ -240,6 +375,9 @@ def download_and_flash_initial(
     tag = release.get("tag_name", "unknown")
     _status(f"Release: {tag}")
 
+    # Fetch SHA-256 checksums for integrity verification.
+    sha256sums = fw_updater._fetch_sha256sums(release)
+
     import tempfile, os
 
     with tempfile.TemporaryDirectory(prefix="bindbnd_") as tmpdir:
@@ -251,7 +389,7 @@ def download_and_flash_initial(
         _status(f"Downloading {app_asset}…")
         app_data = fw_updater.download_firmware(
             app_dl["browser_download_url"],
-            expected_sha256=None,
+            expected_sha256=sha256sums.get(app_asset),
         )
         app_path = os.path.join(tmpdir, app_asset)
         with open(app_path, "wb") as f:
@@ -269,18 +407,25 @@ def download_and_flash_initial(
 
         if bl_asset and pt_asset:
             _status(f"Downloading {bl_name}…")
-            bl_data = fw_updater.download_firmware(bl_asset["browser_download_url"])
+            bl_data = fw_updater.download_firmware(
+                bl_asset["browser_download_url"],
+                expected_sha256=sha256sums.get(bl_name),
+            )
             bl_path = os.path.join(tmpdir, bl_name)
             with open(bl_path, "wb") as f:
                 f.write(bl_data)
 
             _status(f"Downloading {pt_name}…")
-            pt_data = fw_updater.download_firmware(pt_asset["browser_download_url"])
+            pt_data = fw_updater.download_firmware(
+                pt_asset["browser_download_url"],
+                expected_sha256=sha256sums.get(pt_name),
+            )
             pt_path = os.path.join(tmpdir, pt_name)
             with open(pt_path, "wb") as f:
                 f.write(pt_data)
         else:
-            _status("Bootloader/partition-table not in release — app-only flash.")
+            _status("Bootloader/partition-table not in release — app-only flash.\n"
+                    "(The board must have an existing bootloader.)")
 
         # Flash.
         flash_firmware(

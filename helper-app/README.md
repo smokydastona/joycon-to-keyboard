@@ -85,8 +85,10 @@ Current UI tabs:
 
 The app includes a built-in **esptool** integration for flashing brand-new/blank boards:
 
-- **"Download & flash latest"**: auto-detects the connected chip (ESP32 or ESP32-S3), downloads the latest firmware from GitHub Releases, erases flash, and writes everything in one click.
+- **"Download & flash latest"**: auto-detects the connected chip (ESP32 or ESP32-S3), downloads the latest firmware from GitHub Releases, erases flash, and writes everything in one click. All downloads are SHA-256 verified.
 - **"Flash files…"**: pick local `.bin` file(s) — the app auto-classifies bootloader, partition table, and app binary by filename.
+- **"Backup flash…"**: reads the entire flash (4 MB) and saves to a local `.bin` file before you erase — lets you restore if needed.
+- All writes use esptool `--verify` to read back and confirm the data matches.
 - Boards must be in **download mode** (hold BOOT + press RESET, then release BOOT) for initial flashing. Some boards auto-enter download mode via USB.
 - After first-time flash, future updates can use the **OTA** path (no download mode needed).
 

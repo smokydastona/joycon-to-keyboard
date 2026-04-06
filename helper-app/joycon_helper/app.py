@@ -1374,7 +1374,9 @@ class App(tk.Tk):
         self._init_flash_auto_btn = ttk.Button(init_frame, text="Download \u0026 flash latest", command=self._init_flash_auto, width=22)
         self._init_flash_auto_btn.pack(pady=(4, 2))
         self._init_flash_file_btn = ttk.Button(init_frame, text="Flash files\u2026", command=self._init_flash_from_files, width=22)
-        self._init_flash_file_btn.pack(pady=(2, 4))
+        self._init_flash_file_btn.pack(pady=(2, 2))
+        self._init_flash_backup_btn = ttk.Button(init_frame, text="Backup flash\u2026", command=self._init_flash_backup, width=22)
+        self._init_flash_backup_btn.pack(pady=(2, 4))
 
         # ── Bottom status bar (mode indicator — always visible) ──
         status_bar = tk.Frame(self, bg=self._colors.get("panel2", "#e2d0a8"), relief="sunken", bd=1)
@@ -5159,8 +5161,10 @@ class App(tk.Tk):
             "4) In the 'Initial Flash (new boards)' section at the bottom-right:",
             "   \u2022 'Download & flash latest' \u2014 fetches the latest release from GitHub and flashes.",
             "   \u2022 'Flash files\u2026' \u2014 pick local .bin file(s) (bootloader + partition table + app, or app-only).",
+            "   \u2022 'Backup flash\u2026' \u2014 save the current flash contents before erasing (recommended).",
             "5) The chip type is auto-detected. The entire flash is erased before writing.",
-            "6) After flashing, press RESET or re-plug USB. Flash each board separately.",
+            "6) After writing, the firmware is read back and verified automatically.",
+            "7) After flashing, press RESET or re-plug USB. Flash each board separately.",
         ])
 
         # ══════════════════════════════════════════════════════════════
@@ -5432,6 +5436,22 @@ class App(tk.Tk):
             "\u2022 Check wiring: short UART wires, solid GND connection.",
             "\u2022 Make sure you\u2019re not double-powering the ESP32 (USB + VIN both live).",
             "\u2022 Check for EMI (keep UART wires away from motors/power cables).",
+            "",
+            "## Initial flash: 'Could not detect chip'",
+            "\u2022 Is the board in download mode? Hold BOOT, press RESET, release BOOT.",
+            "\u2022 Some boards auto-enter download mode via USB \u2014 try without the button dance.",
+            "\u2022 Check the USB cable \u2014 charge-only cables won\u2019t work (no data lines).",
+            "\u2022 Close any app using the COM port (idf.py monitor, PuTTY, serial terminals).",
+            "\u2022 Try a different USB port on your PC (front vs back panel).",
+            "",
+            "## Initial flash: verification failed",
+            "\u2022 The data written does not match what was read back.",
+            "\u2022 Try a shorter/better USB cable \u2014 long or cheap cables cause data errors.",
+            "\u2022 The board\u2019s flash chip may be damaged \u2014 try a different board.",
+            "",
+            "## Initial flash: 'esptool is not installed'",
+            "\u2022 Run: pip install esptool>=4.7",
+            "\u2022 If using the standalone .exe, ensure the build bundles esptool.",
         ])
 
         # ══════════════════════════════════════════════════════════════
@@ -8787,6 +8807,7 @@ class App(tk.Tk):
 
         self._init_flash_auto_btn.configure(state="disabled")
         self._init_flash_file_btn.configure(state="disabled")
+        self._init_flash_backup_btn.configure(state="disabled")
         self._init_flash_status.set("Starting\u2026")
 
         def _run() -> None:
@@ -8872,6 +8893,7 @@ class App(tk.Tk):
 
         self._init_flash_auto_btn.configure(state="disabled")
         self._init_flash_file_btn.configure(state="disabled")
+        self._init_flash_backup_btn.configure(state="disabled")
         self._init_flash_status.set("Flashing\u2026")
 
         def _run() -> None:
@@ -8898,10 +8920,11 @@ class App(tk.Tk):
     def _on_init_flash_done(self) -> None:
         self._init_flash_auto_btn.configure(state="normal")
         self._init_flash_file_btn.configure(state="normal")
-        self._init_flash_status.set("Flash complete! Reset the board.")
+        self._init_flash_backup_btn.configure(state="normal")
+        self._init_flash_status.set("Flash complete (verified)! Reset the board.")
         messagebox.showinfo(
             "Initial flash complete",
-            "Firmware has been flashed successfully.\n\n"
+            "Firmware has been flashed and verified successfully.\n\n"
             "Reset the board (press RESET or re-plug USB).\n"
             "After booting, it should appear as a USB keyboard + COM port.",
         )
@@ -8909,14 +8932,73 @@ class App(tk.Tk):
     def _on_init_flash_failed(self, error: str) -> None:
         self._init_flash_auto_btn.configure(state="normal")
         self._init_flash_file_btn.configure(state="normal")
+        self._init_flash_backup_btn.configure(state="normal")
         self._init_flash_status.set(f"Flash failed.")
         messagebox.showerror(
             "Initial flash failed",
-            f"{error}\n\n"
-            "Make sure:\n"
-            "\u2022 The board is in download mode (BOOT + RESET)\n"
-            "\u2022 No other app is using the COM port\n"
-            "\u2022 The correct COM port is selected",
+            f"{error}",
+        )
+
+    def _init_flash_backup(self) -> None:
+        """Read and save the current flash contents before erasing."""
+        from tkinter import filedialog
+
+        port = self.port_var.get()
+        if not port:
+            messagebox.showerror("No port", "Select a COM port first.")
+            return
+
+        dest = filedialog.asksaveasfilename(
+            title="Save flash backup",
+            defaultextension=".bin",
+            filetypes=[("Firmware binary", "*.bin"), ("All files", "*.*")],
+            initialfile="flash_backup.bin",
+        )
+        if not dest:
+            return
+
+        confirm = messagebox.askyesno(
+            "Backup Flash",
+            f"Read 4 MB from the flash chip on {port} and save to:\n"
+            f"{dest}\n\n"
+            "The board must be in download mode.\n"
+            "This may take about a minute.\n\n"
+            "Continue?",
+        )
+        if not confirm:
+            return
+
+        self._init_flash_auto_btn.configure(state="disabled")
+        self._init_flash_file_btn.configure(state="disabled")
+        self._init_flash_backup_btn.configure(state="disabled")
+        self._init_flash_status.set("Backing up\u2026")
+
+        def _run() -> None:
+            try:
+                initial_flash.backup_firmware(
+                    port,
+                    dest,
+                    progress_cb=lambda msg: self.after(
+                        0, lambda: self._init_flash_status.set(msg)
+                    ),
+                )
+                self.after(0, lambda: self._on_backup_done(dest))
+            except Exception as e:
+                log.error("Flash backup failed: %s", e, exc_info=True)
+                self.after(0, lambda: self._on_init_flash_failed(str(e)))
+
+        import threading
+        threading.Thread(target=_run, name="init-flash-backup", daemon=True).start()
+
+    def _on_backup_done(self, path: str) -> None:
+        self._init_flash_auto_btn.configure(state="normal")
+        self._init_flash_file_btn.configure(state="normal")
+        self._init_flash_backup_btn.configure(state="normal")
+        self._init_flash_status.set("Backup saved.")
+        messagebox.showinfo(
+            "Backup complete",
+            f"Flash contents saved to:\n{path}\n\n"
+            "You can restore this backup later using 'Flash files\u2026' if needed.",
         )
 
     def _on_fw_update_done(self) -> None:
