@@ -74,7 +74,7 @@ COMPOSITES: dict[str, tuple[Path, Path]] = {
 
 UI_BUNDLE_DIR = REPO_ROOT / ".ui-bundle"
 UI_BUNDLE_GENERATOR = REPO_ROOT / "tools" / "generate_ui_bundle.py"
-KEYBOARD_OVERLAY_GENERATOR = REPO_ROOT / "tools" / "generate_keyboard_overlays.py"
+BUTTON_OVERLAY_GENERATOR = REPO_ROOT / "tools" / "generate_button_overlays.py"
 UI_BUNDLE_INPUTS = [
     UI_BUNDLE_GENERATOR,
     JOYCONS_SRC,
@@ -290,16 +290,16 @@ def main() -> int:
         print(f"[ui-artifacts] bundle generation failed: {e}")
         return 2
 
-    # ── Generate keyboard button overlays ──
-    if KEYBOARD_OVERLAY_GENERATOR.exists():
+    # ── Generate button overlays (all devices) ──
+    if BUTTON_OVERLAY_GENERATOR.exists():
         try:
             subprocess.check_call(
-                [sys.executable, str(KEYBOARD_OVERLAY_GENERATOR)],
+                [sys.executable, str(BUTTON_OVERLAY_GENERATOR)],
                 cwd=str(REPO_ROOT),
             )
-            changed.append("docs/ui/button_overlays/ (keyboard overlays)")
+            changed.append("docs/ui/button_overlays/ (all devices)")
         except Exception as e:
-            print(f"[ui-artifacts] keyboard overlay generation failed: {e}", file=sys.stderr)
+            print(f"[ui-artifacts] button overlay generation failed: {e}", file=sys.stderr)
             return 5
 
     # ── Pre-bake composited backgrounds (overlay fused onto background) ──
