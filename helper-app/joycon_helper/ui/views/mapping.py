@@ -19,7 +19,8 @@ from PyQt6.QtWidgets import (
 )
 
 from ..constants import (
-    KBD_HOTSPOTS, KBD_LABEL_TO_KEYCODE, KEYMAP_HOTSPOTS,
+    INCEDIUS_HOTSPOTS, KBD_HOTSPOTS, KBD_LABEL_TO_KEYCODE,
+    KEYMAP_HOTSPOTS, M913_HOTSPOTS, MOUSE_HOTSPOTS,
     RAINBOW_COLORS, RAINBOW_NAMES, _KEYCODE_TO_KBD_LABEL,
 )
 from ..theme import ThemeEngine
@@ -100,6 +101,7 @@ class MappingView(QWidget):
         # Device selector tabs
         self._device_tabs = QTabWidget()
         self._device_tabs.setTabPosition(QTabWidget.TabPosition.North)
+        self._device_tabs.currentChanged.connect(self._on_device_tab_changed)
 
         # Joy-Con canvas
         self._jc_canvas = HotspotCanvas(self._main.theme)
@@ -108,10 +110,30 @@ class MappingView(QWidget):
         self._jc_canvas.hotspot_hovered.connect(self._on_hotspot_hovered)
         self._device_tabs.addTab(self._jc_canvas, "Joy-Con")
 
-        # Keyboard canvas
+        # M913 Stock canvas
+        self._m913_canvas = HotspotCanvas(self._main.theme)
+        self._m913_canvas.hotspot_clicked.connect(self._on_hotspot_clicked)
+        self._m913_canvas.hotspot_right_clicked.connect(self._on_hotspot_right_click)
+        self._m913_canvas.hotspot_hovered.connect(self._on_hotspot_hovered)
+        self._device_tabs.addTab(self._m913_canvas, "M913")
+
+        # Incedius M913 canvas
+        self._incedius_canvas = HotspotCanvas(self._main.theme)
+        self._incedius_canvas.hotspot_clicked.connect(self._on_hotspot_clicked)
+        self._incedius_canvas.hotspot_right_clicked.connect(self._on_hotspot_right_click)
+        self._incedius_canvas.hotspot_hovered.connect(self._on_hotspot_hovered)
+        self._device_tabs.addTab(self._incedius_canvas, "Incedius")
+
+        # Mouse / Razer canvas
+        self._mouse_canvas = HotspotCanvas(self._main.theme)
+        self._mouse_canvas.hotspot_clicked.connect(self._on_hotspot_clicked)
+        self._mouse_canvas.hotspot_right_clicked.connect(self._on_hotspot_right_click)
+        self._mouse_canvas.hotspot_hovered.connect(self._on_hotspot_hovered)
+        self._device_tabs.addTab(self._mouse_canvas, "Mouse")
+
+        # Keyboard canvas (popup only — not a tab)
         self._kbd_canvas = HotspotCanvas(self._main.theme)
         self._kbd_canvas.hotspot_clicked.connect(self._on_kbd_hotspot_clicked)
-        self._device_tabs.addTab(self._kbd_canvas, "Keyboard Preview")
 
         lay.addWidget(self._device_tabs, 1)
 
@@ -191,6 +213,12 @@ class MappingView(QWidget):
             quick_grid.addWidget(btn, i // 6, i % 6)
         bind_lay.addLayout(quick_grid)
 
+        # Visual keyboard picker
+        kbd_picker_btn = QPushButton("⌨ Keyboard Picker")
+        kbd_picker_btn.setToolTip("Open a full keyboard layout to visually pick a key")
+        kbd_picker_btn.clicked.connect(self._open_kbd_picker)
+        bind_lay.addWidget(kbd_picker_btn)
+
         # Custom keycode entry
         custom_row = QHBoxLayout()
         custom_row.addWidget(QLabel("Keycode:"))
@@ -246,31 +274,78 @@ class MappingView(QWidget):
 
     def _load_hotspots(self) -> None:
         self._jc_canvas.set_hotspots(KEYMAP_HOTSPOTS)
+        self._m913_canvas.set_hotspots(M913_HOTSPOTS)
+        self._incedius_canvas.set_hotspots(INCEDIUS_HOTSPOTS)
+        self._mouse_canvas.set_hotspots(MOUSE_HOTSPOTS)
         self._kbd_canvas.set_hotspots(KBD_HOTSPOTS)
 
-        # Load device background
+        # Joy-Con background
         pm = self._main.assets.load_pixmap("joycons_none.png")
         if pm:
             self._jc_canvas.set_background(pm)
 
+        # M913 background
+        m913_pm = self._main.assets.load_pixmap("m913_none.png")
+        if m913_pm:
+            self._m913_canvas.set_background(m913_pm)
+
+        # Incedius background
+        inc_pm = self._main.assets.load_pixmap("incedius_none.png")
+        if inc_pm:
+            self._incedius_canvas.set_background(inc_pm)
+
+        # Mouse / Razer background
+        mouse_pm = self._main.assets.load_pixmap("razer_none.png")
+        if mouse_pm:
+            self._mouse_canvas.set_background(mouse_pm)
+
+        # Keyboard (popup canvas)
         kbd_pm = self._main.assets.load_pixmap("keyboard.png")
         if kbd_pm:
             self._kbd_canvas.set_background(kbd_pm)
+
+    # -----------------------------------------------------------------
+    # Active device helpers
+    # -----------------------------------------------------------------
+
+    _DEVICE_CANVASES_AND_HOTSPOTS = None  # built lazily
+
+    def _device_list(self):
+        """Return list of (canvas, hotspot_list) in tab order."""
+        return [
+            (self._jc_canvas, KEYMAP_HOTSPOTS),
+            (self._m913_canvas, M913_HOTSPOTS),
+            (self._incedius_canvas, INCEDIUS_HOTSPOTS),
+            (self._mouse_canvas, MOUSE_HOTSPOTS),
+        ]
+
+    def _active_canvas(self) -> HotspotCanvas:
+        idx = self._device_tabs.currentIndex()
+        return self._device_list()[idx][0]
+
+    def _active_hotspots(self):
+        idx = self._device_tabs.currentIndex()
+        return self._device_list()[idx][1]
+
+    def _on_device_tab_changed(self, index: int) -> None:
+        self._selected_hotspot = None
+        self._sel_label.setText("No button selected")
+        self._sel_mapping.setText("Click a button on the canvas to select it")
 
     def _refresh_mapping_visuals(self) -> None:
         profile = self._main.get_profile()
         mappings = profile.get("mappings", {})
 
-        labels: Dict[str, str] = {}
-        for hs_name, _, _ in KEYMAP_HOTSPOTS:
-            key_id = mappings.get(hs_name, {}).get("keycode")
-            is_mapped = key_id is not None
-            self._jc_canvas.update_hotspot_state(hs_name, mapped=is_mapped)
-            if key_id is not None:
-                label = _KEYCODE_TO_KBD_LABEL.get(key_id, f"0x{key_id:02X}")
-                labels[hs_name] = label
-
-        self._jc_canvas.set_mapping_labels(labels)
+        for canvas, hotspots in self._device_list():
+            labels: Dict[str, str] = {}
+            for hs_name, _, _ in hotspots:
+                key_id = mappings.get(hs_name, {}).get("keycode")
+                is_mapped = key_id is not None
+                canvas.update_hotspot_state(hs_name, mapped=is_mapped)
+                if key_id is not None:
+                    label = _KEYCODE_TO_KBD_LABEL.get(key_id, f"0x{key_id:02X}")
+                    labels[hs_name] = label
+            canvas.set_mapping_labels(labels)
         self._refresh_mapping_list()
 
     def _refresh_mapping_list(self) -> None:
@@ -298,7 +373,7 @@ class MappingView(QWidget):
 
     def _on_hotspot_clicked(self, name: str) -> None:
         self._selected_hotspot = name
-        self._jc_canvas.set_selected(name)
+        self._active_canvas().set_selected(name)
         self._sel_label.setText(f"Selected: {name}")
 
         profile = self._main.get_profile()
@@ -440,7 +515,7 @@ class MappingView(QWidget):
         self._refresh_mapping_visuals()
 
     def _ctx_swap(self, name: str) -> None:
-        choices = [n for n, _, _ in KEYMAP_HOTSPOTS if n != name]
+        choices = [n for n, _, _ in self._active_hotspots() if n != name]
         from PyQt6.QtWidgets import QInputDialog
         other, ok = QInputDialog.getItem(
             self, "Swap With", f"Swap {name} with:", choices, 0, False,
@@ -504,14 +579,41 @@ class MappingView(QWidget):
             self.setToolTip("")
 
     def _on_kbd_hotspot_clicked(self, name: str) -> None:
-        # Clicking keyboard hotspot binds it to the selected Joy-Con button
+        # Clicking keyboard hotspot binds it to the selected device button
         if self._selected_hotspot:
             self._bind_key(name)
+        # Close the picker dialog if open
+        dlg = getattr(self, "_kbd_picker_dlg", None)
+        if dlg is not None:
+            dlg.accept()
+
+    def _open_kbd_picker(self) -> None:
+        """Open a popup dialog with the full keyboard canvas for key selection."""
+        if not self._selected_hotspot:
+            QMessageBox.information(
+                self, "No Selection",
+                "Select a controller / device button first, then open the keyboard picker.",
+            )
+            return
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Keyboard Picker — binding {self._selected_hotspot}")
+        dlg.setMinimumSize(900, 500)
+        lay = QVBoxLayout(dlg)
+        lay.setContentsMargins(8, 8, 8, 8)
+        info = QLabel(f"Click a key to bind it to {self._selected_hotspot}")
+        info.setStyleSheet(f"color: {self._main.theme.color('text_secondary')};")
+        lay.addWidget(info)
+        lay.addWidget(self._kbd_canvas, 1)
+        self._kbd_picker_dlg = dlg
+        dlg.exec()
+        # Re-parent the canvas back (QDialog takes ownership during exec)
+        self._kbd_picker_dlg = None
 
     def _on_color_changed(self, color_name: str) -> None:
         self._overlay_color = color_name
         hex_color = RAINBOW_COLORS.get(color_name, "#a03cc8")
-        self._jc_canvas.set_overlay_color(hex_color)
+        for canvas, _ in self._device_list():
+            canvas.set_overlay_color(hex_color)
 
     def _on_learn_toggled(self, checked: bool) -> None:
         self._learn_mode = checked
@@ -522,11 +624,12 @@ class MappingView(QWidget):
 
     def _on_search(self, text: str) -> None:
         self._search_text = text.strip().lower()
-        self._jc_canvas.clear_search()
+        canvas = self._active_canvas()
+        canvas.clear_search()
         if self._search_text:
-            for name, _, _ in KEYMAP_HOTSPOTS:
+            for name, _, _ in self._active_hotspots():
                 match = self._search_text in name.lower()
-                self._jc_canvas.update_hotspot_state(name, search_match=match)
+                canvas.update_hotspot_state(name, search_match=match)
 
     def _on_mapping_list_clicked(self, item: QListWidgetItem) -> None:
         name = item.data(Qt.ItemDataRole.UserRole)
@@ -653,5 +756,6 @@ class MappingView(QWidget):
         self._refresh_mapping_visuals()
 
     def apply_theme(self, theme: ThemeEngine) -> None:
-        self._jc_canvas.apply_theme(theme)
+        for canvas, _ in self._device_list():
+            canvas.apply_theme(theme)
         self._kbd_canvas.apply_theme(theme)

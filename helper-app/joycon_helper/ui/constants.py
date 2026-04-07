@@ -20,6 +20,11 @@ KEYBOARD_IMAGE_H = 1024
 M913_IMAGE_STATE_NAMES = ("none", "connected")
 RAZER_IMAGE_STATE_NAMES = ("none", "connected")
 
+M913_IMAGE_W = 1536
+M913_IMAGE_H = 1024
+MOUSE_IMAGE_W = 1536
+MOUSE_IMAGE_H = 1024
+
 # ---------------------------------------------------------------------------
 # Rainbow overlay colours — matches generate_button_overlays.py output
 # ---------------------------------------------------------------------------
@@ -180,6 +185,68 @@ KBD_HOTSPOTS: List[Tuple[str, float, float]] = [
     # ── Numpad bottom ──
     ("KP0",  1247 / KEYBOARD_IMAGE_W, 590 / KEYBOARD_IMAGE_H),
     ("KP.",  1337 / KEYBOARD_IMAGE_W, 590 / KEYBOARD_IMAGE_H),
+]
+
+# ---------------------------------------------------------------------------
+# M913 Stock hotspot positions (normalised over m913.png, 16 buttons)
+# ---------------------------------------------------------------------------
+M913_HOTSPOTS: List[Tuple[str, float, float]] = [
+    # Main buttons
+    ("left",    670 / M913_IMAGE_W,  250 / M913_IMAGE_H),
+    ("right",   890 / M913_IMAGE_W,  250 / M913_IMAGE_H),
+    ("middle",  785 / M913_IMAGE_W,  225 / M913_IMAGE_H),
+    ("fire",    700 / M913_IMAGE_W,  360 / M913_IMAGE_H),
+    # Side buttons — 4 rows × 3 cols
+    ("side1",   530 / M913_IMAGE_W,  380 / M913_IMAGE_H),
+    ("side2",   575 / M913_IMAGE_W,  380 / M913_IMAGE_H),
+    ("side3",   620 / M913_IMAGE_W,  380 / M913_IMAGE_H),
+    ("side4",   530 / M913_IMAGE_W,  435 / M913_IMAGE_H),
+    ("side5",   575 / M913_IMAGE_W,  435 / M913_IMAGE_H),
+    ("side6",   620 / M913_IMAGE_W,  435 / M913_IMAGE_H),
+    ("side7",   530 / M913_IMAGE_W,  490 / M913_IMAGE_H),
+    ("side8",   575 / M913_IMAGE_W,  490 / M913_IMAGE_H),
+    ("side9",   620 / M913_IMAGE_W,  490 / M913_IMAGE_H),
+    ("side10",  530 / M913_IMAGE_W,  540 / M913_IMAGE_H),
+    ("side11",  575 / M913_IMAGE_W,  540 / M913_IMAGE_H),
+    ("side12",  620 / M913_IMAGE_W,  540 / M913_IMAGE_H),
+]
+
+# ---------------------------------------------------------------------------
+# Incedius M913 hotspot positions (same physical mouse, IncediusMod labels)
+# ---------------------------------------------------------------------------
+INCEDIUS_HOTSPOTS: List[Tuple[str, float, float]] = [
+    # Main buttons (unchanged)
+    ("left",    670 / M913_IMAGE_W,  250 / M913_IMAGE_H),
+    ("right",   890 / M913_IMAGE_W,  250 / M913_IMAGE_H),
+    ("middle",  785 / M913_IMAGE_W,  225 / M913_IMAGE_H),
+    ("fire",    700 / M913_IMAGE_W,  360 / M913_IMAGE_H),
+    # Thumb buttons (side1-6 → Thumb 1-6)
+    ("Thumb1",  530 / M913_IMAGE_W,  380 / M913_IMAGE_H),
+    ("Thumb2",  575 / M913_IMAGE_W,  380 / M913_IMAGE_H),
+    ("Thumb3",  620 / M913_IMAGE_W,  380 / M913_IMAGE_H),
+    ("Thumb4",  530 / M913_IMAGE_W,  435 / M913_IMAGE_H),
+    ("Thumb5",  575 / M913_IMAGE_W,  435 / M913_IMAGE_H),
+    ("Thumb6",  620 / M913_IMAGE_W,  435 / M913_IMAGE_H),
+    # Finger buttons (side7-12 → Finger 1-6)
+    ("Finger1", 530 / M913_IMAGE_W,  490 / M913_IMAGE_H),
+    ("Finger2", 575 / M913_IMAGE_W,  490 / M913_IMAGE_H),
+    ("Finger3", 620 / M913_IMAGE_W,  490 / M913_IMAGE_H),
+    ("Finger4", 530 / M913_IMAGE_W,  540 / M913_IMAGE_H),
+    ("Finger5", 575 / M913_IMAGE_W,  540 / M913_IMAGE_H),
+    ("Finger6", 620 / M913_IMAGE_W,  540 / M913_IMAGE_H),
+]
+
+# ---------------------------------------------------------------------------
+# Generic Mouse / Razer hotspot positions (normalised, 7 buttons)
+# ---------------------------------------------------------------------------
+MOUSE_HOTSPOTS: List[Tuple[str, float, float]] = [
+    ("left",        700 / MOUSE_IMAGE_W,  310 / MOUSE_IMAGE_H),
+    ("right",       850 / MOUSE_IMAGE_W,  310 / MOUSE_IMAGE_H),
+    ("middle",      775 / MOUSE_IMAGE_W,  260 / MOUSE_IMAGE_H),
+    ("scroll_up",   775 / MOUSE_IMAGE_W,  220 / MOUSE_IMAGE_H),
+    ("scroll_down", 775 / MOUSE_IMAGE_W,  310 / MOUSE_IMAGE_H),
+    ("back",        645 / MOUSE_IMAGE_W,  430 / MOUSE_IMAGE_H),
+    ("forward",     645 / MOUSE_IMAGE_W,  380 / MOUSE_IMAGE_H),
 ]
 
 # ---------------------------------------------------------------------------
