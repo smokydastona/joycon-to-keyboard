@@ -341,6 +341,7 @@ class MainWindow(QMainWindow):
         self._connect_btn.style().polish(self._connect_btn)
         self._status_bar.set_connected(self._port_combo.currentData() or "")
         self._log_line("[connected]")
+        self._notify_views("connection_changed", connected=True)
 
     def _on_serial_disconnected(self) -> None:
         self._connect_btn.setText("Connect")
@@ -350,6 +351,7 @@ class MainWindow(QMainWindow):
         self._connect_btn.style().polish(self._connect_btn)
         self._status_bar.set_disconnected()
         self._log_line("[disconnected]")
+        self._notify_views("connection_changed", connected=False)
 
     def _on_connection_error(self, msg: str) -> None:
         QMessageBox.critical(self, "Connection Error", msg)
@@ -569,6 +571,10 @@ class MainWindow(QMainWindow):
     # -----------------------------------------------------------------
 
     def _on_update_result(self, has_update: bool, info: dict) -> None:
+        # Called from background thread — marshal to main thread
+        QTimer.singleShot(0, lambda: self._apply_update_result(has_update, info))
+
+    def _apply_update_result(self, has_update: bool, info: dict) -> None:
         if has_update:
             self._update_btn.setVisible(True)
             self._update_info = info

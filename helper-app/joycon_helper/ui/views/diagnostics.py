@@ -299,7 +299,7 @@ class DiagnosticsView(QWidget):
 
         def _check():
             try:
-                from ..fw_updater import FwUpdater
+                from ...fw_updater import FwUpdater
                 updater = FwUpdater()
                 info = updater.check_versions()
                 from PyQt6.QtCore import QMetaObject, Q_ARG, Qt as QtNs

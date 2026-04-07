@@ -193,6 +193,18 @@ class DashboardView(QScrollArea):
     def profile_updated(self, profile: dict) -> None:
         pass
 
+    def connection_changed(self, connected: bool) -> None:
+        c = self._main.theme.theme["colors"]
+        if connected:
+            self._conn_status.setText("Connected")
+            self._conn_status.setStyleSheet(f"color: {c['success']};")
+            port = self._main._port_combo.currentData() or ""
+            self._conn_port.setText(port)
+        else:
+            self._conn_status.setText("Disconnected")
+            self._conn_status.setStyleSheet(f"color: {c['danger']};")
+            self._conn_port.setText("No port selected")
+
     def apply_theme(self, theme: ThemeEngine) -> None:
         c = theme.theme["colors"]
         self._conn_status.setStyleSheet("")

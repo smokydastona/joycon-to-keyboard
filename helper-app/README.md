@@ -39,49 +39,15 @@ The Razer tab communicates directly with Razer Basilisk X HyperSpeed mice (and o
 - Profile format versioned (v2) for forward compatibility
 - Requires `hidapi` (`pip install hidapi`)
 
-Current UI tabs:
+Current UI sections (sidebar navigation, PyQt6):
 
-- **Loadout**: JSON editor, load/save/validate; loadout rename/duplicate/reset-to-defaults buttons; **slot quick-select** (4 slot buttons with names for fast switching) and **safe mode** recovery button
-- **Tricks**: trick list + step editor, optional record mode from incoming `mapped_key` events, and a small heist plan helper
-- **Stick**: stores deadzone/curve settings into the loadout JSON (not applied by firmware yet unless analog data exists)
-- **Share**: offline-only export/import of a compressed "loadout code" string
-- **Overlay**: a safe always-on-top status window (no hooking/injection)
-- **Controller**: 3-panel "Heist Table" layout — **Heist Library** (left, 4 loadout cards for one-click slot switching + Import/Export), **Controller Canvas** (center, dominant device diagram with hotspots), and **Heist Tools** (right, context-sensitive panel with current mapping + action buttons + Disguises mask quick-switch). Set target name substring and trigger BT scan/connect via the device (requires return UART wiring); includes a keymap editor with a **dominant device canvas** (the Joy-Con diagram fills the center panel) and **popup panels** for heist planning, masks, chords, and keyboard preview — opened via compact toolbar buttons:
-  - **Unified click-to-steal**: click a controller hotspot to instantly enter case mode (if unbound) or steal mode (if bound) — press a key and you're done
-  - **Right-click context menu**: Case, Steal, Reset to passthrough, Clear steal, or Disable on any hotspot
-  - **Live input visualization**: hotspots light up green and pulse when the corresponding controller button is physically pressed
-  - **Conflict detection + auto-fix**: hotspots that produce the same output key are highlighted red; a one-click auto-fix button resolves duplicates
-  - **Color-coded hotspots**: green = active, red = conflict, blue = selected; custom mappings use the user's chosen rainbow colour (default violet)
-  - **Rainbow colour picker**: 🎨 dropdown in the toolbar — choose from red, orange, yellow, green, blue, indigo, or violet for hotspot highlights
-  - **Mask system**: select Base or Mask 1–4 to edit overlay heist plans; masks are activated by holding/toggling a controller button
-  - **Tap-hold heist plan**: a single button can produce different actions for quick tap vs long hold
-  - **Double-tap heist plan**: single-tap sends one key, quick double-tap sends another (configurable timeout)
-  - **Chording**: define multi-button combos that trigger a single action when pressed simultaneously
-  - Case mode, clear steal, and reset-to-passthrough
-  - **Undo / Redo** (Ctrl+Z / Ctrl+Y): up to 50 levels of loadout change history
-  - **Guided Setup wizard**: step-by-step walkthrough that auto-steals WASD/Space/Shift/Ctrl by pressing controller buttons
-  - **Calibration wizard**: 3-step guided stick calibration (center, sweep edges, save/clear) with quick deadzone/curve adjustment
-  - **Intent-based heist plan**: right-click → "What should this button do?" with 14 common game actions
-  - **Quick Job**: auto-applies sensible WASD heist plans when a controller connects and loadout is empty
-  - **Smart Search**: filter hotspots by name, output, or heist plan type with highlighted matches on the diagram
-  - **Practice Run**: temporary playground mode — try changes without saving, then keep or discard
-  - **Ghost labels**: hover over the diagram to see faint tooltips with hotspot name and current mapping
-  - **Hover glow**: a hand-drawn ink ring highlights hotspots as you move the mouse over the diagram
-  - **Steal overlay + ink stamp**: a floating card shows during press-to-steal, and an expanding ring with STOLEN confirms a successful steal
-  - **Visual mask stack**: badges below the mask selector showing each mask's name, mode, and heist plan count
-  - **Mask tab bar**: visible sketch-style tabs below the controller diagram for quick mask switching
-  - **Inline Trick Builder**: the Heist Tools panel includes a toggleable trick editor — pick or create tricks, add/remove key and delay steps, and assign directly to the selected hotspot without leaving the Controller tab
-  - **Explain heist plan**: right-click → full input→output chain dialog showing conflicts and mask overrides
-  - **Lock critical inputs**: prevent accidental unstealing with a right-click lock; locked buttons require confirmation
-  - **Restore last config**: revert to the last loadout successfully written to the device if something goes wrong
-  - **Feedback sounds**: optional Windows beep on steal/unsteal/undo for tactile feedback
-  - **Adaptive UI**: toggle between Simple and Advanced modes; Simple hides masks, chords, tricks tabs
-  - **Mode indicator**: always-visible status bar showing slot, mask, mode, practice run, and undo depth
-- **Input Test**: live event log showing controller button presses/releases with timestamps, a summary of currently active keys, a **visual event timeline** showing the last 5 seconds of input events as colored marks, and an optional **latency profiling** display (toggle checkbox) showing real-time redraw and input processing stats
-- **Status bar diagnostics**: BT signal strength (RSSI with signal bars), round-trip latency (auto-pinged every 10 s), battery level
-- **Community presets**: 5 built-in profiles (FPS/Shooter, Platformer, RPG/Action, Minecraft, Racing) for one-click setup
-- **Mouse** (M913 Impact Elite): configure Redragon M913 mice over USB HID — the tab shows a **dominant M913 device canvas** (fills available space for easy button selection) with controls in **popup panels**: button remapping (16 buttons), DPI (5 slots, 100–16000, auto-clamped to valid hardware steps), LED modes (steady/breathe/rainbow/wave/reactive/random/alternating/flashing + color picker), polling rate — each opened via toolbar buttons. Supports **multiple mice** simultaneously with independent loadouts. **Wireless support**: detects both wired (PID 0xFA07) and wireless dongle (PID 0xFA08). **Snipe button**: assign "snipe" to any button for temporary DPI switch while held. **Hardware macros**: 15 macro slots (up to 67 key events each) via the Macros popup — visual sequence editor for press/release events. **INI import/export**: compatible with m913-ctl INI format for sharing configs. **Diagnostics popup**: raw HID packet viewer for debugging device communication. **Retry logic**: each packet retried up to 2× with ACK verification. **Sister loadouts** link M913 configs to Joy-Con slots so mouse and controller settings travel together. All settings are written to the mouse's onboard memory (anti-cheat safe). **Layout mode** selector lets users switch between "Stock M913" (Side 1–12) and "IncediusMod" (Thumb 1–6 / Finger 1–6) button labels for the [Incedius M913 physical mod](https://www.printables.com/model/1191307-red-dragon-m913-mod). Because each IncediusMod rewiring is unique, the **"Edit Heist Plan…"** button lets users reassign which M913 side button corresponds to each Thumb/Finger position (saved per-loadout, with duplicate detection). The tab displays a sketchbook-ink M913 overlay image that switches between connected and disconnected states (matching the Joy-Con overlay style). Requires `hidapi` (`pip install hidapi`).
-- **Razer** (Basilisk X HyperSpeed): configure Razer mice over USB HID Feature Reports — **dominant device canvas** with compact toolbar and **popup panels** for DPI stages (5 levels, X/Y independent, clamped to per-model max), button remapping (including F13–F24 keys), **hypershift layer** (separate binding per button on the hypershift layer), polling rate, idle timeout, and loadouts. **CRC validation**: response packets verified via XOR checksum + transaction ID. Profile format versioned (v2) for forward compatibility.
+- **Profiles** (sidebar: **Profiles**): JSON editor, load/save/validate; profile rename/duplicate/reset-to-defaults buttons; **slot quick-select** (4 slot buttons with names for fast switching); **community presets** (5 genre categories: FPS/Shooter, Racing, Platformer, RPG, Strategy); **share codes** (offline-only export/import of compressed profile code strings); **app switcher** (auto-switch profile by foreground window); undo/redo (up to 50 levels)
+- **Macros & Stick** (sidebar: **Macros & Stick**): macro list + step editor with JSON step editing, record mode from incoming `mapped_key` events; layers (mask configuration); chords (multi-button combos); stick config (deadzone inner/outer, response curve type, sensitivity, SOCD resolution mode) with live curve preview — all saved to the active profile
+- **Mapping** (sidebar: **Mapping**): **Controller Canvas** (center, Joy-Con diagram with hotspots) and **Binding Panel** (right, context-sensitive panel with current mapping + quick-bind grid + custom keycode entry). **Keyboard Preview** canvas tab for visual binding. **Learn Mode** captures controller button presses. **Search** filters hotspots by name. **Right-click context menu**: Case, Unbind, Disable, Copy/Paste Binding, Swap With…, Lock/Unlock, Toggle Turbo, Info. **Color-coded hotspots**: green = mapped, blue = selected. **Rainbow colour picker**: dropdown for hotspot highlight colours.
+- **Dashboard** (sidebar: **Dashboard**): connection overview cards (serial port, Bluetooth status, battery level, latency), quick action buttons (ping, read profile, upload profile, toggle overlay), device preview image. Connection status updates live on connect/disconnect.
+- **Diagnostics** (sidebar: **Diagnostics**): live input test event log showing controller button presses/releases with timestamps, a summary of currently active keys, a **visual event timeline** showing the last 5 seconds of input events as colored marks, and an optional **latency profiling** display (toggle checkbox) showing real-time redraw and input processing stats. Controller information (type, serial, deadzone, range ratio, body/button color). **Firmware OTA** update with progress bar. **Initial flash** for new boards (download & flash latest, flash from files, backup flash).
+- **Devices — M913** (sidebar: **Devices**, M913 tab): configure Redragon M913 mice over USB HID — device scanner/selector, button remapping (16 buttons), DPI (5 stages, 100–16000, with enable checkboxes), LED modes (off/steady/respiration/rainbow/wave/reactive/ripple/starlight/breath_single + color picker + brightness 0–255 + speed), polling rate (125/250/500/1000 Hz), layout mode selector (Stock M913 / IncediusMod with Edit Map dialog). Supports **multiple mice** simultaneously with independent profiles. **Wireless support**: detects both wired (PID 0xFA07) and wireless dongle (PID 0xFA08). **Snipe button**: assign "snipe" to any button for temporary DPI switch while held. **Hardware macros**: 15 macro slots (up to 67 key events each) via the Macro Builder popup — visual sequence editor for press/release events. **INI import/export**: compatible with m913-ctl INI format for sharing configs. **Diagnostics popup**: raw HID packet viewer for debugging device communication. **Sister slot** links M913 profiles to Joy-Con slots so mouse and controller settings travel together.
+- **Devices — Razer** (sidebar: **Devices**, Razer tab): configure Razer Basilisk X HyperSpeed mice (and other supported Razer mice) over USB HID Feature Reports — device scanner/selector, read state button with battery/FW/serial info, DPI stages (5 levels, X/Y independent with active stage radio selector), button remapping (7 buttons including F13–F24 keys), **hypershift layer** (separate binding per button), polling rate (125/500/1000 Hz), idle timeout (60–900 sec), and profile CRUD. **CRC validation**: response packets verified via XOR checksum + transaction ID. **Sister slot** links Razer profiles to Joy-Con slots.
 - **Help**: comprehensive setup & usage guide with 14 collapsible sections — project overview, hardware requirements, wiring diagrams, pinout image (scrollable `pinouts.png`), firmware installation walkthrough, first end-to-end test procedure, app usage guide (all tabs), default key mapping reference, serial protocol summary, mouse configuration guide, OTA firmware updates, troubleshooting, app install/update instructions, and a quick reference card. Includes a search bar that filters sections by keyword.
 
 ### First-time firmware flashing (no ESP-IDF needed)
@@ -95,11 +61,9 @@ The app includes a built-in **esptool** integration for flashing brand-new/blank
 - Boards must be in **download mode** (hold BOOT + press RESET, then release BOOT) for initial flashing. Some boards auto-enter download mode via USB.
 - After first-time flash, future updates can use the **OTA** path (no download mode needed).
 
-The Controller tab keymap artwork switches between four Joy-Con states based on BT status: disconnected (`joycons-none.png`), left only, right only, and both connected. The Mouse tab displays an M913 overlay that switches between connected (`m913.png`) and disconnected (`m913-none.png`) states based on device scan results.
+The Mapping view's Joy-Con canvas switches between four states based on BT status: disconnected (`joycons-none.png`), left only, right only, and both connected.
 
-The app displays a **full-window background image** (`background.png` / `background-dark.png`) behind all content, automatically selected based on the active theme (light/dark). The image scales to cover the window on resize using Pillow.
-
-The UI uses heist/thief themed terminology throughout: Loadouts (profiles), Masks (layers), Tricks (macros), Heist Plans (mappings), Steal (bind), Case (learn), Execute (apply), Practice Run (sandbox), and Quick Job (defaults).
+The UI is built with **PyQt6** using a sidebar navigation layout with 7 sections (Dashboard, Mapping, Macros & Stick, Profiles, Devices, Diagnostics, Help). Theme toggle (light/dark) is available in the toolbar.
 
 ## UI pack
 

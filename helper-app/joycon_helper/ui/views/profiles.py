@@ -12,8 +12,8 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QCheckBox, QComboBox, QFileDialog, QGroupBox, QHBoxLayout, QLabel,
-    QLineEdit, QListWidget, QListWidgetItem, QMessageBox,
+    QCheckBox, QComboBox, QFileDialog, QGroupBox, QHBoxLayout, QInputDialog,
+    QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox,
     QPushButton, QScrollArea, QTextEdit, QVBoxLayout, QWidget,
 )
 
@@ -125,7 +125,43 @@ class ProfilesView(QWidget):
         btn_row3.addWidget(read_btn)
         actions_lay.addLayout(btn_row3)
 
+        btn_row4 = QHBoxLayout()
+        rename_btn = QPushButton("Rename")
+        rename_btn.clicked.connect(self._rename_profile)
+        btn_row4.addWidget(rename_btn)
+
+        reset_btn = QPushButton("Reset to Default")
+        reset_btn.setProperty("danger", True)
+        reset_btn.clicked.connect(self._reset_to_default)
+        btn_row4.addWidget(reset_btn)
+        actions_lay.addLayout(btn_row4)
+
         left.addWidget(actions_group)
+
+        # Community presets
+        preset_group = QGroupBox("Community Presets")
+        preset_lay = QVBoxLayout(preset_group)
+
+        preset_info = QLabel("Load a pre-built profile optimized for a game genre.")
+        preset_info.setWordWrap(True)
+        preset_info.setStyleSheet(f"color: {self._main.theme.color('text_secondary')};")
+        preset_lay.addWidget(preset_info)
+
+        self._preset_combo = QComboBox()
+        self._preset_combo.addItems([
+            "FPS / Shooter",
+            "Racing / Driving",
+            "Platformer / Action",
+            "RPG / MMO",
+            "Strategy / RTS",
+        ])
+        preset_lay.addWidget(self._preset_combo)
+
+        load_preset_btn = QPushButton("Load Preset")
+        load_preset_btn.clicked.connect(self._load_preset)
+        preset_lay.addWidget(load_preset_btn)
+
+        left.addWidget(preset_group)
 
         # Undo/Redo
         undo_group = QGroupBox("History")
@@ -313,6 +349,81 @@ class ProfilesView(QWidget):
 
     def _read_profile(self) -> None:
         self._main._cmd_read_profile()
+
+    def _rename_profile(self) -> None:
+        profile = self._main.get_profile()
+        old_name = profile.get("name", "")
+        new_name, ok = QInputDialog.getText(
+            self, "Rename Profile", "New name:", text=old_name,
+        )
+        if ok and new_name.strip():
+            profile["name"] = new_name.strip()
+            self._main.set_profile(profile)
+            self._refresh_editor()
+
+    def _reset_to_default(self) -> None:
+        reply = QMessageBox.question(
+            self, "Reset to Default",
+            "Reset the current profile to factory defaults?\nThis cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            self._push_undo()
+            self._main.set_profile(_default_profile())
+            self._refresh_editor()
+
+    def _load_preset(self) -> None:
+        genre = self._preset_combo.currentText()
+        preset = _default_profile()
+        preset["name"] = genre
+
+        # Genre-specific defaults
+        if "FPS" in genre:
+            preset["mappings"] = {
+                "L_Stick_Press": {"keycode": 0x1A, "modifier": 0},  # W
+                "R_Stick_Press": {"keycode": 0x16, "modifier": 0},  # S
+                "ZL": {"keycode": 0x00, "modifier": 0x02},          # LShift (sprint)
+                "ZR": {"keycode": 0x00, "modifier": 0x01},          # LCtrl (crouch)
+                "A": {"keycode": 0x2C, "modifier": 0},              # Space (jump)
+                "B": {"keycode": 0x15, "modifier": 0},              # R (reload)
+                "X": {"keycode": 0x08, "modifier": 0},              # E (interact)
+                "Y": {"keycode": 0x0A, "modifier": 0},              # G (grenade)
+            }
+        elif "Racing" in genre:
+            preset["mappings"] = {
+                "ZR": {"keycode": 0x1A, "modifier": 0},   # W (accel)
+                "ZL": {"keycode": 0x16, "modifier": 0},   # S (brake)
+                "L_Stick_Press": {"keycode": 0x04, "modifier": 0},  # A (left)
+                "R_Stick_Press": {"keycode": 0x07, "modifier": 0},  # D (right)
+                "A": {"keycode": 0x11, "modifier": 0},    # N (nitro)
+                "X": {"keycode": 0x2C, "modifier": 0},    # Space (handbrake)
+            }
+        elif "Platformer" in genre:
+            preset["mappings"] = {
+                "A": {"keycode": 0x2C, "modifier": 0},    # Space (jump)
+                "B": {"keycode": 0x1B, "modifier": 0},    # X (attack)
+                "X": {"keycode": 0x1D, "modifier": 0},    # Z (special)
+                "Y": {"keycode": 0x06, "modifier": 0},    # C (interact)
+            }
+        elif "RPG" in genre:
+            preset["mappings"] = {
+                "A": {"keycode": 0x2C, "modifier": 0},    # Space (confirm)
+                "B": {"keycode": 0x29, "modifier": 0},    # Esc (cancel)
+                "X": {"keycode": 0x0C, "modifier": 0},    # I (inventory)
+                "Y": {"keycode": 0x10, "modifier": 0},    # M (map)
+                "L": {"keycode": 0x14, "modifier": 0},    # Q (prev)
+                "R": {"keycode": 0x08, "modifier": 0},    # E (next)
+            }
+        elif "Strategy" in genre:
+            preset["mappings"] = {
+                "A": {"keycode": 0x2C, "modifier": 0},    # Space (pause)
+                "L": {"keycode": 0x2B, "modifier": 0},    # Tab (cycle)
+                "ZL": {"keycode": 0x00, "modifier": 0x01},  # LCtrl (group)
+            }
+
+        self._push_undo()
+        self._main.set_profile(preset)
+        self._refresh_editor()
 
     def _on_name_changed(self, text: str) -> None:
         profile = self._main.get_profile()

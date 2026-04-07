@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from PyQt6.QtCore import Qt
@@ -365,8 +366,16 @@ class MacrosView(QWidget):
     def _toggle_record(self, checked: bool) -> None:
         if checked:
             self._record_btn.setText("⏹ Stop Recording")
+            self._recording_steps: List[Dict[str, Any]] = []
+            self._recording_start = None
         else:
             self._record_btn.setText("🔴 Record")
+            # Put recorded steps into the editor
+            if hasattr(self, "_recording_steps") and self._recording_steps:
+                self._macro_steps.setText(
+                    json.dumps(self._recording_steps, indent=2)
+                )
+            self._recording_steps = []
 
     def _refresh_macro_list(self) -> None:
         self._macro_list.clear()
@@ -451,13 +460,41 @@ class MacrosView(QWidget):
             deadzone=self._dz_inner.value(),
             sensitivity=self._sensitivity.value(),
         )
+        # Save stick config to profile
+        profile = self._main.get_profile()
+        profile["stick"] = {
+            "deadzone_inner": self._dz_inner.value(),
+            "deadzone_outer": self._dz_outer.value(),
+            "sensitivity": self._sensitivity.value(),
+            "curve_type": self._curve_type.currentText(),
+            "socd_mode": self._socd_mode.currentText(),
+        }
+        self._main.set_profile(profile)
 
     # -----------------------------------------------------------------
     # Event handlers
     # -----------------------------------------------------------------
 
     def device_event(self, obj: dict) -> None:
-        pass
+        # Capture keystrokes during macro recording
+        if (
+            self._record_btn.isChecked()
+            and hasattr(self, "_recording_steps")
+            and obj.get("evt") == "mapped_key"
+        ):
+            key_id = obj.get("key_id")
+            pressed = obj.get("pressed")
+            if key_id is not None:
+                now = time.monotonic()
+                delay_ms = 0
+                if self._recording_start is not None:
+                    delay_ms = int((now - self._recording_start) * 1000)
+                self._recording_start = now
+                self._recording_steps.append({
+                    "keycode": key_id,
+                    "press": bool(pressed),
+                    "delay_ms": delay_ms,
+                })
 
     def profile_loaded(self, slot: int, profile: dict) -> None:
         self._refresh_macro_list()

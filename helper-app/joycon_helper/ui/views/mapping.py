@@ -14,7 +14,7 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QButtonGroup, QComboBox, QDialog, QDialogButtonBox, QGridLayout,
     QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListWidget,
-    QListWidgetItem, QMessageBox, QPushButton, QRadioButton,
+    QListWidgetItem, QMenu, QMessageBox, QPushButton, QRadioButton,
     QScrollArea, QSizePolicy, QSplitter, QTabWidget, QVBoxLayout, QWidget,
 )
 
@@ -48,6 +48,8 @@ class MappingView(QWidget):
         self._learn_mode = False
         self._overlay_color = "violet"
         self._search_text = ""
+        self._clipboard_binding: Optional[Dict[str, Any]] = None
+        self._locked_hotspots: Set[str] = set()
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -314,6 +316,187 @@ class MappingView(QWidget):
     def _on_hotspot_right_click(self, name: str, pos: object) -> None:
         self._on_hotspot_clicked(name)
 
+        profile = self._main.get_profile()
+        mappings = profile.get("mappings", {})
+        entry = mappings.get(name, {})
+        keycode = entry.get("keycode") if isinstance(entry, dict) else None
+        is_mapped = keycode is not None
+        is_locked = name in self._locked_hotspots
+
+        menu = QMenu(self)
+
+        # Learn — case the controller button for this hotspot
+        learn_act = menu.addAction(f"Case key_id for {name}")
+        learn_act.triggered.connect(lambda: self._ctx_learn(name))
+
+        if is_mapped:
+            label = _KEYCODE_TO_KBD_LABEL.get(keycode, f"0x{keycode:02X}")
+            menu.addSeparator()
+
+            # Unbind
+            unbind_act = menu.addAction(f"Unbind {name}")
+            unbind_act.triggered.connect(lambda: self._ctx_unbind(name))
+
+            # Disable
+            disable_act = menu.addAction(f"Disable {name}")
+            disable_act.triggered.connect(lambda: self._ctx_disable(name))
+
+            # Reset to passthrough
+            reset_act = menu.addAction(f"Reset {name} to passthrough")
+            reset_act.triggered.connect(lambda: self._ctx_unbind(name))
+
+        menu.addSeparator()
+
+        # Copy / Paste
+        copy_act = menu.addAction("Copy Binding")
+        copy_act.setEnabled(is_mapped)
+        copy_act.triggered.connect(lambda: self._ctx_copy(name))
+
+        paste_act = menu.addAction("Paste Binding")
+        paste_act.setEnabled(self._clipboard_binding is not None)
+        paste_act.triggered.connect(lambda: self._ctx_paste(name))
+
+        # Swap
+        swap_act = menu.addAction("Swap With…")
+        swap_act.setEnabled(is_mapped)
+        swap_act.triggered.connect(lambda: self._ctx_swap(name))
+
+        menu.addSeparator()
+
+        # Lock / Unlock
+        if is_locked:
+            lock_act = menu.addAction(f"Unlock {name}")
+            lock_act.triggered.connect(lambda: self._locked_hotspots.discard(name))
+        else:
+            lock_act = menu.addAction(f"Lock {name} (prevent changes)")
+            lock_act.triggered.connect(lambda: self._locked_hotspots.add(name))
+
+        # Turbo toggle
+        is_turbo = isinstance(entry, dict) and entry.get("turbo", False)
+        turbo_label = "Disable Turbo" if is_turbo else "Enable Turbo"
+        turbo_act = menu.addAction(turbo_label)
+        turbo_act.setEnabled(is_mapped)
+        turbo_act.triggered.connect(lambda: self._ctx_toggle_turbo(name))
+
+        menu.addSeparator()
+
+        # Info
+        info_act = menu.addAction(f"Info — {name}")
+        info_act.triggered.connect(lambda: self._ctx_info(name))
+
+        # Show the menu at cursor position
+        from PyQt6.QtGui import QCursor
+        menu.exec(QCursor.pos())
+
+    # -----------------------------------------------------------------
+    # Context-menu actions
+    # -----------------------------------------------------------------
+
+    def _ctx_learn(self, name: str) -> None:
+        self._selected_hotspot = name
+        self._learn_btn.setChecked(True)
+        self._sel_mapping.setText(f"Press a controller button to case {name}…")
+
+    def _ctx_unbind(self, name: str) -> None:
+        if name in self._locked_hotspots:
+            QMessageBox.warning(self, "Locked", f"{name} is locked. Unlock it first.")
+            return
+        profile = self._main.get_profile()
+        mappings = profile.get("mappings", {})
+        mappings.pop(name, None)
+        self._main.set_profile(profile)
+        self._refresh_mapping_visuals()
+        self._sel_mapping.setText("Unbound")
+
+    def _ctx_disable(self, name: str) -> None:
+        if name in self._locked_hotspots:
+            QMessageBox.warning(self, "Locked", f"{name} is locked. Unlock it first.")
+            return
+        profile = self._main.get_profile()
+        profile = _ensure_mappings(profile)
+        profile["mappings"][name] = {"type": "disable"}
+        self._main.set_profile(profile)
+        self._refresh_mapping_visuals()
+        self._sel_mapping.setText(f"{name} disabled")
+
+    def _ctx_copy(self, name: str) -> None:
+        profile = self._main.get_profile()
+        entry = profile.get("mappings", {}).get(name)
+        if isinstance(entry, dict):
+            import copy
+            self._clipboard_binding = copy.deepcopy(entry)
+
+    def _ctx_paste(self, name: str) -> None:
+        if name in self._locked_hotspots:
+            QMessageBox.warning(self, "Locked", f"{name} is locked. Unlock it first.")
+            return
+        if self._clipboard_binding is None:
+            return
+        import copy
+        profile = self._main.get_profile()
+        profile = _ensure_mappings(profile)
+        profile["mappings"][name] = copy.deepcopy(self._clipboard_binding)
+        self._main.set_profile(profile)
+        self._refresh_mapping_visuals()
+
+    def _ctx_swap(self, name: str) -> None:
+        choices = [n for n, _, _ in KEYMAP_HOTSPOTS if n != name]
+        from PyQt6.QtWidgets import QInputDialog
+        other, ok = QInputDialog.getItem(
+            self, "Swap With", f"Swap {name} with:", choices, 0, False,
+        )
+        if not ok or not other:
+            return
+        if name in self._locked_hotspots or other in self._locked_hotspots:
+            QMessageBox.warning(self, "Locked", "One of the hotspots is locked.")
+            return
+        profile = self._main.get_profile()
+        mappings = profile.get("mappings", {})
+        a = mappings.get(name)
+        b = mappings.get(other)
+        if a is not None:
+            mappings[other] = a
+        else:
+            mappings.pop(other, None)
+        if b is not None:
+            mappings[name] = b
+        else:
+            mappings.pop(name, None)
+        self._main.set_profile(profile)
+        self._refresh_mapping_visuals()
+
+    def _ctx_toggle_turbo(self, name: str) -> None:
+        if name in self._locked_hotspots:
+            QMessageBox.warning(self, "Locked", f"{name} is locked. Unlock it first.")
+            return
+        profile = self._main.get_profile()
+        entry = profile.get("mappings", {}).get(name)
+        if not isinstance(entry, dict):
+            return
+        entry["turbo"] = not entry.get("turbo", False)
+        self._main.set_profile(profile)
+        self._refresh_mapping_visuals()
+
+    def _ctx_info(self, name: str) -> None:
+        profile = self._main.get_profile()
+        entry = profile.get("mappings", {}).get(name, {})
+        if not isinstance(entry, dict) or not entry:
+            QMessageBox.information(self, name, f"{name}: not mapped")
+            return
+        keycode = entry.get("keycode")
+        modifier = entry.get("modifier", 0)
+        turbo = entry.get("turbo", False)
+        disabled = entry.get("type") == "disable"
+        label = _KEYCODE_TO_KBD_LABEL.get(keycode, f"0x{keycode:02X}") if keycode else "—"
+        lines = [
+            f"Hotspot: {name}",
+            f"Keycode: {label} (0x{keycode:02X})" if keycode else "Disabled" if disabled else "No keycode",
+            f"Modifier: 0x{modifier:02X}" if modifier else "",
+            f"Turbo: {'ON' if turbo else 'OFF'}",
+            f"Locked: {'YES' if name in self._locked_hotspots else 'no'}",
+        ]
+        QMessageBox.information(self, f"Info — {name}", "\n".join(l for l in lines if l))
+
     def _on_hotspot_hovered(self, name: str) -> None:
         if name:
             self.setToolTip(name)
@@ -357,6 +540,10 @@ class MappingView(QWidget):
     def _bind_key(self, key_label: str) -> None:
         if not self._selected_hotspot:
             QMessageBox.information(self, "No Selection", "Select a controller button first.")
+            return
+
+        if self._selected_hotspot in self._locked_hotspots:
+            QMessageBox.warning(self, "Locked", f"{self._selected_hotspot} is locked.")
             return
 
         keycode = KBD_LABEL_TO_KEYCODE.get(key_label)
