@@ -1,13 +1,15 @@
-# Bind Bandit (Windows, Python + Tkinter)
+# Bind Bandit (Windows, Python + PyQt6)
 
 Bind Bandit is a standalone desktop app for configuring gaming peripherals. **No specific hardware is required to launch it** — use whichever features match your setup:
 
-| Use case | What you need | Tabs you'll use |
+| Use case | What you need | Sections you'll use |
 |---|---|---|
-| **Joy-Con → keyboard bridge** | ESP32 + ESP32-S3 boards (flashed) | Loadout, Controller, Tricks, Stick, Overlay, Input Test |
-| **M913 mouse configuration** | Redragon M913 mouse (USB) | Mouse |
-| **Razer mouse configuration** | Razer Basilisk X HyperSpeed (USB) | Razer |
-| **Both** | All of the above | All tabs |
+| **Joy-Con → keyboard bridge** | ESP32 + ESP32-S3 boards (flashed) | Dashboard, Mapping, Macros & Stick, Profiles, Diagnostics |
+| **M913 mouse configuration** | Redragon M913 mouse (USB) | Devices → M913 |
+| **Razer mouse configuration** | Razer Basilisk X HyperSpeed (USB) | Devices → Razer |
+| **Both** | All of the above | All sections |
+
+> **Legacy Tkinter UI**: The original Tkinter interface is still available via `python -m joycon_helper --legacy`.
 
 ### Joy-Con bridge features (requires ESP32-S3 serial connection)
 
