@@ -9,8 +9,27 @@ Until then, entries are grouped by date.
 
 - Capture real controller HID reports and implement evidence-based mapping in the ESP32 host mapper (no guessing report layouts).
 
+### Added (Mouse — M913 & Razer improvements, pass 3)
+
+- **M913 wireless PID support**: enumerate now detects both wired (PID 0xFA07) and wireless dongle (PID 0xFA08).
+- **M913 snipe button**: new "snipe" action (0x9A marker) provides temporary DPI switch while held.
+- **M913 extended LED modes**: wave, reactive, random, alternating, and flashing effects added alongside existing off/steady/respiration/rainbow.
+- **M913 color picker**: "…" button next to the LED hex entry opens a native color chooser dialog.
+- **M913 retry logic**: each HID packet is retried up to 2× with ACK verification and 50 ms backoff.
+- **M913 hardware macros**: 15 macro slots (up to 67 key events each) with `MacroSlot` dataclass, `build_macro_packets()`, and visual Macro Builder popup in the UI.
+- **M913 INI import/export**: `export_ini()` / `import_ini()` for m913-ctl compatible INI format. Accessible via Export INI / Import INI buttons.
+- **M913 DPI bounds clamping**: `clamp_dpi()` snaps arbitrary values to the nearest valid hardware step (100–16000).
+- **M913 diagnostics popup**: raw HID packet viewer — send custom hex packets, read reports, and view device info.
+- **Razer hypershift layer**: `get_button_function()` and `set_button_function()` accept a `hypershift` parameter for the alternate binding layer.
+- **Razer CRC validation**: `_send_report()` verifies XOR checksum (bytes 2–87) and transaction ID on every response.
+- **Razer F13–F24 keycodes**: added to `HID_KEYCODES` and `REMAP_ACTIONS` for extended keyboard binding.
+- **Razer DPI bounds**: `set_dpi()` now clamps values to the per-model hardware max (e.g., 16000 for Basilisk X, 26000 for V3).
+- **F13–F24 in hid_keycodes.py**: added to both `_KEYCODE_NAMES` reverse map and `_KEYSYM_MAP` forward map.
+- **Profile versioning (v2)**: both M913Profile and RazerProfile now emit `"ver": 2` with backward-compatible v1 loading.
+
 ### Fixed
 
+- **Help tab syntax error**: removed stray double comma in serial protocol section that caused a `SyntaxError` on app startup.
 - **BT send mutex (CRITICAL)**: all `esp_bt_hid_host_send_data()` calls in `joycon_setup.c` are now serialised behind a FreeRTOS mutex. Previously the FSM task (`send_subcmd`) and `ctrl_task` (rumble/home-LED) could race on the BT stack, risking corrupted output reports.
 - **Sticky modifier leak on profile switch (HIGH)**: `free_profile()` now releases all currently-held sticky keys from the USB HID report before clearing `s_sticky_state[]`. Previously, switching profiles while a sticky modifier was active left a phantom key press in the HID report.
 - **Macro delay budget overshoot (HIGH)**: individual macro delay steps are now clamped to the remaining time budget (5 000 ms total, matching JSON validation). A single delay step >5 s no longer blows past the safety cap — it is truncated to whatever time remains.

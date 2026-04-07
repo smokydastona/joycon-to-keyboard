@@ -10,10 +10,12 @@ The mouse's own MCU handles everything — no software input injection.
 
 from __future__ import annotations
 
+import configparser
 import json
 import logging
 import os
 import copy
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -35,7 +37,9 @@ except ImportError:
 # USB identifiers
 # ---------------------------------------------------------------------------
 M913_VID = 0x25A7
-M913_PID = 0xFA07  # 2.4 GHz wireless receiver
+M913_PID = 0xFA07           # 2.4 GHz wireless receiver (wired shares this)
+M913_PID_WIRELESS = 0xFA08  # Wireless dongle (alternate PID seen on some units)
+M913_PIDS = (M913_PID, M913_PID_WIRELESS)
 PACKET_SIZE = 17
 
 # USB control-transfer constants (for reference — hidapi uses feature reports)
@@ -157,6 +161,8 @@ MOUSE_ACTIONS: Dict[str, bytes] = {
     "fire":            bytes([0x04, 0x3A, 0x03, 0x14]),
     "three_click":     bytes([0x04, 0x32, 0x03, 0x1C]),
     "polling_switch":  bytes([0x07, 0x00, 0x00, 0x4E]),
+    # Snipe: temporary DPI switch while held (0x9A marker)
+    "snipe":           bytes([0x9A, 0x00, 0x00, 0xBB]),
     # Multimedia (use 0x92 marker → keyboard sub-packet mechanism)
     "media_play":      bytes([0x92, 0x00, 0xCD, 0x00]),
     "media_player":    bytes([0x92, 0x01, 0x83, 0x01]),
@@ -177,9 +183,6 @@ MOUSE_ACTIONS: Dict[str, bytes] = {
     "www_refresh":     bytes([0x92, 0x02, 0x27, 0x02]),
     "www_favorites":   bytes([0x92, 0x02, 0x2A, 0x02]),
 }
-
-# All recognized action names for UI dropdowns
-ALL_ACTIONS = sorted(MOUSE_ACTIONS.keys())
 
 # ---------------------------------------------------------------------------
 # Modifier keys and HID keycodes (from m913-ctl data.cpp)
@@ -267,6 +270,22 @@ DPI_TABLE: Dict[int, Tuple[int, int, int]] = {
 }
 
 VALID_DPI_VALUES = sorted(DPI_TABLE.keys())
+M913_DPI_MIN = VALID_DPI_VALUES[0]    # 100
+M913_DPI_MAX = VALID_DPI_VALUES[-1]   # 16000
+
+
+def clamp_dpi(dpi: int) -> int:
+    """Snap a DPI value to the nearest valid M913 DPI step."""
+    if dpi <= M913_DPI_MIN:
+        return M913_DPI_MIN
+    if dpi >= M913_DPI_MAX:
+        return M913_DPI_MAX
+    # Find nearest valid value
+    best = M913_DPI_MIN
+    for v in VALID_DPI_VALUES:
+        if abs(v - dpi) < abs(best - dpi):
+            best = v
+    return best
 
 # ---------------------------------------------------------------------------
 # Protocol data tables (from m913-ctl protocol.cpp)
@@ -331,6 +350,27 @@ _LED_RAINBOW: List[bytes] = [
 ]
 
 _LED_STATIC = bytes([0x08,0x07,0x00,0x00,0x54,0x08, 0xFF,0x00,0x00,0x57, 0x01,0x54,0xFF,0x56, 0x00,0x00,0xEB])
+
+
+# ---------------------------------------------------------------------------
+# Hardware macro constants (from mouse_m908 protocol docs)
+# ---------------------------------------------------------------------------
+MACRO_SLOT_COUNT = 15        # M913 supports 15 macro slots
+MACRO_MAX_ACTIONS = 67       # Max key events per macro slot
+MACRO_EVENT_DOWN = 0x81      # Key press event marker
+MACRO_EVENT_UP = 0x41        # Key release event marker
+
+# Macro button action marker: macro1–macro15
+MACRO_ACTIONS: Dict[str, bytes] = {}
+for _mi in range(1, MACRO_SLOT_COUNT + 1):
+    _cksum = (0x55 - (0x93 + _mi)) & 0xFF
+    MACRO_ACTIONS[f"macro{_mi}"] = bytes([0x93, _mi, 0x00, _cksum])
+del _mi, _cksum
+
+# Add macro actions to MOUSE_ACTIONS so parse_action() can find them
+MOUSE_ACTIONS.update(MACRO_ACTIONS)
+# Rebuild ALL_ACTIONS after adding macros
+ALL_ACTIONS = sorted(MOUSE_ACTIONS.keys())
 
 
 # ===================================================================
@@ -621,10 +661,11 @@ def build_led_packets(mode: str, color: int = 0x00FF00,
                       speed: int = 3) -> List[bytearray]:
     """Build LED config packets.
 
-    ``mode``: "off", "steady", "respiration", "rainbow"
+    ``mode``: "off", "steady", "respiration", "rainbow", "wave",
+              "reactive", "random", "alternating", "flashing"
     ``color``: 24-bit RGB (0xRRGGBB)
     ``brightness``: 0–255 (steady mode only)
-    ``speed``: 1–5 (respiration mode, 1=slowest)
+    ``speed``: 1–5 (respiration/wave/flashing mode, 1=slowest)
     """
     mode_lower = mode.lower()
 
@@ -653,6 +694,91 @@ def build_led_packets(mode: str, color: int = 0x00FF00,
 
     if mode_lower == "rainbow":
         return [_packet(t) for t in _LED_RAINBOW]
+
+    if mode_lower == "wave":
+        # Wave: mode byte 0x04, uses speed + color
+        p1 = _packet(_LED_BREATHING[0])
+        p1[6] = r_val; p1[7] = g_val; p1[8] = b_val
+        p1[9] = (0x55 - r_val - g_val - b_val) & 0xFF
+        p1[10] = 0x04  # wave mode
+        p1[11] = (0x55 - 0x04) & 0xFF
+        p1[12] = brightness
+        p1[13] = (0x55 - brightness) & 0xFF
+        p1[16] = compute_checksum(p1)
+
+        p2 = _packet(_LED_BREATHING[1])
+        p2[6] = speed
+        p2[7] = (0x55 - speed) & 0xFF
+        p2[16] = compute_checksum(p2)
+        return [p1, p2]
+
+    if mode_lower == "reactive":
+        # Reactive: mode byte 0x05, lights on click then fades
+        p1 = _packet(_LED_BREATHING[0])
+        p1[6] = r_val; p1[7] = g_val; p1[8] = b_val
+        p1[9] = (0x55 - r_val - g_val - b_val) & 0xFF
+        p1[10] = 0x05  # reactive mode
+        p1[11] = (0x55 - 0x05) & 0xFF
+        p1[12] = brightness
+        p1[13] = (0x55 - brightness) & 0xFF
+        p1[16] = compute_checksum(p1)
+
+        p2 = _packet(_LED_BREATHING[1])
+        p2[6] = speed
+        p2[7] = (0x55 - speed) & 0xFF
+        p2[16] = compute_checksum(p2)
+        return [p1, p2]
+
+    if mode_lower == "random":
+        # Random: mode byte 0x06, random color cycle
+        p1 = _packet(_LED_BREATHING[0])
+        p1[6] = r_val; p1[7] = g_val; p1[8] = b_val
+        p1[9] = (0x55 - r_val - g_val - b_val) & 0xFF
+        p1[10] = 0x06  # random mode
+        p1[11] = (0x55 - 0x06) & 0xFF
+        p1[12] = brightness
+        p1[13] = (0x55 - brightness) & 0xFF
+        p1[16] = compute_checksum(p1)
+
+        p2 = _packet(_LED_BREATHING[1])
+        p2[6] = speed
+        p2[7] = (0x55 - speed) & 0xFF
+        p2[16] = compute_checksum(p2)
+        return [p1, p2]
+
+    if mode_lower == "alternating":
+        # Alternating: mode byte 0x07, alternates between color and secondary
+        p1 = _packet(_LED_BREATHING[0])
+        p1[6] = r_val; p1[7] = g_val; p1[8] = b_val
+        p1[9] = (0x55 - r_val - g_val - b_val) & 0xFF
+        p1[10] = 0x07  # alternating mode
+        p1[11] = (0x55 - 0x07) & 0xFF
+        p1[12] = brightness
+        p1[13] = (0x55 - brightness) & 0xFF
+        p1[16] = compute_checksum(p1)
+
+        p2 = _packet(_LED_BREATHING[1])
+        p2[6] = speed
+        p2[7] = (0x55 - speed) & 0xFF
+        p2[16] = compute_checksum(p2)
+        return [p1, p2]
+
+    if mode_lower == "flashing":
+        # Flashing: mode byte 0x08, on/off blink at speed
+        p1 = _packet(_LED_BREATHING[0])
+        p1[6] = r_val; p1[7] = g_val; p1[8] = b_val
+        p1[9] = (0x55 - r_val - g_val - b_val) & 0xFF
+        p1[10] = 0x08  # flashing mode
+        p1[11] = (0x55 - 0x08) & 0xFF
+        p1[12] = brightness
+        p1[13] = (0x55 - brightness) & 0xFF
+        p1[16] = compute_checksum(p1)
+
+        p2 = _packet(_LED_BREATHING[1])
+        p2[6] = speed
+        p2[7] = (0x55 - speed) & 0xFF
+        p2[16] = compute_checksum(p2)
+        return [p1, p2]
 
     # Steady (static color with brightness)
     p = _packet(_LED_STATIC)
@@ -684,6 +810,85 @@ def build_polling_rate_packet(hz: int) -> bytearray:
     p[7] = (0x55 - code) & 0xFF
     p[16] = compute_checksum(p)
     return p
+
+
+# ===================================================================
+# Macro packet builder (from mouse_m908 macro protocol)
+# ===================================================================
+
+@dataclass
+class MacroSlot:
+    """One hardware macro: a list of key events."""
+    events: List[Tuple[int, int]] = field(default_factory=list)
+    # Each event is (event_type, scancode)
+    # event_type: MACRO_EVENT_DOWN (0x81) or MACRO_EVENT_UP (0x41)
+
+    def to_list(self) -> List[List[int]]:
+        return [[t, s] for t, s in self.events]
+
+    @classmethod
+    def from_list(cls, data: List[List[int]]) -> "MacroSlot":
+        return cls(events=[(e[0], e[1]) for e in data if len(e) == 2])
+
+    def is_empty(self) -> bool:
+        return len(self.events) == 0
+
+
+def build_macro_packets(slot_num: int, macro: MacroSlot) -> List[bytearray]:
+    """Build packets to write one macro slot to the device.
+
+    ``slot_num``: 1-based macro slot number (1–15).
+    ``macro``: MacroSlot with up to 67 events.
+
+    The M913 macro memory layout:
+      Each macro occupies a contiguous block.  We pack events as 3-byte
+      tuples (event_type, scancode, 0x00) into the packet data area.
+      The macro header packet: [0x08, 0x07, 0x00, addr_hi, addr_lo, count, ...]
+    """
+    if slot_num < 1 or slot_num > MACRO_SLOT_COUNT:
+        return []
+
+    events = macro.events[:MACRO_MAX_ACTIONS]
+    if not events:
+        return []
+
+    # Macro base address: slot_num determines the address block
+    base_addr = 0x0300 + (slot_num - 1) * 0x0100
+    addr_hi = (base_addr >> 8) & 0xFF
+    addr_lo = base_addr & 0xFF
+
+    # Pack all events into a byte stream
+    event_bytes: List[int] = []
+    for evt_type, scancode in events:
+        event_bytes.extend([evt_type, scancode, 0x00])
+
+    # Header packet: tells the device how many events
+    result: List[bytearray] = []
+    hdr = bytearray(PACKET_SIZE)
+    hdr[0] = 0x08; hdr[1] = 0x07; hdr[2] = 0x00
+    hdr[3] = addr_hi; hdr[4] = addr_lo; hdr[5] = 0x02
+    hdr[6] = len(events)
+    hdr[7] = (0x55 - len(events)) & 0xFF
+    hdr[16] = compute_checksum(hdr)
+    result.append(hdr)
+
+    # Data packets: 10 event bytes per packet (bytes 6–15)
+    offset = 0
+    pkt_addr = addr_lo + 0x02
+    while offset < len(event_bytes):
+        chunk = event_bytes[offset:offset + 10]
+        p = bytearray(PACKET_SIZE)
+        p[0] = 0x08; p[1] = 0x07; p[2] = 0x00
+        p[3] = addr_hi; p[4] = pkt_addr & 0xFF
+        p[5] = len(chunk)
+        for i, b in enumerate(chunk):
+            p[6 + i] = b
+        p[16] = compute_checksum(p)
+        result.append(p)
+        offset += 10
+        pkt_addr += len(chunk)
+
+    return result
 
 
 # ===================================================================
@@ -732,6 +937,9 @@ class M913Profile:
     led_speed: int = 3           # 1–5 (respiration only)
     polling_rate: int = 1000     # 125, 250, 500, 1000
 
+    # Hardware macros: slot_num (1–15) → MacroSlot
+    macros: Dict[int, MacroSlot] = field(default_factory=dict)
+
     # Sister profile linking: which Joy-Con slot this should auto-apply with
     sister_slot: Optional[int] = None  # 1–4, or None
 
@@ -747,8 +955,12 @@ class M913Profile:
     )
 
     def to_dict(self) -> dict:
+        macros_out: Dict[str, Any] = {}
+        for slot_num, ms in self.macros.items():
+            if not ms.is_empty():
+                macros_out[str(slot_num)] = ms.to_list()
         return {
-            "ver": 1,
+            "ver": 2,
             "name": self.name,
             "layout": self.layout,
             "buttons": dict(self.buttons),
@@ -763,6 +975,7 @@ class M913Profile:
                 "speed": self.led_speed,
             },
             "polling_rate": self.polling_rate,
+            "macros": macros_out,
             "sister_slot": self.sister_slot,
             "incedius_map": dict(self.incedius_map),
         }
@@ -785,6 +998,16 @@ class M913Profile:
         p.led_brightness = led.get("brightness", 255)
         p.led_speed = led.get("speed", 3)
         p.polling_rate = d.get("polling_rate", 1000)
+        # Hardware macros (v2+)
+        raw_macros = d.get("macros", {})
+        if isinstance(raw_macros, dict):
+            for k, v in raw_macros.items():
+                try:
+                    slot_num = int(k)
+                    if 1 <= slot_num <= MACRO_SLOT_COUNT and isinstance(v, list):
+                        p.macros[slot_num] = MacroSlot.from_list(v)
+                except (ValueError, TypeError):
+                    pass
         p.sister_slot = d.get("sister_slot", None)
         layout = d.get("layout", "stock")
         p.layout = layout if layout in LAYOUT_MODES else "stock"
@@ -836,33 +1059,34 @@ class M913Device:
         """Find all connected M913 devices.
 
         Returns one entry per physical device (filtered to interface 1,
-        which is the config channel).
+        which is the config channel).  Checks both wired and wireless PIDs.
         """
         if not HID_AVAILABLE:
             return []
 
         results: List[M913DeviceInfo] = []
-        try:
-            devs = _hid.enumerate(M913_VID, M913_PID)
-        except Exception as e:
-            log.error("HID enumerate failed: %s", e)
-            return []
+        for pid in M913_PIDS:
+            try:
+                devs = _hid.enumerate(M913_VID, pid)
+            except Exception as e:
+                log.error("HID enumerate failed for PID 0x%04X: %s", pid, e)
+                continue
 
-        for d in devs:
-            # We only need Interface 1 (the config channel)
-            iface = d.get("interface_number", -1)
-            if iface != 1:
-                continue
-            path = d.get("path")
-            if not path:
-                continue
-            results.append(M913DeviceInfo(
-                path=path,
-                serial_number=d.get("serial_number", "") or "",
-                product_string=d.get("product_string", "") or "",
-                interface_number=iface,
-                manufacturer_string=d.get("manufacturer_string", "") or "",
-            ))
+            for d in devs:
+                # We only need Interface 1 (the config channel)
+                iface = d.get("interface_number", -1)
+                if iface != 1:
+                    continue
+                path = d.get("path")
+                if not path:
+                    continue
+                results.append(M913DeviceInfo(
+                    path=path,
+                    serial_number=d.get("serial_number", "") or "",
+                    product_string=d.get("product_string", "") or "",
+                    interface_number=iface,
+                    manufacturer_string=d.get("manufacturer_string", "") or "",
+                ))
 
         log.info("Found %d M913 device(s)", len(results))
         return results
@@ -954,6 +1178,15 @@ class M913Device:
             log.error("Polling rate failed: %s", ex)
             errors += 1
 
+        # Hardware macros
+        if profile.macros:
+            try:
+                s, e = self.apply_macros(profile.macros)
+                sent += s; errors += e
+            except Exception as ex:
+                log.error("Macro config failed: %s", ex)
+                errors += 1
+
         log.info("Profile '%s' applied: %d packets sent, %d errors",
                  profile.name, sent, errors)
         return sent, errors
@@ -995,18 +1228,50 @@ class M913Device:
         pkt = build_polling_rate_packet(hz)
         return self._send_packets([pkt])
 
-    def _send_packets(self, packets: List[bytearray]) -> Tuple[int, int]:
-        """Send a sequence of packets, reading ACK after each."""
+    def apply_macros(self, macros: Dict[int, MacroSlot]) -> Tuple[int, int]:
+        """Apply hardware macros. Returns (sent, errors)."""
+        sent = 0
+        errors = 0
+        for slot_num, macro in macros.items():
+            if macro.is_empty():
+                continue
+            packets = build_macro_packets(slot_num, macro)
+            s, e = self._send_packets(packets)
+            sent += s
+            errors += e
+        return sent, errors
+
+    def _send_packets(self, packets: List[bytearray],
+                      retries: int = 2) -> Tuple[int, int]:
+        """Send a sequence of packets with retry and ACK verification.
+
+        Each packet is retried up to ``retries`` times on failure.
+        Returns (sent, errors).
+        """
         sent = 0
         errors = 0
         for pkt in packets:
-            try:
-                self.send_packet(pkt)
-                # Read ACK (best-effort, some packets may not get a response)
-                self.recv_packet(timeout_ms=500)
+            success = False
+            for attempt in range(retries + 1):
+                try:
+                    self.send_packet(pkt)
+                    ack = self.recv_packet(timeout_ms=500)
+                    if ack is not None:
+                        success = True
+                        break
+                    # No ACK — might be normal for some packets
+                    if attempt == 0:
+                        success = True  # accept first silent success
+                        break
+                except Exception as e:
+                    log.warning("Packet send attempt %d/%d failed: %s",
+                                attempt + 1, retries + 1, e)
+                    if attempt < retries:
+                        time.sleep(0.05)
+            if success:
                 sent += 1
-            except Exception as e:
-                log.error("Packet send error: %s", e)
+            else:
+                log.error("Packet failed after %d retries", retries + 1)
                 errors += 1
         return sent, errors
 
@@ -1080,3 +1345,138 @@ def save_device_registry(registry: Dict[str, dict]) -> None:
     with open(str(p), "w", encoding="utf-8") as f:
         json.dump(registry, f, indent=2, ensure_ascii=False)
         f.write("\n")
+
+
+# ===================================================================
+# INI import / export  (m913-ctl compatible format)
+# ===================================================================
+
+# Reverse lookup: 4-byte action → action name
+_ACTION_BYTES_TO_NAME: Dict[bytes, str] = {v: k for k, v in MOUSE_ACTIONS.items()}
+
+
+def export_ini(profile: M913Profile, path: str) -> None:
+    """Export an M913Profile to an INI file (m913-ctl compatible).
+
+    Format::
+
+        [profile]
+        name = Default
+        button_left = left
+        button_right = right
+        ...
+        dpi_1 = 800
+        ...
+        dpi_enabled = 1,1,1,1,1
+        led_mode = steady
+        led_color = 00ff00
+        led_brightness = 255
+        led_speed = 3
+        polling_rate = 1000
+    """
+    cp = configparser.ConfigParser()
+    section = "profile"
+    cp.add_section(section)
+
+    cp.set(section, "name", profile.name)
+
+    # Buttons
+    for btn_name in BUTTON_ORDER:
+        action = profile.buttons.get(btn_name, "none")
+        cp.set(section, f"button_{btn_name}", action)
+
+    # DPI
+    for i, val in enumerate(profile.dpi_values[:5]):
+        cp.set(section, f"dpi_{i + 1}", str(val))
+    cp.set(section, "dpi_enabled",
+           ",".join("1" if e else "0" for e in profile.dpi_enabled[:5]))
+
+    # LED
+    cp.set(section, "led_mode", profile.led_mode)
+    cp.set(section, "led_color", f"{profile.led_color:06x}")
+    cp.set(section, "led_brightness", str(profile.led_brightness))
+    cp.set(section, "led_speed", str(profile.led_speed))
+
+    # Polling
+    cp.set(section, "polling_rate", str(profile.polling_rate))
+
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        cp.write(f)
+    log.info("Exported M913 INI → %s", path)
+
+
+def import_ini(path: str) -> M913Profile:
+    """Import an M913Profile from an INI file (m913-ctl compatible).
+
+    Tolerates missing fields — any absent key keeps the default value.
+    """
+    cp = configparser.ConfigParser()
+    cp.read(path, encoding="utf-8")
+
+    section = "profile"
+    if not cp.has_section(section):
+        # Fallback: try first section
+        sections = cp.sections()
+        if sections:
+            section = sections[0]
+        else:
+            raise ValueError(f"No sections found in INI file: {path}")
+
+    p = M913Profile()
+    p.name = cp.get(section, "name", fallback=p.name)
+
+    # Buttons
+    for btn_name in BUTTON_ORDER:
+        key = f"button_{btn_name}"
+        if cp.has_option(section, key):
+            action = cp.get(section, key).strip()
+            # Validate: must be a known action or key combo
+            if parse_action(action) is not None:
+                p.buttons[btn_name] = action
+            else:
+                log.warning("INI import: unknown action '%s' for %s", action, key)
+
+    # DPI
+    for i in range(5):
+        key = f"dpi_{i + 1}"
+        if cp.has_option(section, key):
+            try:
+                val = int(cp.get(section, key))
+                p.dpi_values[i] = clamp_dpi(val)
+            except ValueError:
+                pass
+    if cp.has_option(section, "dpi_enabled"):
+        parts = cp.get(section, "dpi_enabled").split(",")
+        for i, tok in enumerate(parts[:5]):
+            p.dpi_enabled[i] = tok.strip() == "1"
+
+    # LED
+    p.led_mode = cp.get(section, "led_mode", fallback=p.led_mode)
+    if cp.has_option(section, "led_color"):
+        try:
+            p.led_color = int(cp.get(section, "led_color").strip(), 16)
+        except ValueError:
+            pass
+    if cp.has_option(section, "led_brightness"):
+        try:
+            p.led_brightness = max(0, min(255, int(cp.get(section, "led_brightness"))))
+        except ValueError:
+            pass
+    if cp.has_option(section, "led_speed"):
+        try:
+            p.led_speed = max(1, min(5, int(cp.get(section, "led_speed"))))
+        except ValueError:
+            pass
+
+    # Polling
+    if cp.has_option(section, "polling_rate"):
+        try:
+            hz = int(cp.get(section, "polling_rate"))
+            if hz in (125, 250, 500, 1000):
+                p.polling_rate = hz
+        except ValueError:
+            pass
+
+    log.info("Imported M913 INI ← %s  (profile '%s')", path, p.name)
+    return p

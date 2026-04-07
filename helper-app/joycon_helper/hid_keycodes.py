@@ -79,6 +79,10 @@ _KEYSYM_MAP: Dict[str, Tuple[int, int]] = {
     "F1": (0, 0x3A), "F2": (0, 0x3B), "F3": (0, 0x3C), "F4": (0, 0x3D),
     "F5": (0, 0x3E), "F6": (0, 0x3F), "F7": (0, 0x40), "F8": (0, 0x41),
     "F9": (0, 0x42), "F10": (0, 0x43), "F11": (0, 0x44), "F12": (0, 0x45),
+    # Extended function keys (F13–F24)
+    "F13": (0, 0x68), "F14": (0, 0x69), "F15": (0, 0x6A), "F16": (0, 0x6B),
+    "F17": (0, 0x6C), "F18": (0, 0x6D), "F19": (0, 0x6E), "F20": (0, 0x6F),
+    "F21": (0, 0x70), "F22": (0, 0x71), "F23": (0, 0x72), "F24": (0, 0x73),
 
     # System / navigation -----------------------------------------------------
     "Print": (0, 0x46), "Scroll_Lock": (0, 0x47), "Pause": (0, 0x48),
@@ -143,6 +147,10 @@ _KEYCODE_NAMES: Dict[int, str] = {
     0x3A: "F1", 0x3B: "F2", 0x3C: "F3", 0x3D: "F4", 0x3E: "F5", 0x3F: "F6",
     0x40: "F7", 0x41: "F8", 0x42: "F9", 0x43: "F10", 0x44: "F11", 0x45: "F12",
     0x46: "PrtSc", 0x47: "ScrLk", 0x48: "Pause",
+    # F13–F24 (extended function keys)
+    0x68: "F13", 0x69: "F14", 0x6A: "F15", 0x6B: "F16",
+    0x6C: "F17", 0x6D: "F18", 0x6E: "F19", 0x6F: "F20",
+    0x70: "F21", 0x71: "F22", 0x72: "F23", 0x73: "F24",
     0x49: "Ins", 0x4A: "Home", 0x4B: "PgUp",
     0x4C: "Del", 0x4D: "End", 0x4E: "PgDn",
     0x4F: "Right", 0x50: "Left", 0x51: "Down", 0x52: "Up",

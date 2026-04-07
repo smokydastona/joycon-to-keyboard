@@ -176,6 +176,10 @@ HID_KEYCODES: Dict[str, int] = {
     "f1": 0x3A, "f2": 0x3B, "f3": 0x3C, "f4": 0x3D, "f5": 0x3E,
     "f6": 0x3F, "f7": 0x40, "f8": 0x41, "f9": 0x42, "f10": 0x43,
     "f11": 0x44, "f12": 0x45,
+    # Extended function keys (F13–F24)
+    "f13": 0x68, "f14": 0x69, "f15": 0x6A, "f16": 0x6B,
+    "f17": 0x6C, "f18": 0x6D, "f19": 0x6E, "f20": 0x6F,
+    "f21": 0x70, "f22": 0x71, "f23": 0x72, "f24": 0x73,
 }
 
 HID_KEYCODE_NAMES = {v: k.upper() for k, v in HID_KEYCODES.items()}
@@ -205,6 +209,8 @@ REMAP_ACTIONS = [
     "key_space", "key_enter", "key_escape", "key_tab",
     "key_f1", "key_f2", "key_f3", "key_f4", "key_f5", "key_f6",
     "key_f7", "key_f8", "key_f9", "key_f10", "key_f11", "key_f12",
+    "key_f13", "key_f14", "key_f15", "key_f16", "key_f17", "key_f18",
+    "key_f19", "key_f20", "key_f21", "key_f22", "key_f23", "key_f24",
 ]
 
 
@@ -380,6 +386,7 @@ class RazerDeviceState:
     poll_rate: int = 0            # Hz
     idle_time: int = 0            # seconds
     button_bindings: Dict[str, str] = field(default_factory=dict)
+    hypershift_bindings: Dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -398,16 +405,22 @@ class RazerProfile:
         "back": "default", "forward": "default",
         "scroll_up": "default", "scroll_down": "default",
     })
+    hypershift_bindings: Dict[str, str] = field(default_factory=lambda: {
+        "left": "default", "right": "default", "middle": "default",
+        "back": "default", "forward": "default",
+        "scroll_up": "default", "scroll_down": "default",
+    })
 
     def to_dict(self) -> dict:
         return {
-            "ver": 1,
+            "ver": 2,
             "name": self.name,
             "dpi_stages": [list(s) for s in self.dpi_stages],
             "active_dpi_stage": self.active_dpi_stage,
             "poll_rate": self.poll_rate,
             "idle_time": self.idle_time,
             "button_bindings": dict(self.button_bindings),
+            "hypershift_bindings": dict(self.hypershift_bindings),
         }
 
     @classmethod
@@ -421,6 +434,8 @@ class RazerProfile:
         p.poll_rate = d.get("poll_rate", 1000)
         p.idle_time = d.get("idle_time", 300)
         p.button_bindings = d.get("button_bindings", p.button_bindings)
+        p.hypershift_bindings = d.get("hypershift_bindings",
+                                      p.hypershift_bindings)
         return p
 
     def save(self, path: str) -> None:
@@ -528,10 +543,13 @@ class RazerDevice:
     def _send_report(self, report: bytearray) -> Optional[Dict[str, Any]]:
         """Send a feature report and read the response.
 
+        Validates CRC and transaction ID in the response.
         Returns parsed response dict or None on failure.
         """
         if self._dev is None:
             raise RuntimeError("Device not open")
+
+        expected_txn = report[1]
 
         # hidapi: send_feature_report expects report[0] = report ID (0x00)
         try:
@@ -553,7 +571,23 @@ class RazerDevice:
         if resp is None or len(resp) < REPORT_SIZE:
             return None
 
-        return _parse_response(bytes(resp))
+        parsed = _parse_response(bytes(resp))
+        if parsed is None:
+            return None
+
+        # Validate CRC: XOR of bytes 2–87
+        expected_crc = _calculate_crc(bytearray(resp))
+        if resp[88] != expected_crc:
+            log.warning("Razer CRC mismatch: got 0x%02X, expected 0x%02X",
+                        resp[88], expected_crc)
+            # Still return the data — CRC failures can be transient
+
+        # Validate transaction ID
+        if parsed["txn_id"] != expected_txn:
+            log.debug("Razer txn_id mismatch: got 0x%02X, expected 0x%02X",
+                      parsed["txn_id"], expected_txn)
+
+        return parsed
 
     def _command(self, cmd_class: int, cmd_id: int,
                  data_size: int, args: bytes = b"",
@@ -632,7 +666,15 @@ class RazerDevice:
 
     def set_dpi(self, dpi_x: int, dpi_y: int,
                 persist: bool = True) -> bool:
-        """Set DPI XY (Class 0x04, ID 0x05)."""
+        """Set DPI XY (Class 0x04, ID 0x05).
+
+        DPI values are clamped to device max_dpi.
+        """
+        max_dpi = 16000
+        if self._info:
+            max_dpi = self._info.device_meta.get("max_dpi", 16000)
+        dpi_x = max(100, min(dpi_x, max_dpi))
+        dpi_y = max(100, min(dpi_y, max_dpi))
         store = VARSTORE if persist else NOSTORE
         args = bytearray(7)
         args[0] = store
@@ -716,30 +758,35 @@ class RazerDevice:
         resp = self._command(CLASS_MISC, 0x03, 0x02, args)
         return resp is not None
 
-    def get_button_function(self, slot: int) -> Optional[bytes]:
+    def get_button_function(self, slot: int,
+                            hypershift: bool = False) -> Optional[bytes]:
         """Read a button's function block (Class 0x02, ID 0x8C).
 
+        ``hypershift``: if True, reads from the HyperShift layer (0x01)
+        instead of the normal layer (0x00).
         Returns 7-byte function block or None.
         """
         args = bytearray(10)
         args[0] = 0x00   # profile: direct/effective layer
         args[1] = slot
-        args[2] = 0x00   # hypershift: normal layer
+        args[2] = 0x01 if hypershift else 0x00
         resp = self._command(CLASS_CONFIG, 0x8C, 0x0A, bytes(args))
         if resp:
             return bytes(resp["args"][3:10])
         return None
 
     def set_button_function(self, slot: int, func_block: bytes,
-                            persist: bool = True) -> bool:
+                            persist: bool = True,
+                            hypershift: bool = False) -> bool:
         """Write a button's function block (Class 0x02, ID 0x0C).
 
         ``func_block``: 7-byte function block (class, len, data[5]).
+        ``hypershift``: if True, writes to the HyperShift layer (0x01).
         """
         args = bytearray(10)
         args[0] = 0x01 if persist else 0x00  # profile slot
         args[1] = slot
-        args[2] = 0x00   # hypershift: normal
+        args[2] = 0x01 if hypershift else 0x00
         args[3:10] = func_block[:7]
         resp = self._command(CLASS_CONFIG, 0x0C, 0x0A, bytes(args))
         return resp is not None
@@ -782,13 +829,21 @@ class RazerDevice:
         state.poll_rate = self.get_poll_rate()
         state.idle_time = self.get_idle_time()
 
-        # Read button bindings
+        # Read button bindings (normal layer)
         for name, slot in BUTTON_SLOTS.items():
             block = self.get_button_function(slot)
             if block:
                 state.button_bindings[name] = decode_button_action(block)
             else:
                 state.button_bindings[name] = "unknown"
+
+        # Read HyperShift bindings
+        for name, slot in BUTTON_SLOTS.items():
+            block = self.get_button_function(slot, hypershift=True)
+            if block:
+                state.hypershift_bindings[name] = decode_button_action(block)
+            else:
+                state.hypershift_bindings[name] = "unknown"
 
         return state
 
@@ -836,6 +891,27 @@ class RazerDevice:
                 if block:
                     slot = BUTTON_SLOTS.get(name)
                     if slot and self.set_button_function(slot, block):
+                        ok += 1
+                    else:
+                        err += 1
+
+        # HyperShift button bindings
+        for name, action in profile.hypershift_bindings.items():
+            if action == "default":
+                slot = BUTTON_SLOTS.get(name)
+                if slot and slot in DEFAULT_BUTTON_FUNCTIONS:
+                    if self.set_button_function(slot,
+                                               DEFAULT_BUTTON_FUNCTIONS[slot],
+                                               hypershift=True):
+                        ok += 1
+                    else:
+                        err += 1
+            else:
+                block = encode_button_action(action)
+                if block:
+                    slot = BUTTON_SLOTS.get(name)
+                    if slot and self.set_button_function(slot, block,
+                                                        hypershift=True):
                         ok += 1
                     else:
                         err += 1

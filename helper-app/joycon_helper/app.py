@@ -4725,11 +4725,15 @@ class App(tk.Tk):
         ttk.Label(lr1, text="Mode:").pack(side=tk.LEFT)
         self._m913_led_mode_var = tk.StringVar(value=self._m913_profile.led_mode)
         ttk.Combobox(lr1, textvariable=self._m913_led_mode_var,
-                     values=["off", "steady", "respiration", "rainbow"],
+                     values=["off", "steady", "respiration", "rainbow",
+                             "wave", "reactive", "random", "alternating", "flashing"],
                      state="readonly", width=14).pack(side=tk.LEFT, padx=4)
         ttk.Label(lr1, text="Color (#hex):").pack(side=tk.LEFT, padx=(8, 0))
         self._m913_led_color_var = tk.StringVar(value=f"{self._m913_profile.led_color:06x}")
-        ttk.Entry(lr1, textvariable=self._m913_led_color_var, width=8).pack(side=tk.LEFT, padx=4)
+        color_entry = ttk.Entry(lr1, textvariable=self._m913_led_color_var, width=8)
+        color_entry.pack(side=tk.LEFT, padx=4)
+        ttk.Button(lr1, text="\u2026", width=2,
+                   command=self._m913_pick_led_color).pack(side=tk.LEFT)
 
         lr2 = ttk.Frame(body)
         lr2.pack(fill=tk.X, pady=2)
@@ -4768,6 +4772,14 @@ class App(tk.Tk):
         ttk.Button(pfr, text="Save", command=self._m913_save_profile).pack(side=tk.LEFT, padx=2)
         ttk.Button(pfr, text="Load", command=self._m913_load_profile).pack(side=tk.LEFT, padx=2)
         ttk.Button(pfr, text="Delete", command=self._m913_delete_profile).pack(side=tk.LEFT, padx=2)
+
+        # INI import / export (m913-ctl compatible)
+        pfr2 = ttk.Frame(body)
+        pfr2.pack(fill=tk.X, pady=(2, 0))
+        ttk.Button(pfr2, text="Export INI", command=self._m913_export_ini).pack(side=tk.LEFT, padx=2)
+        ttk.Button(pfr2, text="Import INI", command=self._m913_import_ini).pack(side=tk.LEFT, padx=2)
+        ttk.Button(pfr2, text="Macros\u2026", command=self._m913_macro_popup).pack(side=tk.LEFT, padx=2)
+        ttk.Button(pfr2, text="Diagnostics\u2026", command=self._m913_diag_popup).pack(side=tk.LEFT, padx=2)
 
     # ------------------------------------------------------------------
     # Help tab
@@ -5372,7 +5384,7 @@ class App(tk.Tk):
             "  rumble (device_id, freq, amp), home_led (device_id, brightness),",
             "  set_socd_mode (neutral/last_input/first_input),",
             "  set_rapid_trigger (activation, deactivation thresholds),",
-            "  set_humanize (enable/disable timing jitter)",,
+            "  set_humanize (enable/disable timing jitter)",
             "",
             "Events (device \u2192 PC):",
             "  mapped_key (pressed, key_id), macro (id, state),",
@@ -5408,16 +5420,25 @@ class App(tk.Tk):
             "",
             "## Redragon M913 (Mouse tab)",
             "\u2022 16 programmable buttons (including 12 side buttons).",
-            "\u2022 DPI: up to 5 stages, separate X/Y resolution.",
-            "\u2022 LED: color, effect, brightness.",
+            "\u2022 DPI: up to 5 stages, clamped to valid hardware steps (100\u201316000).",
+            "\u2022 LED: color, effect (steady/breathe/rainbow/wave/reactive/random/alternating/flashing), brightness.",
+            "\u2022 Color picker: click the \u2018\u2026\u2019 button next to the hex entry for a visual color chooser.",
             "\u2022 Polling rate: 125 / 250 / 500 / 1000 Hz.",
+            "\u2022 Snipe button: temporary DPI switch while held (assign \u2018snipe\u2019 to any button).",
+            "\u2022 Hardware macros: 15 macro slots (up to 67 key events each). Use the Macros\u2026 popup to record sequences.",
+            "\u2022 Wireless support: both wired (PID 0xFA07) and wireless dongle (PID 0xFA08) are detected.",
             "\u2022 IncediusMod variant supported (different side button layout).",
+            "\u2022 INI import/export: compatible with m913-ctl INI format for sharing configs.",
+            "\u2022 Diagnostics popup: raw HID packet viewer for debugging.",
             "\u2022 Loadouts: save / load / delete / auto-link per device.",
+            "\u2022 Retry logic: each packet is retried up to 2 times with ACK verification.",
             "",
             "## Razer mice (Razer tab)",
             "\u2022 Basilisk X HyperSpeed and other supported models.",
-            "\u2022 DPI: 5 stages, X/Y independent, 100\u201326000 DPI.",
-            "\u2022 7 remappable buttons (keyboard keys, mouse buttons, DPI cycle, disable).",
+            "\u2022 DPI: 5 stages, X/Y independent, clamped to per-model max (100\u201326000 DPI).",
+            "\u2022 7 remappable buttons (keyboard keys including F13\u2013F24, mouse buttons, DPI cycle, disable).",
+            "\u2022 Hypershift layer: each button can have a separate binding on the hypershift layer.",
+            "\u2022 CRC validation: response packets are verified (XOR bytes 2\u201387 + transaction ID check).",
             "\u2022 Polling rate, idle timeout, battery readback.",
             "\u2022 All settings written to onboard memory \u2014 no drivers needed, anti-cheat safe.",
             "\u2022 Loadouts: save / load / delete / auto-link per device.",
@@ -5425,6 +5446,7 @@ class App(tk.Tk):
             "## How it works",
             "Both use USB HID Feature Reports to read/write the mouse\u2019s onboard memory.",
             "No special drivers, no Synapse, no RedragonSoftware.",
+            "Profile format is versioned (v2) for forward compatibility.",
         ])
 
         # ══════════════════════════════════════════════════════════════
@@ -5794,6 +5816,19 @@ class App(tk.Tk):
         self._m913_layout_var.set(display)
         self._m913_on_layout_changed()
 
+    def _m913_pick_led_color(self) -> None:
+        """Open a color picker for the M913 LED color."""
+        from tkinter import colorchooser
+        current = self._m913_led_color_var.get().strip().lstrip("#")
+        try:
+            initial = f"#{current}" if len(current) == 6 else "#00ff00"
+        except Exception:
+            initial = "#00ff00"
+        result = colorchooser.askcolor(color=initial, title="Pick LED Color")
+        if result and result[1]:
+            hex_val = result[1].lstrip("#")
+            self._m913_led_color_var.set(hex_val)
+
     def _m913_apply_config(self) -> None:
         """Apply current UI settings to the selected M913 mouse."""
         idx = self._m913_dev_combo.current()
@@ -5868,6 +5903,263 @@ class App(tk.Tk):
         if messagebox.askyesno("Confirm Delete", f"Delete M913 profile '{name}'?"):
             m913_device.delete_profile(name)
             self._m913_status_var.set(f"Deleted profile '{name}'")
+
+    def _m913_export_ini(self) -> None:
+        """Export current M913 settings to an INI file (m913-ctl format)."""
+        self._m913_ui_to_profile()
+        path = filedialog.asksaveasfilename(
+            title="Export M913 INI",
+            defaultextension=".ini",
+            filetypes=[("INI files", "*.ini"), ("All files", "*.*")],
+            initialfile=f"{self._m913_profile.name}.ini",
+            parent=self,
+        )
+        if not path:
+            return
+        try:
+            m913_device.export_ini(self._m913_profile, path)
+            self._m913_status_var.set(f"Exported INI → {path}")
+            self._log_append(f"[M913] Exported INI: {path}")
+        except Exception as e:
+            self._m913_status_var.set(f"Export error: {e}")
+
+    def _m913_import_ini(self) -> None:
+        """Import M913 settings from an INI file (m913-ctl format)."""
+        path = filedialog.askopenfilename(
+            title="Import M913 INI",
+            filetypes=[("INI files", "*.ini"), ("All files", "*.*")],
+            parent=self,
+        )
+        if not path:
+            return
+        try:
+            self._m913_profile = m913_device.import_ini(path)
+            self._m913_ui_from_profile()
+            self._m913_status_var.set(f"Imported INI ← {path}")
+            self._log_append(f"[M913] Imported INI: {path}")
+        except Exception as e:
+            self._m913_status_var.set(f"Import error: {e}")
+
+    # ------------------------------------------------------------------
+    # M913 Macro Builder Popup
+    # ------------------------------------------------------------------
+
+    def _m913_macro_popup(self) -> None:
+        """Open a popup to visually edit hardware macro slots."""
+        win = tk.Toplevel(self)
+        win.title("M913 Macro Builder")
+        win.geometry("520x460")
+        win.transient(self)
+
+        # Slot selector
+        top = ttk.Frame(win)
+        top.pack(fill=tk.X, padx=8, pady=6)
+        ttk.Label(top, text="Macro Slot:").pack(side=tk.LEFT)
+        slot_var = tk.IntVar(value=1)
+        slot_spin = ttk.Spinbox(top, from_=1, to=m913_device.MACRO_SLOT_COUNT,
+                                textvariable=slot_var, width=4, state="readonly")
+        slot_spin.pack(side=tk.LEFT, padx=4)
+
+        # Event list
+        mid = ttk.LabelFrame(win, text="Key Events")
+        mid.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
+
+        event_list = tk.Listbox(mid, height=14, font=("Consolas", 10))
+        event_list.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+
+        # Controls
+        ctrl = ttk.Frame(win)
+        ctrl.pack(fill=tk.X, padx=8, pady=4)
+
+        key_var = tk.StringVar()
+        ttk.Label(ctrl, text="Key:").pack(side=tk.LEFT)
+        key_combo = ttk.Combobox(ctrl, textvariable=key_var, width=12,
+                                 values=m913_device.ALL_KEY_NAMES, state="readonly")
+        key_combo.pack(side=tk.LEFT, padx=4)
+
+        def _add_press_release() -> None:
+            k = key_var.get()
+            if not k or k not in m913_device.KEY_CODES:
+                return
+            sc = m913_device.KEY_CODES[k]
+            event_list.insert(tk.END, f"Press   {k}  (0x{sc:02X})")
+            event_list.insert(tk.END, f"Release {k}  (0x{sc:02X})")
+
+        def _add_press() -> None:
+            k = key_var.get()
+            if not k or k not in m913_device.KEY_CODES:
+                return
+            sc = m913_device.KEY_CODES[k]
+            event_list.insert(tk.END, f"Press   {k}  (0x{sc:02X})")
+
+        def _add_release() -> None:
+            k = key_var.get()
+            if not k or k not in m913_device.KEY_CODES:
+                return
+            sc = m913_device.KEY_CODES[k]
+            event_list.insert(tk.END, f"Release {k}  (0x{sc:02X})")
+
+        def _remove_selected() -> None:
+            sel = event_list.curselection()
+            if sel:
+                event_list.delete(sel[0])
+
+        def _clear_all() -> None:
+            event_list.delete(0, tk.END)
+
+        ttk.Button(ctrl, text="Press+Release", command=_add_press_release).pack(side=tk.LEFT, padx=2)
+        ttk.Button(ctrl, text="Press", command=_add_press).pack(side=tk.LEFT, padx=2)
+        ttk.Button(ctrl, text="Release", command=_add_release).pack(side=tk.LEFT, padx=2)
+        ttk.Button(ctrl, text="Remove", command=_remove_selected).pack(side=tk.LEFT, padx=2)
+        ttk.Button(ctrl, text="Clear", command=_clear_all).pack(side=tk.LEFT, padx=2)
+
+        # Bottom buttons
+        bot = ttk.Frame(win)
+        bot.pack(fill=tk.X, padx=8, pady=(0, 8))
+        status_var = tk.StringVar(value="")
+        ttk.Label(bot, textvariable=status_var).pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        def _parse_events() -> List[tuple]:
+            events = []
+            for i in range(event_list.size()):
+                line = event_list.get(i)
+                # Format: "Press   key  (0xHH)" or "Release key  (0xHH)"
+                parts = line.split()
+                if len(parts) < 3:
+                    continue
+                evt_type = m913_device.MACRO_EVENT_DOWN if parts[0] == "Press" else m913_device.MACRO_EVENT_UP
+                hex_str = parts[-1].strip("()")
+                try:
+                    sc = int(hex_str, 16)
+                    events.append((evt_type, sc))
+                except ValueError:
+                    pass
+            return events
+
+        def _load_slot() -> None:
+            slot = slot_var.get()
+            event_list.delete(0, tk.END)
+            macro = self._m913_profile.macros.get(slot)
+            if macro and not macro.is_empty():
+                # Reverse lookup scancode → key name
+                sc_to_name = {v: k for k, v in m913_device.KEY_CODES.items()}
+                for evt_type, sc in macro.events:
+                    kind = "Press" if evt_type == m913_device.MACRO_EVENT_DOWN else "Release"
+                    name = sc_to_name.get(sc, f"?{sc:02X}")
+                    event_list.insert(tk.END, f"{kind:7s} {name}  (0x{sc:02X})")
+                status_var.set(f"Loaded slot {slot}: {len(macro.events)} events")
+            else:
+                status_var.set(f"Slot {slot} is empty")
+
+        def _save_slot() -> None:
+            slot = slot_var.get()
+            events = _parse_events()
+            if not events:
+                if slot in self._m913_profile.macros:
+                    del self._m913_profile.macros[slot]
+                status_var.set(f"Slot {slot} cleared")
+                return
+            if len(events) > m913_device.MACRO_MAX_ACTIONS:
+                status_var.set(f"Too many events ({len(events)}/{m913_device.MACRO_MAX_ACTIONS})")
+                return
+            self._m913_profile.macros[slot] = m913_device.MacroSlot(events=events)
+            status_var.set(f"Saved slot {slot}: {len(events)} events")
+
+        ttk.Button(bot, text="Load Slot", command=_load_slot).pack(side=tk.RIGHT, padx=2)
+        ttk.Button(bot, text="Save Slot", command=_save_slot).pack(side=tk.RIGHT, padx=2)
+
+        # Load first slot on open
+        _load_slot()
+
+    # ------------------------------------------------------------------
+    # M913 Diagnostics Popup
+    # ------------------------------------------------------------------
+
+    def _m913_diag_popup(self) -> None:
+        """Open a raw HID packet viewer / diagnostics popup."""
+        win = tk.Toplevel(self)
+        win.title("M913 Diagnostics")
+        win.geometry("560x400")
+        win.transient(self)
+
+        ttk.Label(win, text="Raw HID Feature Report Viewer",
+                  font=("TkDefaultFont", 11, "bold")).pack(pady=(8, 4))
+
+        log_box = ScrolledText(win, height=18, font=("Consolas", 9), state="disabled")
+        log_box.pack(fill=tk.BOTH, expand=True, padx=8, pady=4)
+
+        def _append(text: str) -> None:
+            log_box.configure(state="normal")
+            log_box.insert(tk.END, text + "\n")
+            log_box.see(tk.END)
+            log_box.configure(state="disabled")
+
+        ctrl = ttk.Frame(win)
+        ctrl.pack(fill=tk.X, padx=8, pady=(0, 8))
+
+        def _send_read_report() -> None:
+            """Send a read request and display the raw response."""
+            if not hasattr(self, '_m913_open_dev') or self._m913_open_dev is None or not self._m913_open_dev.is_open:
+                _append("[ERROR] No M913 device is open.")
+                return
+            try:
+                # Attempt to read a feature report (report ID 0x08)
+                resp = self._m913_open_dev.recv_packet(timeout_ms=1000)
+                if resp:
+                    hex_str = " ".join(f"{b:02X}" for b in resp)
+                    _append(f"[RECV] ({len(resp)} bytes) {hex_str}")
+                else:
+                    _append("[RECV] No response (timeout)")
+            except Exception as e:
+                _append(f"[ERROR] {e}")
+
+        def _send_raw() -> None:
+            """Send a raw hex packet from the entry field."""
+            raw = raw_var.get().strip()
+            if not raw:
+                return
+            if not hasattr(self, '_m913_open_dev') or self._m913_open_dev is None or not self._m913_open_dev.is_open:
+                _append("[ERROR] No M913 device is open.")
+                return
+            try:
+                data = bytes.fromhex(raw.replace(" ", ""))
+                if len(data) != m913_device.PACKET_SIZE:
+                    _append(f"[ERROR] Expected {m913_device.PACKET_SIZE} bytes, got {len(data)}")
+                    return
+                pkt = bytearray(data)
+                hex_str = " ".join(f"{b:02X}" for b in pkt)
+                _append(f"[SEND] {hex_str}")
+                resp = self._m913_open_dev.send_recv(pkt)
+                if resp:
+                    hex_str = " ".join(f"{b:02X}" for b in resp)
+                    _append(f"[RECV] ({len(resp)} bytes) {hex_str}")
+                else:
+                    _append("[RECV] No response")
+            except ValueError:
+                _append("[ERROR] Invalid hex string")
+            except Exception as e:
+                _append(f"[ERROR] {e}")
+
+        def _show_device_info() -> None:
+            """Show info about the currently open M913 device."""
+            if not hasattr(self, '_m913_open_dev') or self._m913_open_dev is None or not self._m913_open_dev.is_open:
+                _append("[INFO] No M913 device is open.")
+                return
+            info = self._m913_open_dev.info
+            if info:
+                _append(f"[INFO] Product: {info.product_string}")
+                _append(f"[INFO] Serial:  {info.serial_number}")
+                _append(f"[INFO] Mfr:     {info.manufacturer_string}")
+                _append(f"[INFO] Iface:   {info.interface_number}")
+                _append(f"[INFO] Path:    {info.path}")
+
+        ttk.Button(ctrl, text="Device Info", command=_show_device_info).pack(side=tk.LEFT, padx=2)
+        ttk.Button(ctrl, text="Read Report", command=_send_read_report).pack(side=tk.LEFT, padx=2)
+
+        raw_var = tk.StringVar()
+        ttk.Label(ctrl, text="Raw hex:").pack(side=tk.LEFT, padx=(8, 2))
+        ttk.Entry(ctrl, textvariable=raw_var, width=38, font=("Consolas", 9)).pack(side=tk.LEFT, padx=2)
+        ttk.Button(ctrl, text="Send", command=_send_raw).pack(side=tk.LEFT, padx=2)
 
     # ------------------------------------------------------------------
     # Razer Mouse Tab
