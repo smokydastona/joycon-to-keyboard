@@ -103,8 +103,15 @@ void usb_mouse_scroll(int8_t vertical, int8_t horizontal) {
 
     xSemaphoreTake(s_mutex, portMAX_DELAY);
 
-    s_pending_vscroll = vertical;
-    s_pending_hscroll = horizontal;
+    s_pending_vscroll += vertical;
+    s_pending_hscroll += horizontal;
+
+    // Clamp to int8_t range to avoid overflow.
+    if (s_pending_vscroll > 127) s_pending_vscroll = 127;
+    if (s_pending_vscroll < -127) s_pending_vscroll = -127;
+    if (s_pending_hscroll > 127) s_pending_hscroll = 127;
+    if (s_pending_hscroll < -127) s_pending_hscroll = -127;
+
     send_report();
 
     xSemaphoreGive(s_mutex);

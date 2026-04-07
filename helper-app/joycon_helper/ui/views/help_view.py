@@ -1,6 +1,6 @@
 """Help view — searchable, collapsible sections mirroring the old Help tab.
 
-Provides 14 sections covering setup, usage, troubleshooting, and reference.
+Provides 16 sections covering setup, usage, troubleshooting, and reference.
 Each section is collapsible and all are filtered by a live search bar.
 """
 from __future__ import annotations

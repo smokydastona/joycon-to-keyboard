@@ -197,15 +197,3 @@ bool uart_proto_wait(uint32_t timeout_ticks) {
     }
     return false;  // timeout
 }
-
-bool uart_proto_poll_event(uint8_t* event_byte) {
-    uart_frame_t f;
-    while (uart_proto_poll_frame(&f)) {
-        if (f.type == UART_FRAME_KEY_EVENT && f.length == 1) {
-            *event_byte = f.payload[0];
-            return true;
-        }
-        // ignore other frame types
-    }
-    return false;
-}

@@ -29,12 +29,6 @@ typedef struct {
 // Poll for any decoded UART frame (key/debug/status).
 bool uart_proto_poll_frame(uart_frame_t* out);
 
-// Poll for a decoded key event frame.
-// event_byte format:
-//   bit 7: pressed (1=down)
-//   bits 6..0: key_id
-bool uart_proto_poll_event(uint8_t* event_byte);
-
 // Send a control command frame from the ESP32-S3 to the ESP32 BT host.
 // Payload format: [0]=0xFE (ctrl marker), [1]=cmd_id, [2..]=cmd payload.
 bool uart_proto_send_ctrl(uint8_t cmd_id, const uint8_t* data, uint8_t data_len);
