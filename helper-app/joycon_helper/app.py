@@ -2133,8 +2133,8 @@ class App(tk.Tk):
             self._trick_builder_frame, text="\U0001f9ea Trick Builder",
             bg=bg, fg=fg,
             font=(font_family, 10, "bold"),
-            anchor="w", padx=4, pady=(6, 4),
-        ).pack(fill=tk.X)
+            anchor="w", padx=4,
+        ).pack(fill=tk.X, pady=(6, 4))
 
         # -- Pick or create trick --
         pick_row = tk.Frame(self._trick_builder_frame, bg=bg)
@@ -2180,8 +2180,8 @@ class App(tk.Tk):
             mask_section, text="\U0001f3ad Disguises",
             bg=bg, fg=fg,
             font=(font_family, 10, "bold"),
-            anchor="w", padx=8, pady=(6, 4),
-        ).pack(fill=tk.X)
+            anchor="w", padx=8,
+        ).pack(fill=tk.X, pady=(6, 4))
 
         self._mask_cards_frame = tk.Frame(mask_section, bg=bg)
         self._mask_cards_frame.pack(fill=tk.X, padx=8, pady=(0, 8))
