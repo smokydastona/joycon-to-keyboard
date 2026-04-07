@@ -37,16 +37,16 @@ JOYCONS_DARK_SRC = REPO_ROOT / "joycons-dark.png"
 JOYCONS_DARK_GREY_SRC = REPO_ROOT / "joycons-dark-grey.png"
 JOYCONS_OUT_DIR = BUILD_DIR
 JOYCONS_COPIES = {
-    "joycons-none.png": "Overlay variant (none) derived from joycons-grey.png",
-    "joycons-left.png": "Overlay variant (left connected) composited from joycons.png + joycons-grey.png",
-    "joycons-right.png": "Overlay variant (right connected) composited from joycons.png + joycons-grey.png",
-    "joycons-both.png": "Overlay variant (both connected) derived from joycons.png",
+    "joycons_none.png": "Overlay variant (none) derived from joycons-grey.png",
+    "joycons_left.png": "Overlay variant (left connected) composited from joycons.png + joycons-grey.png",
+    "joycons_right.png": "Overlay variant (right connected) composited from joycons.png + joycons-grey.png",
+    "joycons_both.png": "Overlay variant (both connected) derived from joycons.png",
 }
 JOYCONS_DARK_COPIES = {
-    "joycons-dark-none.png": "Dark overlay variant (none) derived from joycons-dark-grey.png",
-    "joycons-dark-left.png": "Dark overlay variant (left connected) composited from joycons-dark.png + joycons-dark-grey.png",
-    "joycons-dark-right.png": "Dark overlay variant (right connected) composited from joycons-dark.png + joycons-dark-grey.png",
-    "joycons-dark-both.png": "Dark overlay variant (both connected) derived from joycons-dark.png",
+    "joycons_dark_none.png": "Dark overlay variant (none) derived from joycons-dark-grey.png",
+    "joycons_dark_left.png": "Dark overlay variant (left connected) composited from joycons-dark.png + joycons-dark-grey.png",
+    "joycons_dark_right.png": "Dark overlay variant (right connected) composited from joycons-dark.png + joycons-dark-grey.png",
+    "joycons_dark_both.png": "Dark overlay variant (both connected) derived from joycons-dark.png",
 }
 
 GENERATOR_SRC = Path(__file__).resolve()
@@ -61,15 +61,15 @@ BG_DARK = UI_DIR / "dark" / "backgrounds" / "background-dark.png"
 # M913 stock + Incedius composites are committed truth and NOT regenerated.
 COMPOSITES: dict[str, tuple[Path, Path]] = {
     # default (light) — Joy-Con
-    "default/backgrounds/joycons-none.png":  (BG_LIGHT, BUILD_DIR / "joycons-none.png"),
-    "default/backgrounds/joycons-left.png":  (BG_LIGHT, BUILD_DIR / "joycons-left.png"),
-    "default/backgrounds/joycons-right.png": (BG_LIGHT, BUILD_DIR / "joycons-right.png"),
-    "default/backgrounds/joycons-both.png":  (BG_LIGHT, BUILD_DIR / "joycons-both.png"),
+    "default/backgrounds/joycons_none.png":  (BG_LIGHT, BUILD_DIR / "joycons_none.png"),
+    "default/backgrounds/joycons_left.png":  (BG_LIGHT, BUILD_DIR / "joycons_left.png"),
+    "default/backgrounds/joycons_right.png": (BG_LIGHT, BUILD_DIR / "joycons_right.png"),
+    "default/backgrounds/joycons_both.png":  (BG_LIGHT, BUILD_DIR / "joycons_both.png"),
     # dark — Joy-Con
-    "dark/backgrounds/joycons-none.png":  (BG_DARK, BUILD_DIR / "joycons-dark-none.png"),
-    "dark/backgrounds/joycons-left.png":  (BG_DARK, BUILD_DIR / "joycons-dark-left.png"),
-    "dark/backgrounds/joycons-right.png": (BG_DARK, BUILD_DIR / "joycons-dark-right.png"),
-    "dark/backgrounds/joycons-both.png":  (BG_DARK, BUILD_DIR / "joycons-dark-both.png"),
+    "dark/backgrounds/joycons_none.png":  (BG_DARK, BUILD_DIR / "joycons_dark_none.png"),
+    "dark/backgrounds/joycons_left.png":  (BG_DARK, BUILD_DIR / "joycons_dark_left.png"),
+    "dark/backgrounds/joycons_right.png": (BG_DARK, BUILD_DIR / "joycons_dark_right.png"),
+    "dark/backgrounds/joycons_both.png":  (BG_DARK, BUILD_DIR / "joycons_dark_both.png"),
 }
 
 UI_BUNDLE_DIR = REPO_ROOT / ".ui-bundle"
@@ -83,15 +83,19 @@ UI_BUNDLE_INPUTS = [
     JOYCONS_DARK_GREY_SRC,
     BG_LIGHT,
     BG_DARK,
-    # Composited backgrounds are the truth — they are bundle inputs.
-    UI_DIR / "default" / "backgrounds" / "m913.png",
-    UI_DIR / "default" / "backgrounds" / "m913-none.png",
-    UI_DIR / "dark" / "backgrounds" / "m913.png",
-    UI_DIR / "dark" / "backgrounds" / "m913-none.png",
-    UI_DIR / "default" / "backgrounds" / "m913-incedius.png",
-    UI_DIR / "default" / "backgrounds" / "m913-incedius-none.png",
-    UI_DIR / "dark" / "backgrounds" / "m913-incedius.png",
-    UI_DIR / "dark" / "backgrounds" / "m913-incedius-none.png",
+    # Committed device backgrounds (not regenerated).
+    UI_DIR / "default" / "backgrounds" / "m913_connected.png",
+    UI_DIR / "default" / "backgrounds" / "m913_none.png",
+    UI_DIR / "dark" / "backgrounds" / "m913_connected.png",
+    UI_DIR / "dark" / "backgrounds" / "m913_none.png",
+    UI_DIR / "default" / "backgrounds" / "incedius_connected.png",
+    UI_DIR / "default" / "backgrounds" / "incedius_none.png",
+    UI_DIR / "dark" / "backgrounds" / "incedius_connected.png",
+    UI_DIR / "dark" / "backgrounds" / "incedius_none.png",
+    UI_DIR / "default" / "backgrounds" / "razer_connected.png",
+    UI_DIR / "default" / "backgrounds" / "razer_none.png",
+    UI_DIR / "dark" / "backgrounds" / "razer_connected.png",
+    UI_DIR / "dark" / "backgrounds" / "razer_none.png",
     UI_DIR / "misc" / "pinouts.png",
     UI_DIR / "default" / "misc" / "keyboard.png",
     UI_DIR / "dark" / "misc" / "keyboard-dark.png",
@@ -226,12 +230,12 @@ def _run_ui_bundle_generator() -> bool:
     expected = [
         UI_BUNDLE_DIR / "theme.json",
         UI_BUNDLE_DIR / "layout.json",
-        UI_BUNDLE_DIR / "joycons-none.png",
-        UI_BUNDLE_DIR / "joycons-left.png",
-        UI_BUNDLE_DIR / "joycons-right.png",
-        UI_BUNDLE_DIR / "joycons-both.png",
-        UI_BUNDLE_DIR / "m913.png",
-        UI_BUNDLE_DIR / "m913-none.png",
+        UI_BUNDLE_DIR / "backgrounds" / "joycons_none.png",
+        UI_BUNDLE_DIR / "backgrounds" / "joycons_both.png",
+        UI_BUNDLE_DIR / "backgrounds" / "m913_connected.png",
+        UI_BUNDLE_DIR / "backgrounds" / "m913_none.png",
+        UI_BUNDLE_DIR / "backgrounds" / "razer_none.png",
+        UI_BUNDLE_DIR / "keyboard.png",
         UI_BUNDLE_DIR / "background.png",
     ]
     if all(p.exists() for p in expected) and not any(_needs_update(UI_BUNDLE_INPUTS, p) for p in expected):
@@ -255,7 +259,7 @@ def main() -> int:
         for name in JOYCONS_COPIES:
             dst = JOYCONS_OUT_DIR / name
             try:
-                did = _render_joycons_variant(dst, variant=name.removeprefix("joycons-").removesuffix(".png"))
+                did = _render_joycons_variant(dst, variant=name.removeprefix("joycons_").removesuffix(".png"))
             except Exception:
                 return 3
 
@@ -273,7 +277,7 @@ def main() -> int:
             try:
                 did = _render_joycons_variant(
                     dst,
-                    variant=name.removeprefix("joycons-dark-").removesuffix(".png"),
+                    variant=name.removeprefix("joycons_dark_").removesuffix(".png"),
                     color_src=JOYCONS_DARK_SRC,
                     grey_src=JOYCONS_DARK_GREY_SRC,
                 )
