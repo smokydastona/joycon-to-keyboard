@@ -411,6 +411,9 @@ class RazerProfile:
         "scroll_up": "default", "scroll_down": "default",
     })
 
+    # Sister profile linking: which Joy-Con slot this should auto-apply with
+    sister_slot: Optional[int] = None  # 0–3, or None
+
     def to_dict(self) -> dict:
         return {
             "ver": 2,
@@ -421,6 +424,7 @@ class RazerProfile:
             "idle_time": self.idle_time,
             "button_bindings": dict(self.button_bindings),
             "hypershift_bindings": dict(self.hypershift_bindings),
+            "sister_slot": self.sister_slot,
         }
 
     @classmethod
@@ -436,6 +440,7 @@ class RazerProfile:
         p.button_bindings = d.get("button_bindings", p.button_bindings)
         p.hypershift_bindings = d.get("hypershift_bindings",
                                       p.hypershift_bindings)
+        p.sister_slot = d.get("sister_slot", None)
         return p
 
     def save(self, path: str) -> None:

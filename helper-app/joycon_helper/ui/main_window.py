@@ -482,6 +482,7 @@ class MainWindow(QMainWindow):
     def _on_slot_changed(self, index: int) -> None:
         self._slot = index
         self._status_bar.set_slot(index)
+        self._notify_views("slot_changed", slot=index)
 
     def _on_app_switch_slot(self, slot: int) -> None:
         """Called from AppSwitcher background thread — marshal to main thread."""
@@ -494,6 +495,7 @@ class MainWindow(QMainWindow):
         self._slot_combo.setCurrentIndex(slot)
         self.send_cmd({"cmd": "set_active_profile", "slot": slot})
         self._cmd_read_profile()
+        self._notify_views("slot_changed", slot=slot)
         self._log_line(f"[app-switch] → slot {slot}")
 
     # -----------------------------------------------------------------

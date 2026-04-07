@@ -25,6 +25,26 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("joycon_helper.ui.views.devices")
 
+# Lazy-imported device modules (avoid import errors when hidapi missing)
+_m913_mod: Any = None
+_razer_mod: Any = None
+
+
+def _get_m913_mod() -> Any:
+    global _m913_mod
+    if _m913_mod is None:
+        from ... import m913_device as _mod
+        _m913_mod = _mod
+    return _m913_mod
+
+
+def _get_razer_mod() -> Any:
+    global _razer_mod
+    if _razer_mod is None:
+        from ... import razer_device as _mod
+        _razer_mod = _mod
+    return _razer_mod
+
 
 class DevicesView(QWidget):
     """Device configuration for M913 keypad and Razer mice."""
@@ -32,6 +52,13 @@ class DevicesView(QWidget):
     def __init__(self, main: MainWindow) -> None:
         super().__init__()
         self._main = main
+
+        # Active device handles (set after detect)
+        self._m913_dev: Any = None
+        self._razer_dev: Any = None
+        # Currently loaded device profiles
+        self._m913_profile: Any = None
+        self._razer_profile: Any = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -256,9 +283,10 @@ class DevicesView(QWidget):
 
     def _detect_m913(self) -> None:
         try:
-            from ...m913_device import M913Device
-            dev = M913Device()
+            mod = _get_m913_mod()
+            dev = mod.M913Device()
             if dev.connect():
+                self._m913_dev = dev
                 self._m913_status.setText("Connected")
                 self._m913_status.setStyleSheet(
                     f"color: {self._main.theme.color('success')};"
@@ -287,9 +315,10 @@ class DevicesView(QWidget):
 
     def _detect_razer(self) -> None:
         try:
-            from ...razer_device import RazerDevice
-            dev = RazerDevice()
+            mod = _get_razer_mod()
+            dev = mod.RazerDevice()
             if dev.connect():
+                self._razer_dev = dev
                 self._razer_status.setText("Connected")
                 self._razer_status.setStyleSheet(
                     f"color: {self._main.theme.color('success')};"
@@ -305,12 +334,91 @@ class DevicesView(QWidget):
         except Exception as e:
             self._razer_status.setText(f"Error: {e}")
             log.error("Razer detect failed: %s", e, exc_info=True)
+            log.error("Razer detect failed: %s", e, exc_info=True)
 
     def _apply_razer_dpi(self) -> None:
         log.info("Applying Razer DPI: %d", self._razer_dpi.value())
 
     def _apply_razer_polling(self) -> None:
         log.info("Applying Razer polling rate: %s", self._razer_polling.currentText())
+
+    # -----------------------------------------------------------------
+    # Slot changed — auto-apply linked M913 / Razer profiles
+    # -----------------------------------------------------------------
+
+    def slot_changed(self, slot: int) -> None:
+        """Called when the active Joy-Con slot changes (manual or app-switch).
+
+        Scans saved M913 and Razer profiles for any whose ``sister_slot``
+        matches *slot* and applies the first match to the connected device.
+        """
+        self._apply_linked_m913(slot)
+        self._apply_linked_razer(slot)
+
+    def _apply_linked_m913(self, slot: int) -> None:
+        try:
+            mod = _get_m913_mod()
+        except Exception:
+            return
+        try:
+            names = mod.list_saved_profiles()
+        except Exception:
+            return
+        for name in names:
+            try:
+                profile = mod.load_profile(name)
+            except Exception:
+                continue
+            if getattr(profile, "sister_slot", None) == slot:
+                self._m913_profile = profile
+                log.info("M913 auto-switch: loaded '%s' (sister_slot=%d)", name, slot)
+                if self._m913_dev and self._m913_dev.is_open:
+                    try:
+                        self._m913_dev.apply_profile(profile)
+                        self._m913_status.setText(f"Linked: {name}")
+                        self._m913_status.setStyleSheet(
+                            f"color: {self._main.theme.color('success')};"
+                        )
+                        self._main._log_line(f"[m913] Auto-applied profile '{name}' for slot {slot}")
+                    except Exception as e:
+                        log.warning("M913 auto-apply failed: %s", e)
+                else:
+                    self._main._log_line(f"[m913] Linked profile '{name}' ready (device not connected)")
+                return
+        # No linked profile for this slot
+        log.debug("No M913 profile linked to slot %d", slot)
+
+    def _apply_linked_razer(self, slot: int) -> None:
+        try:
+            mod = _get_razer_mod()
+        except Exception:
+            return
+        try:
+            names = mod.list_saved_profiles()
+        except Exception:
+            return
+        for name in names:
+            try:
+                profile = mod.load_profile(name)
+            except Exception:
+                continue
+            if getattr(profile, "sister_slot", None) == slot:
+                self._razer_profile = profile
+                log.info("Razer auto-switch: loaded '%s' (sister_slot=%d)", name, slot)
+                if self._razer_dev and self._razer_dev.is_open:
+                    try:
+                        self._razer_dev.apply_profile(profile)
+                        self._razer_status.setText(f"Linked: {name}")
+                        self._razer_status.setStyleSheet(
+                            f"color: {self._main.theme.color('success')};"
+                        )
+                        self._main._log_line(f"[razer] Auto-applied profile '{name}' for slot {slot}")
+                    except Exception as e:
+                        log.warning("Razer auto-apply failed: %s", e)
+                else:
+                    self._main._log_line(f"[razer] Linked profile '{name}' ready (device not connected)")
+                return
+        log.debug("No Razer profile linked to slot %d", slot)
 
     # -----------------------------------------------------------------
     def device_event(self, obj: dict) -> None:
