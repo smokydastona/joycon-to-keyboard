@@ -2076,8 +2076,8 @@ class App(tk.Tk):
             self._heist_card_frame, textvariable=self._heist_btn_name_var,
             bg=bg, fg=fg,
             font=(font_family, 13, "bold"),
-            anchor="w", padx=8, pady=(8, 2),
-        ).pack(fill=tk.X)
+            anchor="w", padx=8,
+        ).pack(fill=tk.X, pady=(8, 2))
 
         # Current mapping display
         self._heist_current_var = tk.StringVar(value="")
@@ -2085,8 +2085,8 @@ class App(tk.Tk):
             self._heist_card_frame, textvariable=self._heist_current_var,
             bg=bg, fg=muted,
             font=(font_family, 9), anchor="w",
-            padx=8, pady=(0, 8), wraplength=190,
-        ).pack(fill=tk.X)
+            padx=8, wraplength=190,
+        ).pack(fill=tk.X, pady=(0, 8))
 
         tk.Frame(self._heist_card_frame, height=2, bg=border).pack(fill=tk.X, padx=8)
 
