@@ -20,3 +20,7 @@ CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 
 # 1 kHz tick rate for 1ms task delays (low-latency input processing).
 CONFIG_FREERTOS_HZ=1000
+
+# Task watchdog — resets if any subscribed task starves for 10 s.
+CONFIG_ESP_TASK_WDT_EN=y
+CONFIG_ESP_TASK_WDT_TIMEOUT_S=10

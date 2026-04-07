@@ -1,5 +1,5 @@
-pyserial>=3.5
-Pillow>=10.0
-hidapi>=0.14
-esptool>=4.7
-PyQt6>=6.9
+pyserial>=3.5,<4
+Pillow>=10.0,<12
+hidapi>=0.14,<1
+esptool>=4.7,<5
+PyQt6>=6.9,<7

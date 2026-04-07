@@ -27,11 +27,13 @@ You need **three wires** for a working adapter:
 
 That’s enough for: Joy-Con/Binbok → ESP32 → UART → ESP32-S3 → USB keyboard.
 
-## Recommended connections (better / future-proof)
+## Recommended connections (required for full functionality)
 
-Add the reverse UART line so the ESP32-S3 can send commands back later (optional; not required for basic key output):
+Add the reverse UART line so the ESP32-S3 can send commands to the ESP32 (required for helper-app features like bind management, profile sync, and OTA updates):
 
 - ESP32-S3 `TX` → ESP32 `RX`
+
+Without this wire, basic keyboard output still works but the helper app cannot communicate with the ESP32.
 
 ## Pin defaults used by this repo
 

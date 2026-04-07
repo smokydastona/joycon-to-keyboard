@@ -375,6 +375,8 @@ class MainWindow(QMainWindow):
         self._connect_btn.style().polish(self._connect_btn)
         self._status_bar.set_disconnected()
         self._log_line("[disconnected]")
+        # Clear stale key state so overlay/views don't show phantom presses.
+        self._active_key_ids.clear()
         self._notify_views("connection_changed", connected=False)
 
     def _on_connection_error(self, msg: str) -> None:
@@ -472,7 +474,8 @@ class MainWindow(QMainWindow):
                 try:
                     getattr(view, method)(**kwargs)
                 except Exception:
-                    log.debug("View notification failed: %s", method, exc_info=True)
+                    log.warning("View notification failed: %s on %s",
+                                method, type(view).__name__, exc_info=True)
 
     def _get_hotspot_name(self, key_id: int) -> str:
         for name, _, _ in KEYMAP_HOTSPOTS:
@@ -775,6 +778,15 @@ class MainWindow(QMainWindow):
     def _real_quit(self) -> None:
         """Perform full cleanup and quit the application."""
         self._app_switcher.stop()
+        # Disconnect bridge signals to avoid callbacks during teardown.
+        try:
+            self.bridge.connected.disconnect(self._on_serial_connected)
+            self.bridge.disconnected.disconnect(self._on_serial_disconnected)
+            self.bridge.raw_line.disconnect(self._on_raw_line)
+            self.bridge.device_event.disconnect(self._handle_dev_obj)
+            self.bridge.connection_error.disconnect(self._on_connection_error)
+        except (TypeError, RuntimeError):
+            pass  # already disconnected
         if self.bridge.is_connected:
             self.bridge.disconnect_serial()
         if self._overlay and not self._overlay.is_closed:

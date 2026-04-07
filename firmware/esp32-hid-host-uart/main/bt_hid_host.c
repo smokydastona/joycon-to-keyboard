@@ -210,6 +210,10 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
             // SPI flash calibration, sets player LEDs).
             joycon_setup_start(param->open.handle, slot);
 
+            // Clear SOCD/stick state from any prior session so stale
+            // direction history doesn't contaminate the new connection.
+            joycon_mapper_reset_state();
+
             // In dual-connect mode, keep scanning until we have both sides.
             if (dual_needs_more()) {
                 (void)bt_hid_host_start_discovery();

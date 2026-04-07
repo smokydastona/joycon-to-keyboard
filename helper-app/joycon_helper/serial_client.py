@@ -24,15 +24,22 @@ class SerialClient:
         self._ser: Optional[serial.Serial] = None
         self._rx_thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
+        self._connection_lost = threading.Event()
         self.rx: "queue.Queue[SerialLine]" = queue.Queue()
 
     @property
     def is_connected(self) -> bool:
         return self._ser is not None and self._ser.is_open
 
+    @property
+    def connection_lost(self) -> bool:
+        """True when the RX thread exited due to a read error (cable unplug, etc.)."""
+        return self._connection_lost.is_set()
+
     def connect(self, port: str, baud: int = 115200) -> None:
         self.disconnect()
         self._stop.clear()
+        self._connection_lost.clear()
         log.info("Opening serial port %s @ %d", port, baud)
         self._ser = serial.Serial(port=port, baudrate=baud, timeout=0.1)
         self._rx_thread = threading.Thread(target=self._rx_loop, name="serial-rx", daemon=True)
@@ -77,6 +84,7 @@ class SerialClient:
             except Exception as exc:
                 if not self._stop.is_set():
                     log.error("Serial read error: %s", exc, exc_info=True)
+                    self._connection_lost.set()
                 break
 
             if chunk:

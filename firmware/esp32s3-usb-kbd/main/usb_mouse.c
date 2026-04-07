@@ -24,7 +24,7 @@ static int8_t s_last_hscroll = 0;
 
 // --- Anti-cheat rate guard ---
 static int64_t s_last_report_us = 0;
-#define MIN_REPORT_INTERVAL_US 900  // ~1 ms guard (match keyboard)
+#define MIN_REPORT_INTERVAL_US 1000  // 1 ms guard (match keyboard)
 
 // Pending movement/scroll accumulated between reports.
 static int16_t s_pending_dx = 0;

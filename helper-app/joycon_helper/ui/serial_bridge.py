@@ -31,7 +31,7 @@ class SerialBridge(QObject):
         super().__init__(parent)
         self.client = SerialClient()
         self._drain_timer = QTimer(self)
-        self._drain_timer.setInterval(50)
+        self._drain_timer.setInterval(16)
         self._drain_timer.timeout.connect(self._drain_rx)
 
     @property
@@ -80,3 +80,7 @@ class SerialBridge(QObject):
             self.raw_line.emit(item.raw)
             if item.parsed is not None:
                 self.device_event.emit(item.parsed)
+
+        if self.client.connection_lost:
+            log.warning("Connection lost detected — disconnecting")
+            self.disconnect_serial()

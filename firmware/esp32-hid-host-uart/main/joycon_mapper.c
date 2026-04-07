@@ -66,6 +66,14 @@ void joycon_mapper_set_rapid_trigger(uint8_t activation, uint8_t deactivation) {
              (unsigned)s_act_threshold, (unsigned)s_deact_threshold);
 }
 
+void joycon_mapper_reset_state(void) {
+    s_socd_lr_last  = 0;
+    s_socd_ud_last  = 0;
+    s_socd_rlr_last = 0;
+    s_socd_rud_last = 0;
+    ESP_LOGI("joycon-mapper", "Transient state reset (SOCD history cleared)");
+}
+
 void joycon_mapper_set_stick_curve(uint8_t curve, uint8_t exp_x100) {
     if (curve <= STICK_CURVE_QUADRATIC) {
         s_curve = (stick_curve_t)curve;
@@ -580,13 +588,8 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
     }
 #endif
 
-    // TODO: Implement Joy-Con report parsing here.
-    //
-    // Suggested workflow:
-    // 1) Flash ESP32 firmware and capture the first 25 reports from the serial monitor.
-    // 2) Press ONE control at a time on the Joy-Con.
-    // 3) Identify which bytes/bits toggle.
-    // 4) Map those toggles to KEY_ID_* and call emit_if_changed(...).
+    // Fallback: if extended parsing above was compiled out or didn't match,
+    // release all buttons so nothing sticks.
 
     emit_if_changed_ex(device_id, KEY_ID_FORWARD, false, &prev_forward);
     emit_if_changed_ex(device_id, KEY_ID_BACK, false, &prev_back);

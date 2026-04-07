@@ -66,12 +66,15 @@ def _sections() -> List[Tuple[str, str, bool]]:
             "🔌 Wiring & Connections",
             (
                 "## UART wiring between boards\n"
-                "  ESP32 GPIO17 (TX) → ESP32-S3 GPIO18 (RX)\n"
-                "  ESP32 GPIO16 (RX) ← ESP32-S3 GPIO17 (TX)\n"
+                "  ESP32 GPIO17 (TX) → ESP32-S3 GPIO44 (RX)\n"
+                "  ESP32 GPIO16 (RX) ← ESP32-S3 GPIO43 (TX)\n"
                 "  GND ↔ GND\n\n"
                 "## USB connection\n"
                 "  ESP32-S3 USB port → PC (acts as keyboard + CDC serial)\n\n"
                 "## Important\n"
+                "The return UART wire (ESP32-S3 TX → ESP32 RX) is required for "
+                "helper-app features like bind management, profile sync, and OTA "
+                "updates. Without it, basic keyboard output still works.\n\n"
                 "Do NOT connect 5 V or 3.3 V power pins between boards unless "
                 "they share a common power supply. Only GND + TX/RX are needed.\n\n"
                 "See docs/wiring.md for a full diagram."
@@ -86,8 +89,8 @@ def _sections() -> List[Tuple[str, str, bool]]:
                 "  GPIO16 = UART RX (from S3 TX)\n"
                 "  GPIO17 = UART TX (to S3 RX)\n\n"
                 "## ESP32-S3 (USB Device)\n"
-                "  GPIO17 = UART TX (to ESP32 RX)\n"
-                "  GPIO18 = UART RX (from ESP32 TX)\n"
+                "  GPIO43 = UART TX (to ESP32 RX)\n"
+                "  GPIO44 = UART RX (from ESP32 TX)\n"
                 "  USB = HID Keyboard + CDC ACM"
             ),
             False,

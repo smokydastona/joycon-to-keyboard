@@ -105,7 +105,7 @@ Profile schema (expected by the ESP32-S3 keyboard-side firmware):
 Notes:
 
 - `mappings` keys are strings (input `key_id`), for easier JSON interoperability.
-- `stick` is stored for future analog support; it may be ignored by current firmware. The `socd_mode` and `rapid_trigger` sub-fields are forwarded to the ESP32 BT host on profile load.
+- `stick` configures analog stick behavior on the ESP32 BT host. All sub-fields are forwarded on profile load: `deadzone`, `shape`, `curve`, `exp`, `socd_mode`, and `rapid_trigger`.
 - `humanize` enables ±15% timing jitter on macro delays and ±10% on turbo repeats (default true).
 - `right_stick_mode` controls right analog stick behavior: `"keys"` (default), `"mouse"`, or `"scroll"`.
 - `mouse_sensitivity` scales mouse cursor movement when `right_stick_mode` is `"mouse"` (1–50, default 10).
@@ -485,6 +485,12 @@ For ESP32 relay:
 
 ```json
 {"cmd":"fw_update_abort","board":"esp32"}
+```
+
+Response:
+
+```json
+{"rsp":"fw_update_abort","ok":true}
 ```
 
 ### Set stick response curve

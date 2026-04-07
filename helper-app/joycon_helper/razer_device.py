@@ -549,6 +549,7 @@ class RazerDevice:
         """Send a feature report and read the response.
 
         Validates CRC and transaction ID in the response.
+        Retries up to 3 times on CRC mismatch before giving up.
         Returns parsed response dict or None on failure.
         """
         if self._dev is None:
@@ -556,43 +557,50 @@ class RazerDevice:
 
         expected_txn = report[1]
 
-        # hidapi: send_feature_report expects report[0] = report ID (0x00)
-        try:
-            self._dev.send_feature_report(bytes(report))
-        except Exception as e:
-            log.error("Razer HID write failed: %s", e)
-            raise RuntimeError(f"Razer USB write failed (device disconnected?): {e}") from e
+        for crc_attempt in range(3):
+            # hidapi: send_feature_report expects report[0] = report ID (0x00)
+            try:
+                self._dev.send_feature_report(bytes(report))
+            except Exception as e:
+                log.error("Razer HID write failed: %s", e)
+                raise RuntimeError(f"Razer USB write failed (device disconnected?): {e}") from e
 
-        # Small delay for device to process
-        time.sleep(0.02)
+            # Small delay for device to process
+            time.sleep(0.02)
 
-        # Read feature report back (report ID 0x00)
-        try:
-            resp = self._dev.get_feature_report(0x00, REPORT_SIZE)
-        except Exception as e:
-            log.debug("Feature report read failed: %s", e)
-            return None
+            # Read feature report back (report ID 0x00)
+            try:
+                resp = self._dev.get_feature_report(0x00, REPORT_SIZE)
+            except Exception as e:
+                log.debug("Feature report read failed: %s", e)
+                return None
 
-        if resp is None or len(resp) < REPORT_SIZE:
-            return None
+            if resp is None or len(resp) < REPORT_SIZE:
+                return None
 
-        parsed = _parse_response(bytes(resp))
-        if parsed is None:
-            return None
+            parsed = _parse_response(bytes(resp))
+            if parsed is None:
+                return None
 
-        # Validate CRC: XOR of bytes 2–87
-        expected_crc = _calculate_crc(bytearray(resp))
-        if resp[88] != expected_crc:
-            log.warning("Razer CRC mismatch: got 0x%02X, expected 0x%02X",
-                        resp[88], expected_crc)
-            # Still return the data — CRC failures can be transient
+            # Validate CRC: XOR of bytes 2–87
+            expected_crc = _calculate_crc(bytearray(resp))
+            if resp[88] != expected_crc:
+                log.warning("Razer CRC mismatch (attempt %d/3): got 0x%02X, expected 0x%02X",
+                            crc_attempt + 1, resp[88], expected_crc)
+                if crc_attempt < 2:
+                    time.sleep(0.02)
+                    continue  # retry
+                log.error("Razer CRC validation failed after 3 attempts — rejecting response")
+                return None
 
-        # Validate transaction ID
-        if parsed["txn_id"] != expected_txn:
-            log.debug("Razer txn_id mismatch: got 0x%02X, expected 0x%02X",
-                      parsed["txn_id"], expected_txn)
+            # Validate transaction ID
+            if parsed["txn_id"] != expected_txn:
+                log.debug("Razer txn_id mismatch: got 0x%02X, expected 0x%02X",
+                          parsed["txn_id"], expected_txn)
 
-        return parsed
+            return parsed
+
+        return None  # unreachable, but satisfies type checker
 
     def _command(self, cmd_class: int, cmd_id: int,
                  data_size: int, args: bytes = b"",
@@ -678,8 +686,12 @@ class RazerDevice:
         max_dpi = 16000
         if self._info:
             max_dpi = self._info.device_meta.get("max_dpi", 16000)
+        orig_x, orig_y = dpi_x, dpi_y
         dpi_x = max(100, min(dpi_x, max_dpi))
         dpi_y = max(100, min(dpi_y, max_dpi))
+        if dpi_x != orig_x or dpi_y != orig_y:
+            log.warning("DPI clamped: requested (%d, %d) → actual (%d, %d) "
+                        "(device max %d)", orig_x, orig_y, dpi_x, dpi_y, max_dpi)
         store = VARSTORE if persist else NOSTORE
         args = bytearray(7)
         args[0] = store
