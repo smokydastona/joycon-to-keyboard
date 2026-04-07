@@ -63,7 +63,7 @@ uint8_t const desc_configuration[] = {
 char const* string_desc_arr[] = {
     (const char[]){0x09, 0x04},
     "Bind Bandit",
-    "ESP32-S3 USB Keyboard",
+    "InputGremlin",
     "00000001",
     "Bind Bandit CDC",
 };
