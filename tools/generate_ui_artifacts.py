@@ -92,7 +92,7 @@ UI_BUNDLE_INPUTS = [
     UI_DIR / "default" / "backgrounds" / "m913-incedius-none.png",
     UI_DIR / "dark" / "backgrounds" / "m913-incedius.png",
     UI_DIR / "dark" / "backgrounds" / "m913-incedius-none.png",
-    UI_DIR / "reference" / "pinouts.png",
+    UI_DIR / "misc" / "pinouts.png",
     UI_DIR / "default" / "misc" / "keyboard.png",
     UI_DIR / "dark" / "misc" / "keyboard-dark.png",
 ]

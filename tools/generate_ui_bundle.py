@@ -167,7 +167,7 @@ LIGHT_OVERLAYS = {
     "backgrounds/m913-incedius.png": Path("docs/ui/default/backgrounds/m913-incedius.png"),
     "backgrounds/m913-incedius-none.png": Path("docs/ui/default/backgrounds/m913-incedius-none.png"),
     "background.png": Path("docs/ui/default/backgrounds/background.png"),
-    "pinouts.png": Path("docs/ui/reference/pinouts.png"),
+    "pinouts.png": Path("docs/ui/misc/pinouts.png"),
 }
 
 DARK_OVERLAYS = {
@@ -182,7 +182,7 @@ DARK_OVERLAYS = {
     "backgrounds/m913-incedius.png": Path("docs/ui/dark/backgrounds/m913-incedius.png"),
     "backgrounds/m913-incedius-none.png": Path("docs/ui/dark/backgrounds/m913-incedius-none.png"),
     "background-dark.png": Path("docs/ui/dark/backgrounds/background-dark.png"),
-    "pinouts.png": Path("docs/ui/reference/pinouts.png"),
+    "pinouts.png": Path("docs/ui/misc/pinouts.png"),
 }
 
 

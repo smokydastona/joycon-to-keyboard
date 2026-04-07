@@ -48,9 +48,10 @@ docs/ui/
       joycon/  m913/  incedius/  keyboard/  mouse/
     violet/                        Violet variant (default)
       joycon/  m913/  incedius/  keyboard/  mouse/
-  misc/                            Shared assets (icon.png, etc.)
-  reference/                       Non-app reference diagrams
+  misc/                            Shared assets & reference diagrams
+    icon.png                       Application icon
     pinouts.png                    ESP32/ESP32-S3 board pinout
+    hardware flow diagram.png      High-level hardware flow diagram
 ```
 
 The composited PNGs in `{theme}/backgrounds/` are **THE APP TRUTH**.
