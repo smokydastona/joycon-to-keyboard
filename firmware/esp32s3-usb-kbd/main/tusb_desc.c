@@ -84,6 +84,10 @@ uint16_t tud_hid_get_report_cb(uint8_t instance, uint8_t report_id, hid_report_t
 
 void tud_hid_set_report_cb(uint8_t instance, uint8_t report_id, hid_report_type_t report_type,
                           uint8_t const* buffer, uint16_t bufsize) {
+    // LED output reports (Num Lock, Caps Lock, etc.) are received here.
+    // We intentionally ignore them — the Joy-Con bridge has no indicator LEDs
+    // on the keyboard side, but we must accept the report so the host
+    // doesn't stall.
     (void)instance;
     (void)report_id;
     (void)report_type;

@@ -11,6 +11,17 @@ Until then, entries are grouped by date.
 
 ### Fixed
 
+- **BT send mutex (CRITICAL)**: all `esp_bt_hid_host_send_data()` calls in `joycon_setup.c` are now serialised behind a FreeRTOS mutex. Previously the FSM task (`send_subcmd`) and `ctrl_task` (rumble/home-LED) could race on the BT stack, risking corrupted output reports.
+- **Sticky modifier leak on profile switch (HIGH)**: `free_profile()` now releases all currently-held sticky keys from the USB HID report before clearing `s_sticky_state[]`. Previously, switching profiles while a sticky modifier was active left a phantom key press in the HID report.
+- **Macro delay budget overshoot (HIGH)**: individual macro delay steps are now clamped to the remaining time budget (4 000 ms total). A single delay step >4 s no longer blows past the safety cap — it is truncated to whatever time remains.
+- **Serial RX thread join (MED)**: `serial_client.py` `disconnect()` now calls `_rx_thread.join(timeout=2.0)` before discarding the reference, preventing a stale thread from lingering after rapid disconnect/reconnect cycles.
+- **HID enumerate path guard (MED)**: `m913_device.py` and `razer_device.py` `enumerate()` now use `d.get("path")` and skip entries with no path, preventing `KeyError` on malformed HID descriptors.
+- **Stick calibration validation**: `parse_stick_cal()` now validates `min < center < max` after parsing SPI flash data. Corrupt / all-0xFF calibration values are replaced with safe defaults (512 / 2048 / 3584) and a warning is logged.
+- **Unknown profile mapping type warning**: `parse_mappings()` now logs `ESP_LOGW` for unrecognised mapping type strings instead of silently ignoring them.
+- **tud_hid_set_report_cb documented intent**: the empty stub now has a comment explaining that LED output reports are intentionally ignored (no indicator LEDs on the bridge).
+- **app_switcher ctypes crash guard**: `_get_foreground_exe()` and `_get_foreground_title()` are now wrapped in `try/except OSError` so a transient Win32 failure doesn't crash the app-switching poller.
+- **Updater .old.exe cleanup log level**: failure to delete the leftover `.old.exe` after a self-update now logs at `WARNING` instead of `DEBUG`, making it visible in default log output.
+
 - **Macro queue overflow guard (H1)**: profile_runtime macro queue increased from 4→8 entries and `xQueueSend` return value is now checked — if the queue is full, a warning is logged instead of silently dropping the macro.
 - **OTA chunk retry (H2)**: individual OTA chunks now retry up to 3 times with linear backoff (0.5 s × attempt) before aborting. A single transient USB/serial error no longer kills the entire firmware update.
 - **Layout window size mismatch (M4)**: `generate_ui_bundle.py` DEFAULT_LAYOUT window dimensions corrected from 980×720 to 1280×760 to match the actual app geometry.

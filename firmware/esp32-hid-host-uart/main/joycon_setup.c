@@ -24,10 +24,17 @@
 #include "esp_log.h"
 #include "esp_hidh_api.h"
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
 
 #include "uart_framing.h"
 
 static const char *TAG = "joycon-setup";
+
+// Mutex protecting all esp_bt_hid_host_send_data() calls.
+// The FSM task (send_subcmd) and external callers (rumble, home LED)
+// can race on the BT stack; this serialises them.
+static SemaphoreHandle_t s_bt_send_mux;
 
 // --- Subcommand IDs (publicly documented) ---
 #define SUBCMD_REQ_DEV_INFO        0x02
@@ -166,8 +173,10 @@ static void send_subcmd(setup_instance_t *inst, uint8_t subcmd_id,
     if (total_len < 11) total_len = 11;
 
     // Use HID host send_data with type OUTPUT.
+    xSemaphoreTake(s_bt_send_mux, portMAX_DELAY);
     esp_err_t err = esp_bt_hid_host_send_data(inst->handle,
                                                (uint8_t *)buf, total_len);
+    xSemaphoreGive(s_bt_send_mux);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "[%d] send_subcmd 0x%02X failed: %s",
                  inst->device_id, subcmd_id, esp_err_to_name(err));
@@ -223,6 +232,19 @@ static void parse_stick_cal(joycon_stick_cal_axis_t *x, joycon_stick_cal_axis_t 
     x->min = x->center - cal_x_below;
     y->max = y->center + cal_y_above;
     y->min = y->center - cal_y_below;
+
+    // Sanity-check: ensure min < center < max.  If SPI flash contains
+    // garbage (0xFFs / corrupt data), fall back to safe defaults.
+    if (x->min >= x->center || x->center >= x->max) {
+        ESP_LOGW("joycon-setup", "Bad stick cal X (min=%ld center=%ld max=%ld), "
+                 "using defaults", (long)x->min, (long)x->center, (long)x->max);
+        x->min = 512; x->center = 2048; x->max = 3584;
+    }
+    if (y->min >= y->center || y->center >= y->max) {
+        ESP_LOGW("joycon-setup", "Bad stick cal Y (min=%ld center=%ld max=%ld), "
+                 "using defaults", (long)y->min, (long)y->center, (long)y->max);
+        y->min = 512; y->center = 2048; y->max = 3584;
+    }
 }
 
 // --- FSM progression ---
@@ -676,6 +698,11 @@ static void process_spi_read(setup_instance_t *inst, const uint8_t *subcmd_data,
 // --- Public API ---
 
 void joycon_setup_start(uint16_t handle, uint8_t device_id) {
+    // One-time mutex creation (idempotent — safe if called for both slots).
+    if (!s_bt_send_mux) {
+        s_bt_send_mux = xSemaphoreCreateMutex();
+    }
+
     setup_instance_t *inst = get_inst(device_id);
     memset(inst, 0, sizeof(*inst));
     inst->handle = handle;
@@ -915,7 +942,9 @@ void joycon_setup_send_rumble(uint8_t device_id, uint16_t freq_hz, uint8_t amp_1
     // Right actuator (bytes 6-9) — same data
     memcpy(&buf[6], rumble, 4);
 
+    xSemaphoreTake(s_bt_send_mux, portMAX_DELAY);
     esp_err_t err = esp_bt_hid_host_send_data(inst->handle, buf, sizeof(buf));
+    xSemaphoreGive(s_bt_send_mux);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "[%d] Rumble send failed: %s", inst->device_id, esp_err_to_name(err));
     }

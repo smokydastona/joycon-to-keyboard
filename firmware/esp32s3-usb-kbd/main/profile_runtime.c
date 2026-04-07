@@ -360,6 +360,15 @@ static void free_profile(void) {
     memset(s_th_trackers, 0, sizeof(s_th_trackers));
     s_th_count = 0;
 
+    // Release any currently-held sticky modifiers before clearing state,
+    // otherwise the USB HID report retains phantom key presses.
+    for (int i = 0; i < INPUT_KEY_ID_MAX; i++) {
+        if (s_sticky_state[i] && s_map[i].mode == MAP_STICKY_MOD) {
+            usb_kbd_set_key(s_map[i].sticky_hid_mod,
+                            s_map[i].sticky_hid_keycode, false);
+        }
+    }
+
     // Reset sticky, chord, and key-pressed state.
     memset(s_sticky_state, 0, sizeof(s_sticky_state));
     memset(s_chords, 0, sizeof(s_chords));
@@ -699,6 +708,8 @@ static void parse_mappings(cJSON *root) {
             register_th_tracker((uint8_t)key_id);
             continue;
         }
+
+        ESP_LOGW(TAG, "Unknown mapping type '%s' for key %d", type->valuestring, key_id);
     }
 }
 
@@ -1044,9 +1055,11 @@ static void macro_task(void *arg) {
             macro_step_t *st = &m->steps[i];
 
             if (st->type == STEP_DELAY) {
-                total_ms += st->u.delay.ms;
-                if (total_ms > 4000) break;
-                vTaskDelay(pdMS_TO_TICKS(st->u.delay.ms));
+                uint32_t remaining = (total_ms < 4000) ? (4000 - total_ms) : 0;
+                uint32_t actual = (st->u.delay.ms > remaining) ? remaining : st->u.delay.ms;
+                total_ms += actual;
+                if (actual == 0) break;
+                vTaskDelay(pdMS_TO_TICKS(actual));
                 continue;
             }
 

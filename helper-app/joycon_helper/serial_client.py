@@ -48,6 +48,9 @@ class SerialClient:
             except Exception:
                 log.debug("Error closing serial port", exc_info=True)
         self._ser = None
+        if self._rx_thread is not None:
+            self._rx_thread.join(timeout=2.0)
+            self._rx_thread = None
 
     def send_obj(self, obj: dict[str, Any]) -> None:
         if not self.is_connected:

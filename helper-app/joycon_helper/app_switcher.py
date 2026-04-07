@@ -33,42 +33,49 @@ PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 
 def _get_foreground_exe() -> Optional[str]:
     """Return the executable name of the foreground window's process, or None."""
-    hwnd = _user32.GetForegroundWindow()
-    if not hwnd:
-        return None
-
-    pid = ctypes.wintypes.DWORD()
-    _user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
-    if pid.value == 0:
-        return None
-
-    handle = _kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
-    if not handle:
-        return None
-
     try:
-        buf = (ctypes.c_wchar * 260)()
-        size = ctypes.wintypes.DWORD(260)
-        if _kernel32.QueryFullProcessImageNameW(handle, 0, buf, ctypes.byref(size)):
-            full_path = buf.value
-            return os.path.basename(full_path).lower()
-    finally:
-        _kernel32.CloseHandle(handle)
+        hwnd = _user32.GetForegroundWindow()
+        if not hwnd:
+            return None
+
+        pid = ctypes.wintypes.DWORD()
+        _user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if pid.value == 0:
+            return None
+
+        handle = _kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
+        if not handle:
+            return None
+
+        try:
+            buf = (ctypes.c_wchar * 260)()
+            size = ctypes.wintypes.DWORD(260)
+            if _kernel32.QueryFullProcessImageNameW(handle, 0, buf, ctypes.byref(size)):
+                full_path = buf.value
+                return os.path.basename(full_path).lower()
+        finally:
+            _kernel32.CloseHandle(handle)
+    except OSError:
+        log.debug("ctypes call failed in _get_foreground_exe", exc_info=True)
 
     return None
 
 
 def _get_foreground_title() -> Optional[str]:
     """Return the window title of the foreground window, or None."""
-    hwnd = _user32.GetForegroundWindow()
-    if not hwnd:
+    try:
+        hwnd = _user32.GetForegroundWindow()
+        if not hwnd:
+            return None
+        length = _user32.GetWindowTextLengthW(hwnd)
+        if length == 0:
+            return None
+        buf = ctypes.create_unicode_buffer(length + 1)
+        _user32.GetWindowTextW(hwnd, buf, length + 1)
+        return buf.value
+    except OSError:
+        log.debug("ctypes call failed in _get_foreground_title", exc_info=True)
         return None
-    length = _user32.GetWindowTextLengthW(hwnd)
-    if length == 0:
-        return None
-    buf = ctypes.create_unicode_buffer(length + 1)
-    _user32.GetWindowTextW(hwnd, buf, length + 1)
-    return buf.value
 
 
 # Config file path (next to the helper app data)

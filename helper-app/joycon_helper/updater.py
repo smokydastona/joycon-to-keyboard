@@ -167,7 +167,7 @@ def _cleanup_old_exe() -> None:
             old.unlink()
             log.info("Cleaned up old exe: %s", old)
         except OSError:
-            log.debug("Could not remove old exe: %s", old, exc_info=True)
+            log.warning("Could not remove old exe: %s", old, exc_info=True)
 
 
 def download_and_install(

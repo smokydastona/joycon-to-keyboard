@@ -488,8 +488,11 @@ class RazerDevice:
                 continue
             seen_pids.add(key)
 
+            path = d.get("path")
+            if not path:
+                continue
             results.append(RazerDeviceInfo(
-                path=d["path"],
+                path=path,
                 pid=pid,
                 serial_number=d.get("serial_number", "") or "",
                 product_string=d.get("product_string", "") or "",

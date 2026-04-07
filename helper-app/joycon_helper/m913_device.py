@@ -853,8 +853,11 @@ class M913Device:
             iface = d.get("interface_number", -1)
             if iface != 1:
                 continue
+            path = d.get("path")
+            if not path:
+                continue
             results.append(M913DeviceInfo(
-                path=d["path"],
+                path=path,
                 serial_number=d.get("serial_number", "") or "",
                 product_string=d.get("product_string", "") or "",
                 interface_number=iface,
