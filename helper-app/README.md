@@ -48,7 +48,7 @@ Current UI sections (sidebar navigation, PyQt6):
 - **Diagnostics** (sidebar: **Diagnostics**): live input test event log showing controller button presses/releases with timestamps, a summary of currently active keys, a **visual event timeline** showing the last 5 seconds of input events as colored marks, and an optional **latency profiling** display (toggle checkbox) showing real-time redraw and input processing stats. Controller information (type, serial, deadzone, range ratio, body/button color). **Firmware OTA** update with progress bar. **Initial flash** for new boards (download & flash latest, flash from files, backup flash).
 - **Devices — M913** (sidebar: **Devices**, M913 tab): configure Redragon M913 mice over USB HID — device scanner/selector, button remapping (16 buttons), DPI (5 stages, 100–16000, with enable checkboxes), LED modes (off/steady/respiration/rainbow/wave/reactive/ripple/starlight/breath_single + color picker + brightness 0–255 + speed), polling rate (125/250/500/1000 Hz), layout mode selector (Stock M913 / IncediusMod with Edit Map dialog). Supports **multiple mice** simultaneously with independent profiles. **Wireless support**: detects both wired (PID 0xFA07) and wireless dongle (PID 0xFA08). **Snipe button**: assign "snipe" to any button for temporary DPI switch while held. **Hardware macros**: 15 macro slots (up to 67 key events each) via the Macro Builder popup — visual sequence editor for press/release events. **INI import/export**: compatible with m913-ctl INI format for sharing configs. **Diagnostics popup**: raw HID packet viewer for debugging device communication. **Sister slot** links M913 profiles to Joy-Con slots so mouse and controller settings travel together.
 - **Devices — Razer** (sidebar: **Devices**, Razer tab): configure Razer Basilisk X HyperSpeed mice (and other supported Razer mice) over USB HID Feature Reports — device scanner/selector, read state button with battery/FW/serial info, DPI stages (5 levels, X/Y independent with active stage radio selector), button remapping (7 buttons including F13–F24 keys), **hypershift layer** (separate binding per button), polling rate (125/500/1000 Hz), idle timeout (60–900 sec), and profile CRUD. **CRC validation**: response packets verified via XOR checksum + transaction ID. **Sister slot** links Razer profiles to Joy-Con slots.
-- **Help**: comprehensive setup & usage guide with 14 collapsible sections — project overview, hardware requirements, wiring diagrams, pinout image (scrollable `pinouts.png`), firmware installation walkthrough, first end-to-end test procedure, app usage guide (all tabs), default key mapping reference, serial protocol summary, mouse configuration guide, OTA firmware updates, troubleshooting, app install/update instructions, and a quick reference card. Includes a search bar that filters sections by keyword.
+- **Help**: comprehensive setup & usage guide with 15 collapsible sections — project overview, hardware requirements, wiring diagrams, pinout image (scrollable `pinouts.png`), firmware installation walkthrough, first end-to-end test procedure, app usage guide (all tabs), default key mapping reference, serial protocol summary, mouse configuration guide, OTA firmware updates, troubleshooting, app install/update instructions, settings & system tray guide, and a quick reference card. Includes a search bar that filters sections by keyword.
 
 ### First-time firmware flashing (no ESP-IDF needed)
 
@@ -63,7 +63,17 @@ The app includes a built-in **esptool** integration for flashing brand-new/blank
 
 The Mapping view's Joy-Con canvas switches between four states based on BT status: disconnected (`joycons-none.png`), left only, right only, and both connected.
 
-The UI is built with **PyQt6** using a sidebar navigation layout with 7 sections (Dashboard, Mapping, Macros & Stick, Profiles, Devices, Diagnostics, Help). Theme toggle (light/dark) is available in the toolbar.
+The UI is built with **PyQt6** using a sidebar navigation layout with 7 sections (Dashboard, Mapping, Macros & Stick, Profiles, Devices, Diagnostics, Help). Theme toggle (light/dark) and a ⚙ Settings button are available in the toolbar.
+
+### System tray & background mode
+
+Bind Bandit places a **system tray icon** (Windows notification area) on launch. Features:
+
+- **Minimize to tray**: when enabled in Settings, closing the window hides it to the tray instead of quitting. The app keeps running in the background.
+- **Start minimized**: launch the app hidden to the tray (no main window). Also available via `--minimized` CLI flag.
+- **Start with Windows**: registers the app to run automatically on login (HKCU Run registry key).
+- **Tray context menu**: right-click the tray icon for Show/Hide, Settings, and Quit.
+- **Double-click** the tray icon to toggle window visibility.
 
 ## UI pack
 

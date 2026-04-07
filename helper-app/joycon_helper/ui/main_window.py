@@ -10,12 +10,17 @@ import logging
 import time
 from typing import Any, Dict, List, Optional
 
-from PyQt6.QtCore import QSize, QTimer, Qt
+import os
+import sys
+
+from PyQt6.QtCore import QSettings, QSize, QTimer, Qt
 from PyQt6.QtGui import QAction, QFont, QIcon
 from PyQt6.QtWidgets import (
-    QApplication, QComboBox, QDockWidget, QHBoxLayout, QLabel, QLineEdit,
-    QMainWindow, QMessageBox, QPlainTextEdit, QPushButton, QSizePolicy,
-    QSplitter, QStackedWidget, QToolBar, QVBoxLayout, QWidget,
+    QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
+    QDockWidget, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
+    QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QPushButton,
+    QSizePolicy, QSplitter, QStackedWidget, QSystemTrayIcon,
+    QToolBar, QVBoxLayout, QWidget,
 )
 
 from .._version import __version__
@@ -80,12 +85,16 @@ class MainWindow(QMainWindow):
         rules = load_rules()
         self._app_switcher.set_rules(rules)
 
+        # Persistent settings
+        self._settings = QSettings()
+
         self._setup_window()
         self._build_toolbar()
         self._build_sidebar()
         self._build_views()
         self._build_log_dock()
         self._build_status_bar()
+        self._build_tray_icon()
         self._connect_signals()
         self._apply_theme()
 
@@ -181,11 +190,19 @@ class MainWindow(QMainWindow):
         self._read_btn.clicked.connect(self._cmd_read_profile)
         tb.addWidget(self._read_btn)
 
-        # Theme toggle
+        # Right-side spacer
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         tb.addWidget(spacer)
 
+        # Settings
+        settings_btn = QPushButton("⚙")
+        settings_btn.setFixedSize(32, 32)
+        settings_btn.setToolTip("Settings")
+        settings_btn.clicked.connect(self._open_settings)
+        tb.addWidget(settings_btn)
+
+        # Theme toggle
         self._theme_btn = QPushButton("🌙" if self.theme.is_dark else "☀")
         self._theme_btn.setFixedSize(32, 32)
         self._theme_btn.setToolTip("Toggle light/dark theme")
@@ -594,9 +611,142 @@ class MainWindow(QMainWindow):
     # -----------------------------------------------------------------
 
     def closeEvent(self, event: Any) -> None:
+        if self._settings.value("minimize_to_tray", False, type=bool) and self._tray_icon.isVisible():
+            event.ignore()
+            self.hide()
+            self._tray_icon.showMessage(
+                "Bind Bandit",
+                "Running in the background. Right-click the tray icon to quit.",
+                QSystemTrayIcon.MessageIcon.Information,
+                2000,
+            )
+            return
+        self._real_quit()
+        super().closeEvent(event)
+
+    def _real_quit(self) -> None:
+        """Perform full cleanup and quit the application."""
         self._app_switcher.stop()
         if self.bridge.is_connected:
             self.bridge.disconnect_serial()
         if self._overlay and not self._overlay.is_closed:
             self._overlay.close()
-        super().closeEvent(event)
+        self._tray_icon.hide()
+        QApplication.quit()
+
+    # -----------------------------------------------------------------
+    # System tray
+    # -----------------------------------------------------------------
+
+    def _build_tray_icon(self) -> None:
+        self._tray_icon = QSystemTrayIcon(self)
+        icon_pm = self.assets.load_icon()
+        if icon_pm:
+            self._tray_icon.setIcon(QIcon(icon_pm))
+        else:
+            self._tray_icon.setIcon(self.windowIcon())
+        self._tray_icon.setToolTip(f"Bind Bandit v{__version__}")
+
+        tray_menu = QMenu()
+        show_action = tray_menu.addAction("Show / Hide")
+        show_action.triggered.connect(self._toggle_visibility)
+        tray_menu.addSeparator()
+        settings_action = tray_menu.addAction("⚙ Settings")
+        settings_action.triggered.connect(self._open_settings)
+        tray_menu.addSeparator()
+        quit_action = tray_menu.addAction("Quit")
+        quit_action.triggered.connect(self._real_quit)
+        self._tray_icon.setContextMenu(tray_menu)
+
+        self._tray_icon.activated.connect(self._on_tray_activated)
+        self._tray_icon.show()
+
+    def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
+        if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
+            self._toggle_visibility()
+
+    def _toggle_visibility(self) -> None:
+        if self.isVisible():
+            self.hide()
+        else:
+            self.showNormal()
+            self.activateWindow()
+
+    # -----------------------------------------------------------------
+    # Settings dialog
+    # -----------------------------------------------------------------
+
+    def _open_settings(self) -> None:
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Settings")
+        dlg.setMinimumWidth(380)
+        layout = QVBoxLayout(dlg)
+
+        form = QFormLayout()
+        layout.addLayout(form)
+
+        cb_tray = QCheckBox("Minimize to system tray on close")
+        cb_tray.setChecked(self._settings.value("minimize_to_tray", False, type=bool))
+        form.addRow(cb_tray)
+
+        cb_start_minimized = QCheckBox("Start minimized to tray")
+        cb_start_minimized.setChecked(self._settings.value("start_minimized", False, type=bool))
+        form.addRow(cb_start_minimized)
+
+        cb_autostart = QCheckBox("Start with Windows")
+        cb_autostart.setChecked(self._is_autostart_enabled())
+        form.addRow(cb_autostart)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(dlg.accept)
+        buttons.rejected.connect(dlg.reject)
+        layout.addWidget(buttons)
+
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            self._settings.setValue("minimize_to_tray", cb_tray.isChecked())
+            self._settings.setValue("start_minimized", cb_start_minimized.isChecked())
+            self._set_autostart(cb_autostart.isChecked())
+
+    # -----------------------------------------------------------------
+    # Windows auto-start helpers
+    # -----------------------------------------------------------------
+
+    _AUTOSTART_REG_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+    _AUTOSTART_VALUE_NAME = "BindBandit"
+
+    def _get_app_executable(self) -> str:
+        if getattr(sys, "frozen", False):
+            return sys.executable
+        # Running from source — use pythonw with module invocation
+        return f'"{sys.executable}" -m joycon_helper'
+
+    def _is_autostart_enabled(self) -> bool:
+        if sys.platform != "win32":
+            return False
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, self._AUTOSTART_REG_KEY, 0, winreg.KEY_READ) as key:
+                winreg.QueryValueEx(key, self._AUTOSTART_VALUE_NAME)
+                return True
+        except FileNotFoundError:
+            return False
+        except OSError:
+            return False
+
+    def _set_autostart(self, enabled: bool) -> None:
+        if sys.platform != "win32":
+            return
+        try:
+            import winreg
+            if enabled:
+                exe = self._get_app_executable()
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, self._AUTOSTART_REG_KEY, 0, winreg.KEY_SET_VALUE) as key:
+                    winreg.SetValueEx(key, self._AUTOSTART_VALUE_NAME, 0, winreg.REG_SZ, exe)
+            else:
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, self._AUTOSTART_REG_KEY, 0, winreg.KEY_SET_VALUE) as key:
+                    try:
+                        winreg.DeleteValue(key, self._AUTOSTART_VALUE_NAME)
+                    except FileNotFoundError:
+                        pass
+        except OSError:
+            log.warning("Failed to update auto-start registry", exc_info=True)

@@ -287,6 +287,31 @@ def _sections() -> List[Tuple[str, str, bool]]:
             False,
         ),
         (
+            "⚙ Settings & System Tray",
+            (
+                "## System tray\n"
+                "Bind Bandit places an icon in the Windows system tray on launch. "
+                "Double-click the tray icon to show or hide the main window. "
+                "Right-click the tray icon for a menu with Show/Hide, Settings, "
+                "and Quit.\n\n"
+                "## Settings dialog\n"
+                "Open Settings via the ⚙ button in the toolbar, or from the "
+                "system tray right-click menu.\n\n"
+                "### Minimize to system tray on close\n"
+                "When enabled, closing the main window hides it to the system "
+                "tray instead of quitting. The app continues running in the "
+                "background.\n\n"
+                "### Start minimized to tray\n"
+                "When enabled, the app starts hidden — only the tray icon is "
+                "shown. You can also pass --minimized on the command line.\n\n"
+                "### Start with Windows\n"
+                "Registers Bind Bandit to launch automatically when you log in "
+                "to Windows. This creates a Run registry entry under "
+                "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run."
+            ),
+            False,
+        ),
+        (
             "📋 Quick Reference",
             (
                 "## Keyboard shortcuts (helper app)\n"
