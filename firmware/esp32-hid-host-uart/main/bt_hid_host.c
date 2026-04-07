@@ -40,6 +40,11 @@ static char s_pending_name[64] = {0};
 static char s_target_name_override[64] = {0};
 static portMUX_TYPE s_name_mux = portMUX_INITIALIZER_UNLOCKED;
 
+// --- Forward declarations (used by reconnect logic below) ---
+static bool is_bda_connected(const esp_bd_addr_t bda);
+static const char* bda_to_str(const esp_bd_addr_t bda, char* out, size_t out_len);
+static void try_connect(const esp_bd_addr_t bda, uint8_t device_id, const char* name);
+
 // --- Auto-reconnect state ---
 #if CONFIG_JOYCON_HOST_AUTO_RECONNECT
 static esp_timer_handle_t s_reconnect_timer = NULL;
