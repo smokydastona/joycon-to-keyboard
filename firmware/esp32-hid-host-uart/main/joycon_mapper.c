@@ -427,6 +427,9 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
             int dx = apply_stick_curve(cal_normalize(&s_cal.lx, st.lx));
             int dy = apply_stick_curve(cal_normalize(&s_cal.ly, st.ly));
 
+            // Send left stick analog data for sprint zone detection.
+            bridge_send_analog(device_id, (int16_t)dx, (int16_t)dy);
+
             // Hysteresis: use lower threshold to keep active, higher to activate
             bool now_right = prev_right ? (dx > deact_dz)  : (dx > act_dz);
             bool now_left  = prev_left  ? (dx < -deact_dz) : (dx < -act_dz);
@@ -450,6 +453,9 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
 
             int rdx = apply_stick_curve(cal_normalize(&s_cal.rx, st.rx));
             int rdy = apply_stick_curve(cal_normalize(&s_cal.ry, st.ry));
+
+            // Send right stick analog data for mouse/scroll modes.
+            bridge_send_analog((uint8_t)(device_id | 0x80), (int16_t)rdx, (int16_t)rdy);
 
             bool now_rup = prev_rup ? (rdy < -deact_dz) : (rdy < -act_dz);
             bool now_rdn = prev_rdn ? (rdy >  deact_dz) : (rdy >  act_dz);

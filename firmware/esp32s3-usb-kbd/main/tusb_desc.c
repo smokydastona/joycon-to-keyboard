@@ -25,38 +25,47 @@ tusb_desc_device_t const desc_device = {
     .bNumConfigurations = 0x01,
 };
 
-// HID report descriptor: standard boot keyboard
-static uint8_t const desc_hid_report[] = {
+// HID report descriptor: standard boot keyboard (instance 0)
+static uint8_t const desc_hid_report_kbd[] = {
     TUD_HID_REPORT_DESC_KEYBOARD(),
 };
 
+// HID report descriptor: standard mouse (instance 1)
+static uint8_t const desc_hid_report_mouse[] = {
+    TUD_HID_REPORT_DESC_MOUSE(),
+};
+
 uint8_t const* tud_hid_descriptor_report_cb(uint8_t instance) {
-    (void)instance;
-    return desc_hid_report;
+    if (instance == 1) return desc_hid_report_mouse;
+    return desc_hid_report_kbd;
 }
 
 // Configuration descriptor
 enum {
     ITF_NUM_CDC,
     ITF_NUM_CDC_DATA,
-    ITF_NUM_HID,
+    ITF_NUM_HID_KBD,
+    ITF_NUM_HID_MOUSE,
     ITF_NUM_TOTAL,
 };
 
-#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN + TUD_HID_DESC_LEN)
+#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN + TUD_HID_DESC_LEN + TUD_HID_DESC_LEN)
 
 // Endpoint allocation:
 // - CDC: 1x interrupt IN notification, 1x bulk OUT, 1x bulk IN
-// - HID: 1x interrupt IN
-#define EPNUM_CDC_NOTIF 0x81
-#define EPNUM_CDC_OUT   0x02
-#define EPNUM_CDC_IN    0x82
-#define EPNUM_HID       0x83
+// - HID keyboard: 1x interrupt IN
+// - HID mouse: 1x interrupt IN
+#define EPNUM_CDC_NOTIF  0x81
+#define EPNUM_CDC_OUT    0x02
+#define EPNUM_CDC_IN     0x82
+#define EPNUM_HID_KBD    0x83
+#define EPNUM_HID_MOUSE  0x84
 
 uint8_t const desc_configuration[] = {
     TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, CONFIG_TOTAL_LEN, 0x00, 100),
     TUD_CDC_DESCRIPTOR(ITF_NUM_CDC, 4, EPNUM_CDC_NOTIF, 8, EPNUM_CDC_OUT, EPNUM_CDC_IN, 64),
-    TUD_HID_DESCRIPTOR(ITF_NUM_HID, 0, HID_ITF_PROTOCOL_KEYBOARD, sizeof(desc_hid_report), EPNUM_HID, 16, 1),
+    TUD_HID_DESCRIPTOR(ITF_NUM_HID_KBD, 0, HID_ITF_PROTOCOL_KEYBOARD, sizeof(desc_hid_report_kbd), EPNUM_HID_KBD, 16, 1),
+    TUD_HID_DESCRIPTOR(ITF_NUM_HID_MOUSE, 5, HID_ITF_PROTOCOL_MOUSE, sizeof(desc_hid_report_mouse), EPNUM_HID_MOUSE, 16, 1),
 };
 
 // String descriptors (non-static so usb_kbd.c can pass them to tinyusb_driver_install)
@@ -66,9 +75,10 @@ char const* string_desc_arr[] = {
     "InputGremlin",
     "00000001",
     "Bind Bandit CDC",
+    "Bind Bandit Mouse",
 };
 
-#define STRING_DESC_ARR_SIZE 5
+#define STRING_DESC_ARR_SIZE 6
 const int string_desc_arr_count = STRING_DESC_ARR_SIZE;
 
 // Required HID callbacks

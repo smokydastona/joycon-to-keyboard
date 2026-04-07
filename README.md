@@ -5,7 +5,7 @@
 This workspace contains firmware for a **two-chip adapter**:
 
 - **ESP32 (Classic BT capable)** connects wirelessly to a Joy-Con and outputs a small, fixed **UART protocol**.
-- **ESP32-S3 (e.g. Arduino Nano ESP32-S3)** receives UART and exposes a **USB HID keyboard** to the PC.
+- **ESP32-S3 (e.g. Arduino Nano ESP32-S3)** receives UART and exposes a **USB HID keyboard + mouse** composite device to the PC.
   - It also exposes a **USB CDC-ACM serial (COM port)** for the `helper-app/` protocol.
 
 If you have an Arduino Nano ESP32 (ABX00083): see `docs/arduino-nano-esp32-setup.md`.

@@ -6,6 +6,7 @@ idf_component_register(
         "profile_runtime.c"
         "uart_proto.c"
         "usb_kbd.c"
+        "usb_mouse.c"
         "keymap.c"
         "tusb_desc.c"
     INCLUDE_DIRS "."

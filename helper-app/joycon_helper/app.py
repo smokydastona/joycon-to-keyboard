@@ -4966,13 +4966,13 @@ class App(tk.Tk):
             "Bind Bandit is the companion app for the Joy-Con \u2192 Hardware Keyboard Bridge.",
             "",
             "The bridge converts wireless controller input (Joy-Con, Binbok, etc.) into",
-            "real USB keyboard output that the PC sees as a genuine hardware keyboard.",
+            "real USB keyboard + mouse output that the PC sees as genuine hardware devices.",
             "This is anti-cheat safe \u2014 no virtual drivers, no injected input.",
             "",
             "## How it works",
             "1) An ESP32 board connects wirelessly to your controller via Bluetooth Classic.",
             "2) It sends button events over a UART serial link to an ESP32-S3 board.",
-            "3) The ESP32-S3 plugs into the PC and shows up as a USB HID keyboard.",
+            "3) The ESP32-S3 plugs into the PC and shows up as a USB HID keyboard + mouse.",
             "4) This app (Bind Bandit) talks to the ESP32-S3 over a USB serial port",
             "   to configure loadouts, heist plans, tricks, and more.",
         ], collapsed=False)
@@ -4982,7 +4982,7 @@ class App(tk.Tk):
         # ══════════════════════════════════════════════════════════════
         _add("\U0001f6d2  What You Need", [
             "## Hardware",
-            "\u2022 ESP32-S3 dev board (e.g. Arduino Nano ESP32 ABX00083) \u2014 the USB keyboard side",
+            "\u2022 ESP32-S3 dev board (e.g. Arduino Nano ESP32 ABX00083) \u2014 the USB keyboard + mouse side",
             "\u2022 ESP32 dev board with Classic Bluetooth (e.g. NodeMCU ESP32-WROOM-32) \u2014 the BT host side",
             "\u2022 3 jumper wires (power + ground + UART data)",
             "\u2022 A Joy-Con, Binbok, or compatible Bluetooth Classic HID controller",
@@ -5123,7 +5123,7 @@ class App(tk.Tk):
             "  idf.py build",
             "  idf.py flash monitor",
             "",
-            "## Step 1: Flash ESP32-S3 (USB keyboard)",
+            "## Step 1: Flash ESP32-S3 (USB keyboard + mouse)",
             "Folder: firmware/esp32s3-usb-kbd/",
             "",
             "  idf.py set-target esp32s3",
@@ -5136,7 +5136,7 @@ class App(tk.Tk):
             "\u2022 Bridge UART TX GPIO = 43  (Arduino Nano TX0)",
             "\u2022 Bridge UART baud = 921600",
             "",
-            "After flashing: PC should see a USB keyboard + COM port.",
+            "After flashing: PC should see a USB keyboard + mouse + COM port.",
             "",
             "## Step 2: Flash ESP32 (Bluetooth host)",
             "Folder: firmware/esp32-hid-host-uart/",
@@ -5191,7 +5191,7 @@ class App(tk.Tk):
             "4) Watch the Input Test tab \u2014 you should see events when you press buttons.",
             "",
             "## What to check",
-            "\u2022 ESP32-S3 enumerates as a USB keyboard (check Device Manager).",
+            "\u2022 ESP32-S3 enumerates as a USB keyboard + mouse (check Device Manager).",
             "\u2022 A COM port appears (CDC-ACM) \u2014 this is what the helper app connects to.",
             "\u2022 ESP32 power LED lights up (powered through VIN from the ESP32-S3).",
             "\u2022 Controller connects via Bluetooth (check ESP32 monitor logs if available).",
@@ -9274,7 +9274,7 @@ class App(tk.Tk):
             "Initial flash complete",
             "Firmware has been flashed and verified successfully.\n\n"
             "Reset the board (press RESET or re-plug USB).\n"
-            "After booting, it should appear as a USB keyboard + COM port.",
+            "After booting, it should appear as a USB keyboard + mouse + COM port.",
         )
 
     def _on_init_flash_failed(self, error: str) -> None:

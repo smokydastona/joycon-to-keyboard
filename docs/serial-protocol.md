@@ -196,6 +196,25 @@ The ESP32 periodically polls Bluetooth RSSI and sends signal strength using mark
 
 The poll timer fires every 5 seconds for each connected device. The ESP32-S3 forwards this to the helper app as an NDJSON `rssi` event: `{"evt":"rssi","device_id":N,"rssi":N}`.
 
+## Analog stick frames (ESP32 → ESP32-S3)
+
+The ESP32 sends raw analog stick values (after curve + calibration) using marker `0xF7`:
+
+- `payload[0]`: `0xF7` (analog marker)
+- `payload[1]`: `device_id`
+  - `0x00` = left stick
+  - `0x80` = right stick (bit 7 set)
+- `payload[2..3]`: x value (int16 LE, normalized −4096 to +4096)
+- `payload[4..5]`: y value (int16 LE, normalized −4096 to +4096)
+
+The ESP32-S3 uses these values for:
+
+- Right stick → mouse cursor movement (in `STICK_MODE_MOUSE`)
+- Right stick → scroll wheel (in `STICK_MODE_SCROLL`)
+- Left stick → sprint zone detection (magnitude vs threshold)
+
+These frames are sent every report cycle alongside the digital key events.
+
 ## Why this design
 
 - Keeps ESP32 code simple: it only needs to emit key_id up/down.

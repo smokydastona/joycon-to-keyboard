@@ -3,8 +3,8 @@
 
 CONFIG_TINYUSB_CDC_ENABLED=y
 
-# Ensure at least one HID interface instance exists.
-CONFIG_TINYUSB_HID_COUNT=1
+# Two HID interface instances: keyboard (instance 0) + mouse (instance 1).
+CONFIG_TINYUSB_HID_COUNT=2
 
 # Flash size — partition table requires ~3.6 MB (two OTA app slots).
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y

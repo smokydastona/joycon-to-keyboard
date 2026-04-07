@@ -79,6 +79,20 @@ Profile schema (expected by the ESP32-S3 keyboard-side firmware):
 		}
 	},
 	"humanize": true,
+	"right_stick_mode": "keys",
+	"mouse_sensitivity": 10,
+	"sprint_zone": {
+		"enabled": false,
+		"threshold": 90,
+		"key": {"mod": 0, "keycode": 225}
+	},
+	"leader_sequences": [
+		{
+			"keys": [8, 9],
+			"action": {"mod": 0, "keycode": 40}
+		}
+	],
+	"humanize": true,
 	"ui": {
 		"hotspots": {
 			"A": 130,
@@ -93,6 +107,10 @@ Notes:
 - `mappings` keys are strings (input `key_id`), for easier JSON interoperability.
 - `stick` is stored for future analog support; it may be ignored by current firmware. The `socd_mode` and `rapid_trigger` sub-fields are forwarded to the ESP32 BT host on profile load.
 - `humanize` enables ±15% timing jitter on macro delays and ±10% on turbo repeats (default true).
+- `right_stick_mode` controls right analog stick behavior: `"keys"` (default), `"mouse"`, or `"scroll"`.
+- `mouse_sensitivity` scales mouse cursor movement when `right_stick_mode` is `"mouse"` (1–50, default 10).
+- `sprint_zone` configures automatic sprint key activation when the left stick deflection exceeds the threshold percentage. `key` specifies the HID modifier+keycode to press (e.g. Left Shift = keycode 0xE1).
+- `leader_sequences` defines an array of key sequences that fire after a leader key is pressed. Each sequence has `keys` (array of key_ids) and `action` (HID mod+keycode). Max 8 sequences, 4 keys each. 1-second timeout.
 - `ui.hotspots` is helper-app-only UI state (Controller tab). It maps a visual control name to an observed input `key_id`.
 - Firmware ignores unknown profile fields.
 
@@ -110,6 +128,11 @@ Notes:
 | `turbo` | Rapid-fire (auto-repeat) key while held. Contains `mod`, `keycode`, and `delay_ms` (repeat interval). See below. |
 | `sticky` | Toggle modifier: first press activates, second press deactivates. Contains `mod` and `keycode`. See below. |
 | `oneshot` | One-shot modifier: press once to arm, next key press applies the modifier once, then auto-releases. Contains `mod` and `keycode`. See below. |
+| `auto_shift` | Quick tap sends normal key, hold past threshold sends shifted key. Contains `normal` and `shifted` sub-objects plus `hold_ms`. See below. |
+| `mouse_button` | Maps to a real USB HID mouse button. Contains `button` (1=left, 2=right, 4=middle). See below. |
+| `sequential` | Cycles through a list of outputs on each press. Contains `outputs` array. See below. |
+| `leader` | Activates leader key mode: buffers subsequent presses and matches against `leader_sequences`. No extra fields. |
+| `profile_switch` | Switches the active profile slot and reloads. Contains `slot` (0–3). See below. |
 
 ### Turbo mapping
 
@@ -209,6 +232,82 @@ The `double_tap` type sends one key on a single tap and a different key when dou
 | `timeout_ms` | int | Maximum gap between taps to register as double-tap. Default 300. |
 
 State machine: first press starts tracking → first release arms the timer → second press within `timeout_ms` fires the double-tap action → if the timer expires without a second press, the single-tap action fires.
+
+### Auto-shift mapping
+
+Quick tap sends normal key, holding past a threshold sends the shifted variant:
+
+```json
+{
+	"type": "auto_shift",
+	"normal": {"mod": 0, "keycode": 4},
+	"shifted": {"mod": 2, "keycode": 4},
+	"hold_ms": 200
+}
+```
+
+| field | type | description |
+|-------|------|-------------|
+| `normal` | object | `mod` + `keycode` for quick tap. |
+| `shifted` | object | `mod` + `keycode` for hold action. |
+| `hold_ms` | int | Threshold in milliseconds. Default 200. Range: 50–1000. |
+
+### Mouse button mapping
+
+Maps a controller button to a real USB HID mouse button:
+
+```json
+{
+	"type": "mouse_button",
+	"button": 1
+}
+```
+
+| field | type | description |
+|-------|------|-------------|
+| `button` | int | Mouse button bitmask: 1=left, 2=right, 4=middle. |
+
+### Sequential mapping
+
+Each press cycles to the next output in a list:
+
+```json
+{
+	"type": "sequential",
+	"outputs": [
+		{"mod": 0, "keycode": 30},
+		{"mod": 0, "keycode": 31},
+		{"mod": 0, "keycode": 32}
+	]
+}
+```
+
+| field | type | description |
+|-------|------|-------------|
+| `outputs` | array | 1–8 objects, each with `mod` and `keycode`. |
+
+### Leader mapping
+
+Designate a key as a leader key. No extra fields — just `{"type": "leader"}`.
+
+Leader sequences are defined at the profile root level (see below).
+
+### Profile switch mapping
+
+Switches the active profile slot and reloads the profile:
+
+```json
+{
+	"type": "profile_switch",
+	"slot": 2
+}
+```
+
+| field | type | description |
+|-------|------|-------------|
+| `slot` | int | Target profile slot (0–3). |
+
+Works in direct mappings, layer overrides, and chord actions.
 
 ### Chords (optional)
 

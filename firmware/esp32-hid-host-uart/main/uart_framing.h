@@ -75,3 +75,11 @@ void bridge_send_controller_info(uint8_t device_id, uint8_t controller_type,
 //   [1] = device_id (0=left, 1=right)
 //   [2] = rssi (int8_t, dBm, signed)
 void bridge_send_rssi(uint8_t device_id, int8_t rssi);
+
+// Sends analog stick data to the ESP32-S3 for mouse/scroll processing.
+// Payload format:
+//   [0] = 0xF7 (analog marker)
+//   [1] = device_id (0=left, 1=right)
+//   [2..3] = x (int16_t LE, normalized -4096..+4096)
+//   [4..5] = y (int16_t LE, normalized -4096..+4096)
+void bridge_send_analog(uint8_t device_id, int16_t x, int16_t y);

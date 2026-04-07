@@ -11,6 +11,7 @@
 #include "uart_proto.h"
 #include "keymap.h"
 #include "usb_kbd.h"
+#include "usb_mouse.h"
 #include "bridge_serial.h"
 #include "profile_runtime.h"
 #include "fw_ota.h"
@@ -20,6 +21,7 @@ static const char* TAG = "s3-kbd";
 #define STATUS_MARKER 0xFD
 #define KEY_EX_MARKER 0xFC
 #define BATTERY_MARKER 0xFA
+#define ANALOG_MARKER 0xF7
 
 static const char* status_id_to_state(uint8_t id) {
     switch (id) {
@@ -128,6 +130,14 @@ void app_main(void) {
                 uint8_t device_id = f.payload[1];
                 int8_t rssi = (int8_t)f.payload[2];
                 bridge_serial_emit_rssi(device_id, rssi);
+                continue;
+            }
+
+            if (f.type == UART_FRAME_ANALOG && f.length >= 6 && f.payload[0] == ANALOG_MARKER) {
+                uint8_t device_id = f.payload[1];
+                int16_t x = (int16_t)((uint16_t)f.payload[2] | ((uint16_t)f.payload[3] << 8));
+                int16_t y = (int16_t)((uint16_t)f.payload[4] | ((uint16_t)f.payload[5] << 8));
+                profile_runtime_handle_analog(device_id, x, y);
                 continue;
             }
         }

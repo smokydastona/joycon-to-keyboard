@@ -18,3 +18,8 @@ void profile_runtime_handle_input(bool pressed, uint8_t key_id);
 // Anti-cheat humanization: adds timing jitter to macros/turbo.
 void profile_runtime_set_humanize(bool enabled);
 bool profile_runtime_get_humanize(void);
+
+// Handle analog stick data from UART.
+// device_id: 0=left stick, 0x80=right stick (bit7 marks right).
+// x, y: normalized stick values (-4096..+4096).
+void profile_runtime_handle_analog(uint8_t device_id, int16_t x, int16_t y);

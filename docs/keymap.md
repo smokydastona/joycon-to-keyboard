@@ -276,6 +276,76 @@ Chords are evaluated before individual key mappings. See `helper-app/protocol.md
 
 Profiles can define up to 4 overlay layers. Each layer is activated by holding (or toggling) a controller button, and overrides specific key mappings while active. See `helper-app/protocol.md` for the full layer schema.
 
+## Auto-shift
+
+Quick tap sends one keycode; holding past a threshold sends the shifted variant:
+
+```json
+{"type": "auto_shift", "normal": {"mod": 0, "keycode": 4}, "shifted": {"mod": 2, "keycode": 4}, "hold_ms": 200}
+```
+
+## Mouse button mapping
+
+Maps a controller button to a real USB HID mouse button:
+
+```json
+{"type": "mouse_button", "button": 1}
+```
+
+Button values: `1` = left, `2` = right, `4` = middle.
+
+## Sequential / cycle button
+
+Each press sends the next output in a list, wrapping around:
+
+```json
+{"type": "sequential", "outputs": [{"mod": 0, "keycode": 30}, {"mod": 0, "keycode": 31}]}
+```
+
+## Leader key sequences
+
+Designate a key as a leader key. After pressing it, subsequent key presses within 1 second are buffered and matched against configured sequences. Define sequences in the profile root:
+
+```json
+{
+  "leader_sequences": [
+    {"keys": [8, 9], "action": {"mod": 0, "keycode": 40}}
+  ]
+}
+```
+
+## Profile switching
+
+Switch the active profile slot on-the-fly from the controller:
+
+```json
+{"type": "profile_switch", "slot": 2}
+```
+
+Works as a standalone mapping or as a chord action. Slots: 0–3.
+
+## Right stick modes
+
+Set `right_stick_mode` in the profile root to control right stick behavior:
+
+- `"keys"` — virtual direction keys (default)
+- `"mouse"` — mouse cursor movement (scaled by `mouse_sensitivity`, 1–50)
+- `"scroll"` — scroll wheel
+
+## Sprint zone
+
+Automatically press a sprint key when the left stick exceeds a deflection threshold:
+
+```json
+{
+  "sprint_zone": {
+    "enabled": true,
+    "threshold": 90,
+    "key": {"mod": 0, "keycode": 0xE1}
+  }
+}
+```
+
 ## Conflict detection
 
 The helper app detects when multiple hotspots produce the same output key and highlights them in red. An **auto-fix** button is available to resolve conflicts by keeping the first binding and clearing duplicates.

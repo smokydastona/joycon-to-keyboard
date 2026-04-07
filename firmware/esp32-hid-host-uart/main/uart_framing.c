@@ -211,3 +211,14 @@ void bridge_send_rssi(uint8_t device_id, int8_t rssi) {
     payload[2] = (uint8_t)rssi;  // signed, reinterpret on receiver
     bridge_send_frame(payload, (uint8_t)sizeof(payload));
 }
+
+void bridge_send_analog(uint8_t device_id, int16_t x, int16_t y) {
+    uint8_t payload[6];
+    payload[0] = 0xF7;  // Analog marker
+    payload[1] = device_id;
+    payload[2] = (uint8_t)(x & 0xFF);
+    payload[3] = (uint8_t)((x >> 8) & 0xFF);
+    payload[4] = (uint8_t)(y & 0xFF);
+    payload[5] = (uint8_t)((y >> 8) & 0xFF);
+    bridge_send_frame(payload, (uint8_t)sizeof(payload));
+}

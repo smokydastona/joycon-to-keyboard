@@ -22,6 +22,7 @@
 #include "bridge_serial.h"
 #include "keymap.h"
 #include "usb_kbd.h"
+#include "usb_mouse.h"
 #include "uart_proto.h"
 
 static const char *TAG = "profile";
@@ -86,6 +87,11 @@ typedef enum {
     MAP_STICKY_MOD = 7,
     MAP_TAP_HOLD = 8,
     MAP_ONESHOT_MOD = 9,
+    MAP_AUTO_SHIFT = 10,
+    MAP_MOUSE_BUTTON = 11,
+    MAP_SEQUENTIAL = 12,
+    MAP_LEADER = 13,
+    MAP_PROFILE_SWITCH = 14,
 } map_mode_t;
 
 typedef struct {
@@ -116,6 +122,21 @@ typedef struct {
     // One-shot modifier fields (MAP_ONESHOT_MOD)
     uint8_t os_hid_mod;
     uint8_t os_hid_keycode;
+    // Auto-shift fields (MAP_AUTO_SHIFT)
+    uint8_t as_normal_mod;
+    uint8_t as_normal_keycode;
+    uint8_t as_shifted_mod;
+    uint8_t as_shifted_keycode;
+    uint16_t as_hold_ms;       // default 200
+    // Mouse button fields (MAP_MOUSE_BUTTON)
+    uint8_t mouse_button;      // MOUSE_BUTTON_LEFT=1, RIGHT=2, MIDDLE=4
+    // Sequential fields (MAP_SEQUENTIAL)
+    uint8_t seq_count;
+    uint8_t seq_mods[8];
+    uint8_t seq_keycodes[8];
+    // Leader fields (MAP_LEADER) — leader key just sets s_leader_active
+    // Profile switch fields (MAP_PROFILE_SWITCH)
+    uint8_t profile_slot;  // 0..3
 } map_entry_t;
 
 // --- Layer system ---
@@ -426,6 +447,139 @@ static void oneshot_release_if_pending(void) {
     }
 }
 
+// --- Auto-shift state machine ---
+// Quick tap = normal keycode, hold > threshold = Shift+keycode
+// Reuses the tap-hold timer pattern.
+
+#define MAX_AUTO_SHIFT_KEYS 8
+
+typedef enum {
+    AS_IDLE = 0,
+    AS_PRESSED,   // key pressed, waiting for hold threshold
+    AS_HOLDING,   // hold threshold exceeded, shifted action active
+} as_state_t;
+
+typedef struct {
+    uint8_t key_id;
+    as_state_t state;
+    esp_timer_handle_t timer;
+    uint8_t normal_mod;
+    uint8_t normal_keycode;
+    uint8_t shifted_mod;
+    uint8_t shifted_keycode;
+} as_tracker_t;
+
+static as_tracker_t s_as_trackers[MAX_AUTO_SHIFT_KEYS];
+static size_t s_as_count = 0;
+
+static as_tracker_t *find_as_tracker(uint8_t key_id) {
+    for (size_t i = 0; i < s_as_count; i++) {
+        if (s_as_trackers[i].key_id == key_id) return &s_as_trackers[i];
+    }
+    return NULL;
+}
+
+static void as_timeout_cb(void *arg) {
+    as_tracker_t *as = (as_tracker_t *)arg;
+    if (as->state != AS_PRESSED) return;
+    // Hold threshold reached: fire shifted action.
+    as->state = AS_HOLDING;
+    usb_kbd_set_key(as->shifted_mod, as->shifted_keycode, true);
+}
+
+static void register_as_tracker(uint8_t key_id) {
+    if (find_as_tracker(key_id)) return;
+    if (s_as_count >= MAX_AUTO_SHIFT_KEYS) {
+        ESP_LOGW(TAG, "Max auto-shift keys reached (%d)", MAX_AUTO_SHIFT_KEYS);
+        return;
+    }
+    as_tracker_t *as = &s_as_trackers[s_as_count];
+    memset(as, 0, sizeof(*as));
+    as->key_id = key_id;
+    as->state = AS_IDLE;
+    esp_timer_create_args_t args = {
+        .callback = as_timeout_cb,
+        .arg = as,
+        .name = "as",
+    };
+    if (esp_timer_create(&args, &as->timer) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create auto-shift timer for key %u", key_id);
+        return;
+    }
+    s_as_count++;
+}
+
+// --- Sequential/cycle button ---
+// Each press sends the next item in a list, wrapping around.
+
+static uint8_t s_seq_index[INPUT_KEY_ID_MAX];
+
+// --- Leader key sequences ---
+// Designate a key as leader; after pressing, buffer subsequent keys
+// within timeout and match against configured sequences.
+
+#define MAX_LEADER_SEQS 8
+#define MAX_LEADER_SEQ_LEN 4
+#define LEADER_TIMEOUT_MS 1000
+
+typedef struct {
+    uint8_t keys[MAX_LEADER_SEQ_LEN];
+    uint8_t key_count;
+    uint8_t action_mod;
+    uint8_t action_keycode;
+} leader_seq_t;
+
+static leader_seq_t s_leader_seqs[MAX_LEADER_SEQS];
+static size_t s_leader_seq_count = 0;
+
+static bool s_leader_active = false;
+static uint8_t s_leader_buf[MAX_LEADER_SEQ_LEN];
+static size_t s_leader_buf_len = 0;
+static esp_timer_handle_t s_leader_timer = NULL;
+
+static void leader_timeout_cb(void *arg) {
+    (void)arg;
+    if (!s_leader_active) return;
+
+    // Try to match the buffered sequence.
+    for (size_t i = 0; i < s_leader_seq_count; i++) {
+        leader_seq_t *ls = &s_leader_seqs[i];
+        if (ls->key_count != s_leader_buf_len) continue;
+        bool match = true;
+        for (size_t j = 0; j < ls->key_count; j++) {
+            if (ls->keys[j] != s_leader_buf[j]) { match = false; break; }
+        }
+        if (match) {
+            usb_kbd_set_key(ls->action_mod, ls->action_keycode, true);
+            usb_kbd_set_key(ls->action_mod, ls->action_keycode, false);
+            break;
+        }
+    }
+
+    s_leader_active = false;
+    s_leader_buf_len = 0;
+}
+
+// --- Right stick mode ---
+typedef enum {
+    STICK_MODE_KEYS = 0,     // default: stick → WASD key events
+    STICK_MODE_MOUSE = 1,    // stick → mouse cursor movement
+    STICK_MODE_SCROLL = 2,   // stick → scroll wheel
+} stick_mode_t;
+
+static stick_mode_t s_right_stick_mode = STICK_MODE_KEYS;
+static uint16_t s_mouse_sensitivity = 10;  // sensitivity multiplier (1-50)
+
+// --- Sprint zone (left stick magnitude → sprint key) ---
+static bool s_sprint_zone_enabled = false;
+static uint8_t s_sprint_zone_threshold = 90;  // % of max deflection
+static uint8_t s_sprint_key_mod = 0;
+static uint8_t s_sprint_key_keycode = 0;
+static bool s_sprint_active = false;
+
+// --- On-controller profile switching ---
+static int s_active_slot = 0;
+
 // --- Chord (combo) system ---
 
 #define MAX_CHORDS 8
@@ -506,6 +660,40 @@ static void free_profile(void) {
     memset(s_key_pressed, 0, sizeof(s_key_pressed));
     memset(s_chord_suppressed, 0, sizeof(s_chord_suppressed));
 
+    // Clean up auto-shift timers.
+    for (size_t i = 0; i < s_as_count; i++) {
+        if (s_as_trackers[i].timer) {
+            esp_timer_stop(s_as_trackers[i].timer);
+            esp_timer_delete(s_as_trackers[i].timer);
+        }
+    }
+    memset(s_as_trackers, 0, sizeof(s_as_trackers));
+    s_as_count = 0;
+
+    // Reset sequential state.
+    memset(s_seq_index, 0, sizeof(s_seq_index));
+
+    // Reset leader state.
+    s_leader_active = false;
+    s_leader_buf_len = 0;
+    memset(s_leader_seqs, 0, sizeof(s_leader_seqs));
+    s_leader_seq_count = 0;
+    if (s_leader_timer) {
+        esp_timer_stop(s_leader_timer);
+    }
+
+    // Reset stick mode and sprint zone.
+    s_right_stick_mode = STICK_MODE_KEYS;
+    s_mouse_sensitivity = 10;
+    s_sprint_zone_enabled = false;
+    s_sprint_zone_threshold = 90;
+    s_sprint_key_mod = 0;
+    s_sprint_key_keycode = 0;
+    if (s_sprint_active) {
+        usb_kbd_set_key(s_sprint_key_mod, s_sprint_key_keycode, false);
+        s_sprint_active = false;
+    }
+
     for (size_t i = 0; i < s_macro_count; i++) {
         free(s_macros[i].steps);
         s_macros[i].steps = NULL;
@@ -546,6 +734,19 @@ static esp_err_t nvs_get_active_slot(int *out_slot) {
     if (err == ESP_OK) {
         *out_slot = slot;
     }
+    return err;
+}
+
+static esp_err_t nvs_set_active_slot(int slot) {
+    nvs_handle_t h;
+    esp_err_t err = nvs_open(BRIDGE_PROFILE_NS, NVS_READWRITE, &h);
+    if (err != ESP_OK) return err;
+
+    err = nvs_set_i8(h, BRIDGE_ACTIVE_KEY, (int8_t)slot);
+    if (err == ESP_OK) {
+        err = nvs_commit(h);
+    }
+    nvs_close(h);
     return err;
 }
 
@@ -850,6 +1051,72 @@ static void parse_mappings(cJSON *root) {
             continue;
         }
 
+        if (strcmp(type->valuestring, "auto_shift") == 0) {
+            cJSON *normal_j = cJSON_GetObjectItemCaseSensitive(entry, "normal");
+            cJSON *shifted_j = cJSON_GetObjectItemCaseSensitive(entry, "shifted");
+            cJSON *hold_ms_j = cJSON_GetObjectItemCaseSensitive(entry, "hold_ms");
+            if (!cJSON_IsObject(normal_j) || !cJSON_IsObject(shifted_j)) continue;
+            cJSON *nm = cJSON_GetObjectItemCaseSensitive(normal_j, "mod");
+            cJSON *nk = cJSON_GetObjectItemCaseSensitive(normal_j, "keycode");
+            cJSON *sm = cJSON_GetObjectItemCaseSensitive(shifted_j, "mod");
+            cJSON *sk = cJSON_GetObjectItemCaseSensitive(shifted_j, "keycode");
+            if (!cJSON_IsNumber(nm) || !cJSON_IsNumber(nk)) continue;
+            if (!cJSON_IsNumber(sm) || !cJSON_IsNumber(sk)) continue;
+            s_map[key_id].mode = MAP_AUTO_SHIFT;
+            s_map[key_id].as_normal_mod = (uint8_t)nm->valueint;
+            s_map[key_id].as_normal_keycode = (uint8_t)nk->valueint;
+            s_map[key_id].as_shifted_mod = (uint8_t)sm->valueint;
+            s_map[key_id].as_shifted_keycode = (uint8_t)sk->valueint;
+            s_map[key_id].as_hold_ms = 200;
+            if (cJSON_IsNumber(hold_ms_j) && hold_ms_j->valueint >= 50 && hold_ms_j->valueint <= 1000) {
+                s_map[key_id].as_hold_ms = (uint16_t)hold_ms_j->valueint;
+            }
+            register_as_tracker((uint8_t)key_id);
+            continue;
+        }
+
+        if (strcmp(type->valuestring, "mouse_button") == 0) {
+            cJSON *btn_j = cJSON_GetObjectItemCaseSensitive(entry, "button");
+            if (!cJSON_IsNumber(btn_j)) continue;
+            s_map[key_id].mode = MAP_MOUSE_BUTTON;
+            s_map[key_id].mouse_button = (uint8_t)btn_j->valueint;
+            continue;
+        }
+
+        if (strcmp(type->valuestring, "sequential") == 0) {
+            cJSON *outputs = cJSON_GetObjectItemCaseSensitive(entry, "outputs");
+            if (!cJSON_IsArray(outputs)) continue;
+            int cnt = cJSON_GetArraySize(outputs);
+            if (cnt < 1 || cnt > 8) continue;
+            s_map[key_id].mode = MAP_SEQUENTIAL;
+            s_map[key_id].seq_count = (uint8_t)cnt;
+            int idx = 0;
+            cJSON *item;
+            cJSON_ArrayForEach(item, outputs) {
+                if (idx >= 8) break;
+                if (!cJSON_IsObject(item)) { idx++; continue; }
+                cJSON *m_j = cJSON_GetObjectItemCaseSensitive(item, "mod");
+                cJSON *k_j = cJSON_GetObjectItemCaseSensitive(item, "keycode");
+                s_map[key_id].seq_mods[idx] = cJSON_IsNumber(m_j) ? (uint8_t)m_j->valueint : 0;
+                s_map[key_id].seq_keycodes[idx] = cJSON_IsNumber(k_j) ? (uint8_t)k_j->valueint : 0;
+                idx++;
+            }
+            continue;
+        }
+
+        if (strcmp(type->valuestring, "leader") == 0) {
+            s_map[key_id].mode = MAP_LEADER;
+            continue;
+        }
+
+        if (strcmp(type->valuestring, "profile_switch") == 0) {
+            cJSON *slot_j = cJSON_GetObjectItemCaseSensitive(entry, "slot");
+            if (!cJSON_IsNumber(slot_j) || slot_j->valueint < 0 || slot_j->valueint >= PROFILE_MAX_SLOTS) continue;
+            s_map[key_id].mode = MAP_PROFILE_SWITCH;
+            s_map[key_id].profile_slot = (uint8_t)slot_j->valueint;
+            continue;
+        }
+
         ESP_LOGW(TAG, "Unknown mapping type '%s' for key %d", type->valuestring, key_id);
     }
 }
@@ -994,6 +1261,11 @@ static void parse_layer_mappings(cJSON *mappings_obj, layer_t *layer) {
             ov->entry.os_hid_mod = (uint8_t)mod_j->valueint;
             ov->entry.os_hid_keycode = (uint8_t)kc_j->valueint;
             register_os_tracker((uint8_t)key_id);
+        } else if (strcmp(type->valuestring, "profile_switch") == 0) {
+            cJSON *slot_j = cJSON_GetObjectItemCaseSensitive(entry, "slot");
+            if (!cJSON_IsNumber(slot_j) || slot_j->valueint < 0 || slot_j->valueint >= 4) continue;
+            ov->entry.mode = MAP_PROFILE_SWITCH;
+            ov->entry.profile_slot = (uint8_t)slot_j->valueint;
         } else {
             continue;
         }
@@ -1111,6 +1383,11 @@ static void parse_chords(cJSON *root) {
             c->action.macro_index = idx;
         } else if (strcmp(type->valuestring, "disable") == 0) {
             c->action.mode = MAP_DISABLED;
+        } else if (strcmp(type->valuestring, "profile_switch") == 0) {
+            cJSON *slot_j = cJSON_GetObjectItemCaseSensitive(action, "slot");
+            if (!cJSON_IsNumber(slot_j) || slot_j->valueint < 0 || slot_j->valueint >= PROFILE_MAX_SLOTS) continue;
+            c->action.mode = MAP_PROFILE_SWITCH;
+            c->action.profile_slot = (uint8_t)slot_j->valueint;
         } else {
             continue;
         }
@@ -1141,6 +1418,86 @@ static void load_profile_json(const char *json) {
     parse_mappings(root);
     parse_layers(root);
     parse_chords(root);
+
+    // --- Parse leader sequences ---
+    cJSON *leader_j = cJSON_GetObjectItemCaseSensitive(root, "leader_sequences");
+    if (cJSON_IsArray(leader_j)) {
+        size_t lcount = 0;
+        cJSON *ls_obj;
+        cJSON_ArrayForEach(ls_obj, leader_j) {
+            if (!cJSON_IsObject(ls_obj)) continue;
+            if (lcount >= MAX_LEADER_SEQS) break;
+
+            cJSON *keys_j = cJSON_GetObjectItemCaseSensitive(ls_obj, "keys");
+            cJSON *action_j = cJSON_GetObjectItemCaseSensitive(ls_obj, "action");
+            if (!cJSON_IsArray(keys_j) || !cJSON_IsObject(action_j)) continue;
+
+            leader_seq_t *ls = &s_leader_seqs[lcount];
+            memset(ls, 0, sizeof(*ls));
+
+            int kc = 0;
+            cJSON *k;
+            cJSON_ArrayForEach(k, keys_j) {
+                if (kc >= MAX_LEADER_SEQ_LEN) break;
+                if (!cJSON_IsNumber(k)) continue;
+                ls->keys[kc++] = (uint8_t)k->valueint;
+            }
+            if (kc < 1) continue;
+            ls->key_count = (uint8_t)kc;
+
+            cJSON *am = cJSON_GetObjectItemCaseSensitive(action_j, "mod");
+            cJSON *ak = cJSON_GetObjectItemCaseSensitive(action_j, "keycode");
+            if (cJSON_IsNumber(am)) ls->action_mod = (uint8_t)am->valueint;
+            if (cJSON_IsNumber(ak)) ls->action_keycode = (uint8_t)ak->valueint;
+
+            lcount++;
+        }
+        s_leader_seq_count = lcount;
+        ESP_LOGI(TAG, "Loaded %u leader sequences", (unsigned)lcount);
+    }
+
+    // --- Parse right stick mode ---
+    cJSON *rstick_j = cJSON_GetObjectItemCaseSensitive(root, "right_stick_mode");
+    if (cJSON_IsString(rstick_j) && rstick_j->valuestring) {
+        if (strcmp(rstick_j->valuestring, "mouse") == 0) {
+            s_right_stick_mode = STICK_MODE_MOUSE;
+        } else if (strcmp(rstick_j->valuestring, "scroll") == 0) {
+            s_right_stick_mode = STICK_MODE_SCROLL;
+        } else {
+            s_right_stick_mode = STICK_MODE_KEYS;
+        }
+        ESP_LOGI(TAG, "Right stick mode: %s", rstick_j->valuestring);
+    }
+
+    // --- Parse mouse sensitivity ---
+    cJSON *sens_j = cJSON_GetObjectItemCaseSensitive(root, "mouse_sensitivity");
+    if (cJSON_IsNumber(sens_j)) {
+        int v = sens_j->valueint;
+        if (v < 1) v = 1;
+        if (v > 50) v = 50;
+        s_mouse_sensitivity = (uint16_t)v;
+    }
+
+    // --- Parse sprint zone ---
+    cJSON *sprint_j = cJSON_GetObjectItemCaseSensitive(root, "sprint_zone");
+    if (cJSON_IsObject(sprint_j)) {
+        cJSON *enabled_j = cJSON_GetObjectItemCaseSensitive(sprint_j, "enabled");
+        cJSON *threshold_j = cJSON_GetObjectItemCaseSensitive(sprint_j, "threshold");
+        cJSON *key_j = cJSON_GetObjectItemCaseSensitive(sprint_j, "key");
+
+        s_sprint_zone_enabled = cJSON_IsTrue(enabled_j);
+        if (cJSON_IsNumber(threshold_j) && threshold_j->valueint >= 10 && threshold_j->valueint <= 100) {
+            s_sprint_zone_threshold = (uint8_t)threshold_j->valueint;
+        }
+        if (cJSON_IsObject(key_j)) {
+            cJSON *km = cJSON_GetObjectItemCaseSensitive(key_j, "mod");
+            cJSON *kk = cJSON_GetObjectItemCaseSensitive(key_j, "keycode");
+            if (cJSON_IsNumber(km)) s_sprint_key_mod = (uint8_t)km->valueint;
+            if (cJSON_IsNumber(kk)) s_sprint_key_keycode = (uint8_t)kk->valueint;
+        }
+        ESP_LOGI(TAG, "Sprint zone: enabled=%d threshold=%u%%",
+                 s_sprint_zone_enabled, (unsigned)s_sprint_zone_threshold);
+    }
 
     // Optional humanize flag (default true).
     cJSON *humanize_j = cJSON_GetObjectItemCaseSensitive(root, "humanize");
@@ -1289,6 +1646,16 @@ void profile_runtime_init(void) {
         return;
     }
 
+    // Create leader key timeout timer (persistent, reused across profiles).
+    if (!s_leader_timer) {
+        esp_timer_create_args_t args = {
+            .callback = leader_timeout_cb,
+            .arg = NULL,
+            .name = "leader",
+        };
+        esp_timer_create(&args, &s_leader_timer);
+    }
+
     xTaskCreate(macro_task, "macro", 4096, NULL, 5, NULL);
 
     profile_runtime_reload();
@@ -1308,6 +1675,8 @@ void profile_runtime_reload(void) {
         ESP_LOGW(TAG, "Active slot out of range (%d); using passthrough", slot);
         return;
     }
+
+    s_active_slot = slot;
 
     char *json = NULL;
     err = nvs_get_profile_json(slot, &json);
@@ -1513,6 +1882,87 @@ static void dispatch_mapping(map_entry_t *m, bool pressed, uint8_t key_id) {
             return;
         }
 
+        case MAP_AUTO_SHIFT: {
+            as_tracker_t *as = find_as_tracker(key_id);
+            if (!as) {
+                // Fallback: fire normal action directly.
+                usb_kbd_set_key(m->as_normal_mod, m->as_normal_keycode, pressed);
+                return;
+            }
+            switch (as->state) {
+                case AS_IDLE:
+                    if (pressed) {
+                        as->state = AS_PRESSED;
+                        as->normal_mod = m->as_normal_mod;
+                        as->normal_keycode = m->as_normal_keycode;
+                        as->shifted_mod = m->as_shifted_mod;
+                        as->shifted_keycode = m->as_shifted_keycode;
+                        esp_timer_start_once(as->timer,
+                                             (uint64_t)m->as_hold_ms * 1000);
+                    }
+                    break;
+                case AS_PRESSED:
+                    if (!pressed) {
+                        // Released before hold threshold: fire normal tap.
+                        esp_timer_stop(as->timer);
+                        usb_kbd_set_key(as->normal_mod, as->normal_keycode, true);
+                        usb_kbd_set_key(as->normal_mod, as->normal_keycode, false);
+                        as->state = AS_IDLE;
+                    }
+                    break;
+                case AS_HOLDING:
+                    if (!pressed) {
+                        // Release shifted action.
+                        usb_kbd_set_key(as->shifted_mod, as->shifted_keycode, false);
+                        as->state = AS_IDLE;
+                    }
+                    break;
+            }
+            return;
+        }
+
+        case MAP_MOUSE_BUTTON:
+            usb_mouse_button(m->mouse_button, pressed);
+            return;
+
+        case MAP_SEQUENTIAL:
+            if (pressed && m->seq_count > 0) {
+                uint8_t idx = s_seq_index[key_id];
+                usb_kbd_set_key(m->seq_mods[idx], m->seq_keycodes[idx], true);
+                usb_kbd_set_key(m->seq_mods[idx], m->seq_keycodes[idx], false);
+                s_seq_index[key_id] = (uint8_t)((idx + 1) % m->seq_count);
+            }
+            return;
+
+        case MAP_LEADER:
+            if (pressed) {
+                s_leader_active = true;
+                s_leader_buf_len = 0;
+                if (s_leader_timer) {
+                    esp_timer_stop(s_leader_timer);
+                    esp_timer_start_once(s_leader_timer,
+                                         (uint64_t)LEADER_TIMEOUT_MS * 1000);
+                }
+            }
+            return;
+
+        case MAP_PROFILE_SWITCH:
+            if (pressed) {
+                int slot = (int)m->profile_slot;
+                if (slot >= 0 && slot < PROFILE_MAX_SLOTS) {
+                    ESP_LOGI(TAG, "Profile switch → slot %d", slot);
+                    esp_err_t err = nvs_set_active_slot(slot);
+                    if (err == ESP_OK) {
+                        s_active_slot = slot;
+                        profile_runtime_reload();
+                    } else {
+                        ESP_LOGW(TAG, "Profile switch NVS write failed: %s",
+                                 esp_err_to_name(err));
+                    }
+                }
+            }
+            return;
+
         case MAP_PASSTHROUGH:
         default:
             send_key_id(pressed, m->remap_to);
@@ -1524,6 +1974,42 @@ void profile_runtime_handle_input(bool pressed, uint8_t key_id) {
     // Update global pressed state for chord detection.
     if (key_id < INPUT_KEY_ID_MAX) {
         s_key_pressed[key_id] = pressed;
+    }
+
+    // --- Leader key buffer interception ---
+    // When leader mode is active, buffer key presses and reset the timeout.
+    if (s_leader_active && pressed) {
+        // Don't buffer the leader key itself again.
+        map_entry_t *km = &s_map[key_id];
+        if (km->mode != MAP_LEADER) {
+            if (s_leader_buf_len < MAX_LEADER_SEQ_LEN) {
+                s_leader_buf[s_leader_buf_len++] = key_id;
+            }
+            // Reset timeout for each key press.
+            if (s_leader_timer) {
+                esp_timer_stop(s_leader_timer);
+                esp_timer_start_once(s_leader_timer,
+                                     (uint64_t)LEADER_TIMEOUT_MS * 1000);
+            }
+            // Check for immediate match (if sequence matches exactly).
+            for (size_t i = 0; i < s_leader_seq_count; i++) {
+                leader_seq_t *ls = &s_leader_seqs[i];
+                if (ls->key_count != s_leader_buf_len) continue;
+                bool match = true;
+                for (size_t j = 0; j < ls->key_count; j++) {
+                    if (ls->keys[j] != s_leader_buf[j]) { match = false; break; }
+                }
+                if (match) {
+                    if (s_leader_timer) esp_timer_stop(s_leader_timer);
+                    usb_kbd_set_key(ls->action_mod, ls->action_keycode, true);
+                    usb_kbd_set_key(ls->action_mod, ls->action_keycode, false);
+                    s_leader_active = false;
+                    s_leader_buf_len = 0;
+                    return;
+                }
+            }
+            return;  // Consumed by leader buffer.
+        }
     }
 
     // Check if this key_id activates a layer.
@@ -1665,4 +2151,66 @@ void profile_runtime_set_humanize(bool enabled) {
 
 bool profile_runtime_get_humanize(void) {
     return s_humanize;
+}
+
+void profile_runtime_handle_analog(uint8_t device_id, int16_t x, int16_t y) {
+    // device_id encoding from joycon_mapper:
+    //   0x00 = left stick
+    //   0x80 = right stick (bit 7 set)
+    bool is_right = (device_id & 0x80) != 0;
+
+    if (is_right) {
+        // --- Right stick: mouse / scroll / keys ---
+        switch (s_right_stick_mode) {
+            case STICK_MODE_MOUSE: {
+                // Convert normalized stick (-4096..+4096) to mouse delta.
+                // Apply sensitivity scaling. Deadzone: ignore small values.
+                int16_t dx = 0, dy = 0;
+                if (x > 200 || x < -200) {
+                    dx = (int16_t)((int32_t)x * (int32_t)s_mouse_sensitivity / 4096);
+                }
+                if (y > 200 || y < -200) {
+                    dy = (int16_t)((int32_t)y * (int32_t)s_mouse_sensitivity / 4096);
+                }
+                if (dx != 0 || dy != 0) {
+                    usb_mouse_move(dx, dy);
+                }
+                break;
+            }
+            case STICK_MODE_SCROLL: {
+                // Scroll mode: Y axis → vertical scroll, X axis → horizontal.
+                int8_t vs = 0, hs = 0;
+                if (y > 1000) vs = -1;
+                else if (y < -1000) vs = 1;
+                if (x > 1000) hs = 1;
+                else if (x < -1000) hs = -1;
+                if (vs != 0 || hs != 0) {
+                    usb_mouse_scroll(vs, hs);
+                }
+                break;
+            }
+            case STICK_MODE_KEYS:
+            default:
+                // Keys mode: stick-to-key is handled by joycon_mapper
+                // on the ESP32 host side (existing behavior).
+                break;
+        }
+    } else {
+        // --- Left stick: sprint zone detection ---
+        if (s_sprint_zone_enabled) {
+            // Calculate stick magnitude (0..4096 range).
+            int32_t mag_sq = (int32_t)x * x + (int32_t)y * y;
+            int32_t threshold = (int32_t)s_sprint_zone_threshold * 4096 / 100;
+            int32_t thresh_sq = threshold * threshold;
+
+            bool should_sprint = (mag_sq > thresh_sq);
+            if (should_sprint && !s_sprint_active) {
+                s_sprint_active = true;
+                usb_kbd_set_key(s_sprint_key_mod, s_sprint_key_keycode, true);
+            } else if (!should_sprint && s_sprint_active) {
+                s_sprint_active = false;
+                usb_kbd_set_key(s_sprint_key_mod, s_sprint_key_keycode, false);
+            }
+        }
+    }
 }

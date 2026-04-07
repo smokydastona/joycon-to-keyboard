@@ -101,6 +101,11 @@ The profile system supports these mapping modes:
 - **sticky** — toggle key: first press activates, second press deactivates
 - **tap_hold** — different actions for quick tap vs long hold
 - **oneshot** — one-shot modifier: arms on press, applies to the next key, then auto-releases
+- **auto_shift** — quick tap sends normal key, hold past threshold sends shifted key
+- **mouse_button** — maps a controller button to a USB HID mouse button (left/right/middle)
+- **sequential** — cycles through a list of outputs on each press
+- **leader** — activates leader key mode: buffers subsequent key presses and matches against configured sequences
+- **profile_switch** — switches the active profile slot (0–3) and reloads
 - **chords** — multi-button combos that fire a single action when pressed simultaneously
 
 ### Timing humanization
@@ -114,3 +119,59 @@ Profiles may include up to 4 **overlay layers**. Each layer is activated by a co
 ### Chords
 
 Profiles may include up to 8 **chord combos**. Each chord defines 2–4 keys that, when pressed simultaneously, fire a single action (and suppress the individual key mappings). Chords are evaluated before individual mappings. See `helper-app/protocol.md` for the JSON schema.
+
+### USB HID mouse (composite device)
+
+The ESP32-S3 enumerates as a **composite USB device** with:
+
+- USB HID keyboard (boot keyboard protocol)
+- USB HID mouse (standard mouse report)
+- USB CDC-ACM serial port (COM port for helper app)
+
+The mouse interface enables analog stick → mouse cursor mapping and mouse button mappings — all through real hardware HID reports (anti-cheat safe).
+
+### Right stick modes
+
+The profile `right_stick_mode` field controls what the right analog stick does:
+
+| Mode     | Behavior                                        |
+|----------|-------------------------------------------------|
+| `keys`   | Stick → virtual direction keys (default)        |
+| `mouse`  | Stick → mouse cursor movement (sensitivity-scaled) |
+| `scroll` | Stick → scroll wheel (threshold-based)          |
+
+The `mouse_sensitivity` field (1–50, default 10) scales mouse cursor movement.
+
+### Sprint zone
+
+The profile `sprint_zone` object enables automatic sprint key activation based on left stick deflection magnitude:
+
+```json
+{
+  "sprint_zone": {
+    "enabled": true,
+    "threshold": 90,
+    "key": { "mod": 0, "keycode": 0xE1 }
+  }
+}
+```
+
+When the left stick magnitude exceeds the threshold (% of max), the sprint key is pressed. When it drops below, the key is released.
+
+### Leader key sequences
+
+The profile `leader_sequences` array defines key sequences that fire after pressing a leader key:
+
+```json
+{
+  "leader_sequences": [
+    { "keys": [8, 9], "action": { "mod": 0, "keycode": 0x28 } }
+  ]
+}
+```
+
+Press leader key → press A, B → fires Enter. Timeout: 1 second.
+
+### Profile switching
+
+Map any key or chord to `{"type": "profile_switch", "slot": N}` to switch the active profile slot (0–3) on-the-fly. Example chord: Home + A → slot 0.
