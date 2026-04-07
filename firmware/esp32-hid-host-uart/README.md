@@ -59,7 +59,7 @@ This firmware uses an **A/B OTA partition layout** (`partitions.csv`). The helpe
 OTA control commands and response frames are documented in `docs/serial-protocol.md`.
 ## UART (default)
 
-- Baud: 115200
+- Baud: 921600
 - TX pin: GPIO 17
 - RX pin: GPIO 16 (optional helper-app control)
 

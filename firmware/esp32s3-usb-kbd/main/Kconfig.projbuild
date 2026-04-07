@@ -9,7 +9,7 @@ config BRIDGE_UART_PORT
 
 config BRIDGE_UART_BAUD
     int "Bridge UART baud"
-    default 115200
+    default 921600
 
 config BRIDGE_UART_TX_GPIO
     int "Bridge UART TX GPIO"

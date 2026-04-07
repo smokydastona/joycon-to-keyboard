@@ -12,6 +12,9 @@ CONFIG_PARTITION_TABLE_CUSTOM_FILENAME="partitions.csv"
 # reverts to the previous partition on next reboot.
 CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
 
+# 1 kHz tick rate for 1ms task delays (low-latency input processing).
+CONFIG_FREERTOS_HZ=1000
+
 # --- Bluetooth Classic (BR/EDR) HID Host ---
 CONFIG_BT_ENABLED=y
 CONFIG_BTDM_CTRL_MODE_BR_EDR_ONLY=y

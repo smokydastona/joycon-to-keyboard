@@ -131,8 +131,9 @@ void app_main(void) {
             }
         }
 
-        // esp_tinyusb runs tud_task() in its own internal task;
-        // yield briefly so the idle task and USB task can run.
-        vTaskDelay(1);
+        // Block until UART data arrives or 1 tick elapses, whichever is
+        // first.  This replaces vTaskDelay(1) so the task wakes instantly
+        // when the ESP32 BT host sends key events over UART.
+        uart_proto_wait(1);
     }
 }

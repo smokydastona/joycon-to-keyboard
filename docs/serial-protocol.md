@@ -4,6 +4,8 @@ This is a tiny framing format so the USB-keyboard-side firmware (ESP32-S3) can a
 
 It is also used in the reverse direction (ESP32-S3 → ESP32) for optional helper-app control commands.
 
+**Default baud rate: 921600 8N1** (both boards must match).
+
 ## Frame format
 
 All bytes are unsigned.

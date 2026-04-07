@@ -361,7 +361,7 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
         // --- Deadzone (scaled from threshold) ---
         const int deadzone = ((int)s_threshold) << 5;  // 32 -> 1024 on 4096 scale
 
-        // --- Left stick -> WASD (with curve) ---
+        // --- Left stick -> WASD (with curve + SOCD cleaning) ---
         {
             int dx = apply_stick_curve(cal_normalize(&s_cal.lx, st.lx));
             int dy = apply_stick_curve(cal_normalize(&s_cal.ly, st.ly));
@@ -371,13 +371,20 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
             bool now_up    = dy < -deadzone;
             bool now_down  = dy > deadzone;
 
+            // SOCD (Simultaneous Opposing Cardinal Directions) cleaning.
+            // Neutral mode: if opposing directions are both active, cancel both.
+            // This is the most anti-cheat safe behaviour — no real human input
+            // can produce perfectly simultaneous opposing keyboard key presses.
+            if (now_left && now_right) { now_left = false; now_right = false; }
+            if (now_up   && now_down)  { now_up   = false; now_down  = false; }
+
             emit_if_changed_ex(device_id, KEY_ID_FORWARD, now_up, &prev_forward);
             emit_if_changed_ex(device_id, KEY_ID_BACK, now_down, &prev_back);
             emit_if_changed_ex(device_id, KEY_ID_LEFT, now_left, &prev_left);
             emit_if_changed_ex(device_id, KEY_ID_RIGHT, now_right, &prev_right);
         }
 
-        // --- Right stick -> virtual directions (with curve) ---
+        // --- Right stick -> virtual directions (with curve + SOCD cleaning) ---
         {
             static bool prev_rup = false, prev_rdn = false;
             static bool prev_rlt = false, prev_rrt = false;
@@ -385,10 +392,19 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
             int rdx = apply_stick_curve(cal_normalize(&s_cal.rx, st.rx));
             int rdy = apply_stick_curve(cal_normalize(&s_cal.ry, st.ry));
 
-            emit_if_changed_ex(device_id, KEY_ID_RSTICK_UP,    rdy < -deadzone, &prev_rup);
-            emit_if_changed_ex(device_id, KEY_ID_RSTICK_DOWN,  rdy >  deadzone, &prev_rdn);
-            emit_if_changed_ex(device_id, KEY_ID_RSTICK_LEFT,  rdx < -deadzone, &prev_rlt);
-            emit_if_changed_ex(device_id, KEY_ID_RSTICK_RIGHT, rdx >  deadzone, &prev_rrt);
+            bool now_rup = rdy < -deadzone;
+            bool now_rdn = rdy >  deadzone;
+            bool now_rlt = rdx < -deadzone;
+            bool now_rrt = rdx >  deadzone;
+
+            // SOCD cleaning for right stick directions.
+            if (now_rlt && now_rrt) { now_rlt = false; now_rrt = false; }
+            if (now_rup && now_rdn) { now_rup = false; now_rdn = false; }
+
+            emit_if_changed_ex(device_id, KEY_ID_RSTICK_UP,    now_rup, &prev_rup);
+            emit_if_changed_ex(device_id, KEY_ID_RSTICK_DOWN,  now_rdn, &prev_rdn);
+            emit_if_changed_ex(device_id, KEY_ID_RSTICK_LEFT,  now_rlt, &prev_rlt);
+            emit_if_changed_ex(device_id, KEY_ID_RSTICK_RIGHT, now_rrt, &prev_rrt);
         }
 
         // --- Face buttons ---

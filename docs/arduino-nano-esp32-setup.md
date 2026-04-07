@@ -48,7 +48,7 @@ So set:
 `idf.py menuconfig` → `Bind Bandit (ESP32-S3 USB Keyboard)` → `Bridge UART RX GPIO` = `44`
 
 Also set:
-- `Bridge UART baud` to `115200`
+- `Bridge UART baud` to `921600`
 - `UART port` to whichever UART you prefer (default `1` in this repo)
 
 ## If you paste the RX0 GPIO mapping

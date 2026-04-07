@@ -41,7 +41,7 @@ These are the defaults you’ll get without changing `menuconfig`.
 
 From `firmware/esp32-hid-host-uart/README.md`:
 
-- UART baud: `115200`
+- UART baud: `921600`
 - ESP32 `TX`: **GPIO17**
 - ESP32 `RX`: **GPIO16** (unused by default)
 
@@ -110,7 +110,7 @@ The ESP32-S3 is the “front” of the dongle:
 - Keep UART wires short (a few cm) and route `GND` next to the UART line when possible.
 - If you see random disconnects or garbage bytes:
   - confirm **common ground** is connected,
-  - confirm UART baud is `115200` on both ends,
+  - confirm UART baud is `921600` on both ends,
   - confirm you did not accidentally swap RX/TX,
   - confirm you did not connect to a UART pin that is shared with bootstrapping on your ESP32 dev board.
 

@@ -126,7 +126,7 @@ Set:
 
 - `Bridge UART RX GPIO`
 - `Bridge UART TX GPIO` (optional for now, but recommended if you wired it)
-- `Bridge UART baud` = `115200`
+- `Bridge UART baud` = `921600`
 
 If you’re using **Arduino Nano ESP32-S3 (ABX00083)**:
 
@@ -229,7 +229,7 @@ The ESP32 firmware’s UART pins are set in:
 
 Defaults (as of this repo):
 
-- Baud: `115200`
+- Baud: `921600`
 - TX: `GPIO17`
 - RX: `GPIO16` (unused)
 
@@ -286,7 +286,7 @@ At this stage it’s expected that the mapper may not yet emit real keyboard key
 ### UART garbage / nothing received
 
 - Confirm **GND ↔ GND** between the boards.
-- Confirm the baud rate is `115200` on both ends.
+- Confirm the baud rate is `921600` on both ends.
 - Confirm you did TX → RX (not TX → TX).
 - Confirm you used the correct GPIO numbers in `menuconfig` (Nano labels like `RX0` are not the same as ESP32-S3 GPIO numbers; for ABX00083 `RX0=GPIO44`).
 

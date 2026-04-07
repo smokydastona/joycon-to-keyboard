@@ -39,3 +39,8 @@ bool uart_proto_poll_event(uint8_t* event_byte);
 bool uart_proto_send_ctrl(uint8_t cmd_id, const uint8_t* data, uint8_t data_len);
 
 void uart_proto_init(void);
+
+// Block until UART data arrives or timeout_ticks expires.
+// Returns true if UART data woke the task, false on timeout.
+// Use instead of vTaskDelay() in the main loop for immediate wake-up.
+bool uart_proto_wait(uint32_t timeout_ticks);

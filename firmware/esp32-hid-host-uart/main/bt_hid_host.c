@@ -136,6 +136,15 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
 
             s_connecting = false;
 
+            // Request fastest QoS polling for lowest BT latency.
+            // The default poll interval can add several ms of idle time
+            // between master→slave transmissions.  Using the minimum
+            // value keeps the link actively polling every slot, which is
+            // what a gaming controller needs for sub-frame input latency.
+            // Best-effort: the controller may negotiate a higher value.
+            (void)esp_bt_gap_set_qos(param->open.bd_addr,
+                                     ESP_BT_GAP_TPOLL_MIN);
+
             // Start the Joy-Con setup FSM (sends subcommands to switch
             // the controller to full 0x30 report mode with IMU, reads
             // SPI flash calibration, sets player LEDs).

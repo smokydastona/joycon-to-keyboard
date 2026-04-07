@@ -3,6 +3,8 @@
 #include <string.h>
 
 #include "driver/uart.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
 
 #include "esp_log.h"
 
@@ -24,6 +26,12 @@ static const char* TAG = "uart-proto";
 // status frames that include an optional device name.
 #define UART_PAYLOAD_MAX 220
 
+// Event queue depth — only needs a few slots since we drain the FIFO in each
+// iteration.  The queue wakes the main loop immediately when data arrives.
+#define UART_EVENT_QUEUE_DEPTH 8
+
+static QueueHandle_t s_uart_queue = NULL;
+
 static inline uint8_t xor_checksum(uint8_t length, const uint8_t* payload) {
     uint8_t x = length;
     for (uint8_t i = 0; i < length; i++) {
@@ -44,7 +52,9 @@ void uart_proto_init(void) {
 
     uart_port_t port = (uart_port_t)CONFIG_BRIDGE_UART_PORT;
 
-    ESP_ERROR_CHECK(uart_driver_install(port, 2048, 0, 0, NULL, 0));
+    ESP_ERROR_CHECK(uart_driver_install(port, 2048, 0,
+                                        UART_EVENT_QUEUE_DEPTH,
+                                        &s_uart_queue, 0));
     ESP_ERROR_CHECK(uart_param_config(port, &cfg));
     ESP_ERROR_CHECK(uart_set_pin(port, CONFIG_BRIDGE_UART_TX_GPIO, CONFIG_BRIDGE_UART_RX_GPIO,
                                  UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
@@ -162,6 +172,27 @@ bool uart_proto_poll_frame(uart_frame_t* out) {
     }
 
     return false;
+}
+
+bool uart_proto_wait(uint32_t timeout_ticks) {
+    if (!s_uart_queue) {
+        vTaskDelay(timeout_ticks);
+        return false;
+    }
+
+    uart_event_t evt;
+    // Block until UART data arrives or the timeout expires.
+    // We don't inspect the event type — any UART activity (data, parity
+    // error, FIFO overflow, etc.) should trigger a poll cycle.
+    if (xQueueReceive(s_uart_queue, &evt, (TickType_t)timeout_ticks) == pdTRUE) {
+        // Drain any additional queued events so we handle a burst in one
+        // poll cycle instead of waking once per event.
+        while (xQueueReceive(s_uart_queue, &evt, 0) == pdTRUE) {
+            // discard — we'll drain the FIFO in poll_frame anyway
+        }
+        return true;
+    }
+    return false;  // timeout
 }
 
 bool uart_proto_poll_event(uint8_t* event_byte) {
