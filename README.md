@@ -1,4 +1,4 @@
-![Bind Bandit Pinouts](pinouts.png)
+![Hardware Flow Diagram](docs/ui/reference/hardware%20flow%20diagram.png)
 
 # Joy-Con → Hardware Keyboard (anti-cheat safe)
 
