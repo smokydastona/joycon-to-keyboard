@@ -14,7 +14,7 @@ import os
 import sys
 
 from PyQt6.QtCore import QSettings, QSize, QTimer, Qt
-from PyQt6.QtGui import QAction, QFont, QIcon
+from PyQt6.QtGui import QAction, QFont, QIcon, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
     QDockWidget, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
@@ -80,6 +80,12 @@ class MainWindow(QMainWindow):
         self._bt_connected_left = False
         self._bt_connected_right = False
 
+        # Undo / redo (centralized for all profile changes)
+        self._undo_stack: List[str] = []
+        self._redo_stack: List[str] = []
+        self._undo_max = 50
+        self._skip_undo = False  # prevents recursion during undo/redo
+
         # App switcher (foreground-window → profile slot)
         self._app_switcher = AppSwitcher(on_switch=self._on_app_switch_slot)
         rules = load_rules()
@@ -94,6 +100,7 @@ class MainWindow(QMainWindow):
         self._build_views()
         self._build_log_dock()
         self._build_status_bar()
+        self._build_shortcuts()
         self._build_tray_icon()
         self._connect_signals()
         self._apply_theme()
@@ -525,8 +532,149 @@ class MainWindow(QMainWindow):
         return self._profile
 
     def set_profile(self, profile: Dict[str, Any]) -> None:
+        if not self._skip_undo and self._profile:
+            self._push_undo()
         self._profile = profile
         self._notify_views("profile_updated", profile=profile)
+        self._update_undo_ui()
+
+    # -----------------------------------------------------------------
+    # Undo / Redo (centralized)
+    # -----------------------------------------------------------------
+
+    def _push_undo(self) -> None:
+        snapshot = json.dumps(self._profile, ensure_ascii=False)
+        self._undo_stack.append(snapshot)
+        if len(self._undo_stack) > self._undo_max:
+            self._undo_stack = self._undo_stack[-self._undo_max:]
+        self._redo_stack.clear()
+
+    def undo(self) -> None:
+        if not self._undo_stack:
+            return
+        current = json.dumps(self._profile, ensure_ascii=False)
+        self._redo_stack.append(current)
+        snapshot = self._undo_stack.pop()
+        self._skip_undo = True
+        self._profile = json.loads(snapshot)
+        self._notify_views("profile_updated", profile=self._profile)
+        self._skip_undo = False
+        self._update_undo_ui()
+        # Refresh profiles editor if visible
+        pv = self._views[NAV_PROFILES]
+        if pv is not None and hasattr(pv, "_refresh_editor"):
+            pv._refresh_editor()
+
+    def redo(self) -> None:
+        if not self._redo_stack:
+            return
+        current = json.dumps(self._profile, ensure_ascii=False)
+        self._undo_stack.append(current)
+        snapshot = self._redo_stack.pop()
+        self._skip_undo = True
+        self._profile = json.loads(snapshot)
+        self._notify_views("profile_updated", profile=self._profile)
+        self._skip_undo = False
+        self._update_undo_ui()
+        pv = self._views[NAV_PROFILES]
+        if pv is not None and hasattr(pv, "_refresh_editor"):
+            pv._refresh_editor()
+
+    def _update_undo_ui(self) -> None:
+        self._status_bar.set_undo_depth(len(self._undo_stack))
+        # Update ProfilesView undo/redo buttons if built
+        pv = self._views[NAV_PROFILES]
+        if pv is not None and hasattr(pv, "_undo_btn"):
+            pv._undo_btn.setEnabled(bool(self._undo_stack))
+            pv._redo_btn.setEnabled(bool(self._redo_stack))
+
+    # -----------------------------------------------------------------
+    # Keyboard shortcuts
+    # -----------------------------------------------------------------
+
+    def _build_shortcuts(self) -> None:
+        # Undo / Redo
+        QShortcut(QKeySequence.StandardKey.Undo, self).activated.connect(self.undo)
+        QShortcut(QKeySequence.StandardKey.Redo, self).activated.connect(self.redo)
+        QShortcut(QKeySequence("Ctrl+Shift+Z"), self).activated.connect(self.redo)
+
+        # Save / Load (device)
+        QShortcut(QKeySequence.StandardKey.Save, self).activated.connect(
+            self._cmd_write_profile
+        )
+        QShortcut(QKeySequence.StandardKey.Open, self).activated.connect(
+            self._cmd_read_profile
+        )
+
+        # Save to file
+        QShortcut(QKeySequence("Ctrl+Shift+S"), self).activated.connect(
+            self._shortcut_save_to_file
+        )
+
+        # New profile
+        QShortcut(QKeySequence.StandardKey.New, self).activated.connect(
+            self._shortcut_new_profile
+        )
+
+        # Find (focus search in current view)
+        QShortcut(QKeySequence.StandardKey.Find, self).activated.connect(
+            self._shortcut_focus_search
+        )
+
+        # Ping
+        QShortcut(QKeySequence("Ctrl+P"), self).activated.connect(self._cmd_ping)
+
+        # Refresh ports
+        QShortcut(QKeySequence("Ctrl+R"), self).activated.connect(self._refresh_ports)
+
+        # Navigation: Ctrl+1..7
+        for i in range(min(7, len(NAV_ITEMS))):
+            QShortcut(QKeySequence(f"Ctrl+{i + 1}"), self).activated.connect(
+                lambda idx=i: self._nav_to(idx)
+            )
+
+        # Toggle theme
+        QShortcut(QKeySequence("Ctrl+T"), self).activated.connect(self._toggle_theme)
+
+        # Toggle overlay
+        QShortcut(QKeySequence("Ctrl+Shift+O"), self).activated.connect(
+            self.toggle_overlay
+        )
+
+        # Quit
+        QShortcut(QKeySequence.StandardKey.Quit, self).activated.connect(
+            self._real_quit
+        )
+
+    def _nav_to(self, index: int) -> None:
+        self._sidebar.set_active(index)
+        self._on_nav_changed(index)
+
+    def _shortcut_save_to_file(self) -> None:
+        pv = self._views[NAV_PROFILES]
+        if pv is None:
+            pv = self._ensure_view(NAV_PROFILES)
+        if hasattr(pv, "_save_to_file"):
+            pv._save_to_file()
+
+    def _shortcut_new_profile(self) -> None:
+        from .views.profiles import _default_profile
+        self.set_profile(_default_profile())
+        pv = self._views[NAV_PROFILES]
+        if pv is not None and hasattr(pv, "_refresh_editor"):
+            pv._refresh_editor()
+
+    def _shortcut_focus_search(self) -> None:
+        view = self._view_stack.currentWidget()
+        if view is None:
+            return
+        # MappingView has _search_input, HelpView has _search
+        for attr in ("_search_input", "_search"):
+            widget = getattr(view, attr, None)
+            if widget is not None:
+                widget.setFocus()
+                widget.selectAll()
+                return
 
     # -----------------------------------------------------------------
     # Theme

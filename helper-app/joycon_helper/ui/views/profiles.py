@@ -50,9 +50,6 @@ class ProfilesView(QWidget):
     def __init__(self, main: MainWindow) -> None:
         super().__init__()
         self._main = main
-        self._undo_stack: List[str] = []
-        self._redo_stack: List[str] = []
-        self._undo_max = 50
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(16, 16, 16, 16)
@@ -167,14 +164,14 @@ class ProfilesView(QWidget):
         undo_group = QGroupBox("History")
         undo_lay = QHBoxLayout(undo_group)
 
-        self._undo_btn = QPushButton("↩ Undo")
+        self._undo_btn = QPushButton("↩ Undo (Ctrl+Z)")
         self._undo_btn.setEnabled(False)
-        self._undo_btn.clicked.connect(self._undo)
+        self._undo_btn.clicked.connect(self._main.undo)
         undo_lay.addWidget(self._undo_btn)
 
-        self._redo_btn = QPushButton("↪ Redo")
+        self._redo_btn = QPushButton("↪ Redo (Ctrl+Y)")
         self._redo_btn.setEnabled(False)
-        self._redo_btn.clicked.connect(self._redo)
+        self._redo_btn.clicked.connect(self._main.redo)
         undo_lay.addWidget(self._redo_btn)
 
         left.addWidget(undo_group)
@@ -302,13 +299,11 @@ class ProfilesView(QWidget):
         self._main._cmd_read_profile()
 
     def _new_profile(self) -> None:
-        self._push_undo()
         profile = _default_profile()
         self._main.set_profile(profile)
         self._refresh_editor()
 
     def _duplicate_profile(self) -> None:
-        self._push_undo()
         import copy
         profile = copy.deepcopy(self._main.get_profile())
         name = profile.get("name", "Profile")
@@ -328,7 +323,6 @@ class ProfilesView(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Load Failed", str(e))
             return
-        self._push_undo()
         self._main.set_profile(data)
         self._refresh_editor()
 
@@ -368,7 +362,6 @@ class ProfilesView(QWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
-            self._push_undo()
             self._main.set_profile(_default_profile())
             self._refresh_editor()
 
@@ -421,7 +414,6 @@ class ProfilesView(QWidget):
                 "ZL": {"keycode": 0x00, "modifier": 0x01},  # LCtrl (group)
             }
 
-        self._push_undo()
         self._main.set_profile(preset)
         self._refresh_editor()
 
@@ -453,7 +445,6 @@ class ProfilesView(QWidget):
         except json.JSONDecodeError as e:
             QMessageBox.warning(self, "Invalid JSON", str(e))
             return
-        self._push_undo()
         self._main.set_profile(data)
 
     # -----------------------------------------------------------------
@@ -491,47 +482,8 @@ class ProfilesView(QWidget):
         except Exception as e:
             QMessageBox.warning(self, "Import Failed", str(e))
             return
-        self._push_undo()
         self._main.set_profile(data)
         self._refresh_editor()
-
-    # -----------------------------------------------------------------
-    # Undo / Redo
-    # -----------------------------------------------------------------
-
-    def _push_undo(self) -> None:
-        profile = self._main.get_profile()
-        snapshot = json.dumps(profile, ensure_ascii=False)
-        self._undo_stack.append(snapshot)
-        if len(self._undo_stack) > self._undo_max:
-            self._undo_stack = self._undo_stack[-self._undo_max:]
-        self._redo_stack.clear()
-        self._update_undo_ui()
-
-    def _undo(self) -> None:
-        if not self._undo_stack:
-            return
-        current = json.dumps(self._main.get_profile(), ensure_ascii=False)
-        self._redo_stack.append(current)
-        snapshot = self._undo_stack.pop()
-        self._main.set_profile(json.loads(snapshot))
-        self._refresh_editor()
-        self._update_undo_ui()
-
-    def _redo(self) -> None:
-        if not self._redo_stack:
-            return
-        current = json.dumps(self._main.get_profile(), ensure_ascii=False)
-        self._undo_stack.append(current)
-        snapshot = self._redo_stack.pop()
-        self._main.set_profile(json.loads(snapshot))
-        self._refresh_editor()
-        self._update_undo_ui()
-
-    def _update_undo_ui(self) -> None:
-        self._undo_btn.setEnabled(bool(self._undo_stack))
-        self._redo_btn.setEnabled(bool(self._redo_stack))
-        self._main._status_bar.set_undo_depth(len(self._undo_stack))
 
     # -----------------------------------------------------------------
     # App Switcher
