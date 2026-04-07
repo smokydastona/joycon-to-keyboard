@@ -60,4 +60,20 @@ config JOYCON_HOST_NINTENDO_0X30_EMIT_KEYS
         Keep this OFF until you've verified that the parsed fields match your
         actual controller by comparing with raw report bytes.
 
+config JOYCON_HOST_AUTO_RECONNECT
+    bool "Auto-reconnect on BT disconnect"
+    default y
+    help
+        When enabled, the ESP32 will automatically attempt to re-connect to the
+        last known controller BDA after a disconnect. Uses exponential backoff
+        (2s, 4s, 8s) for up to 3 retries before falling back to discovery.
+
+config JOYCON_HOST_AUTO_RECONNECT_MAX_RETRIES
+    int "Max auto-reconnect retries"
+    range 1 10
+    default 3
+    depends on JOYCON_HOST_AUTO_RECONNECT
+    help
+        Number of reconnect attempts before giving up and restarting discovery.
+
 endmenu

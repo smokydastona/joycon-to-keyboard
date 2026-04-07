@@ -27,6 +27,8 @@ static const char *TAG = "bridge-ctrl";
 #define CTRL_CMD_CALIBRATION       0x04
 #define CTRL_CMD_RUMBLE            0x05
 #define CTRL_CMD_HOME_LED          0x06
+#define CTRL_CMD_SET_SOCD_MODE     0x07
+#define CTRL_CMD_SET_RAPID_TRIGGER 0x08
 
 // OTA control commands (from ESP32-S3)
 #define CTRL_CMD_OTA_BEGIN   0x10
@@ -96,6 +98,20 @@ static void handle_ctrl_cmd(uint8_t cmd_id, const uint8_t *payload, uint8_t payl
             // payload[1] = brightness (0-15)
             if (payload_len >= 2) {
                 joycon_setup_set_home_led(payload[0], payload[1]);
+            }
+            break;
+        }
+        case CTRL_CMD_SET_SOCD_MODE: {
+            // payload[0] = socd mode (0=neutral, 1=last_input, 2=first_input)
+            if (payload_len >= 1) {
+                joycon_mapper_set_socd_mode(payload[0]);
+            }
+            break;
+        }
+        case CTRL_CMD_SET_RAPID_TRIGGER: {
+            // payload[0] = activation threshold, payload[1] = deactivation threshold
+            if (payload_len >= 2) {
+                joycon_mapper_set_rapid_trigger(payload[0], payload[1]);
             }
             break;
         }

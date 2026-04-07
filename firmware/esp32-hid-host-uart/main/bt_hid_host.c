@@ -40,6 +40,53 @@ static char s_pending_name[64] = {0};
 static char s_target_name_override[64] = {0};
 static portMUX_TYPE s_name_mux = portMUX_INITIALIZER_UNLOCKED;
 
+// --- Auto-reconnect state ---
+#if CONFIG_JOYCON_HOST_AUTO_RECONNECT
+static esp_timer_handle_t s_reconnect_timer = NULL;
+static esp_bd_addr_t s_last_bda = {0};
+static char s_last_name[64] = {0};
+static uint8_t s_last_device_id = 0;
+static bool s_have_last_bda = false;
+static int s_reconnect_attempt = 0;
+static const int s_reconnect_base_ms = 2000;  // 2s initial backoff
+
+static void reconnect_timer_cb(void *arg) {
+    (void)arg;
+    if (!s_have_last_bda) return;
+    if (is_bda_connected(s_last_bda)) {
+        s_reconnect_attempt = 0;
+        return;
+    }
+
+    char bda_str[18];
+    ESP_LOGI(TAG, "Auto-reconnect attempt %d/%d to %s",
+             s_reconnect_attempt + 1,
+             CONFIG_JOYCON_HOST_AUTO_RECONNECT_MAX_RETRIES,
+             bda_to_str(s_last_bda, bda_str, sizeof(bda_str)));
+    bridge_send_bt_status(6, s_last_bda, s_last_name);  // status 6 = reconnecting
+
+    try_connect(s_last_bda, s_last_device_id, s_last_name);
+}
+
+static void schedule_reconnect(void) {
+    if (!s_have_last_bda) return;
+    if (s_reconnect_attempt >= CONFIG_JOYCON_HOST_AUTO_RECONNECT_MAX_RETRIES) {
+        ESP_LOGW(TAG, "Auto-reconnect exhausted %d retries; restarting discovery",
+                 CONFIG_JOYCON_HOST_AUTO_RECONNECT_MAX_RETRIES);
+        s_reconnect_attempt = 0;
+        s_have_last_bda = false;
+        bt_hid_host_start_discovery();
+        return;
+    }
+
+    // Exponential backoff: 2s, 4s, 8s, ...
+    int delay_ms = s_reconnect_base_ms << s_reconnect_attempt;
+    s_reconnect_attempt++;
+    ESP_LOGI(TAG, "Scheduling reconnect in %d ms (attempt %d)", delay_ms, s_reconnect_attempt);
+    esp_timer_start_once(s_reconnect_timer, (uint64_t)delay_ms * 1000);
+}
+#endif  // CONFIG_JOYCON_HOST_AUTO_RECONNECT
+
 static bool name_matches_target(const char* name) {
     if (!name) return false;
     char local_name[64];
@@ -145,6 +192,14 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
             (void)esp_bt_gap_set_qos(param->open.bd_addr,
                                      ESP_BT_GAP_TPOLL_MIN);
 
+#if CONFIG_JOYCON_HOST_AUTO_RECONNECT
+            // Connected successfully — reset reconnect state.
+            s_reconnect_attempt = 0;
+            if (s_reconnect_timer) {
+                esp_timer_stop(s_reconnect_timer);
+            }
+#endif
+
             // Start the Joy-Con setup FSM (sends subcommands to switch
             // the controller to full 0x30 report mode with IMU, reads
             // SPI flash calibration, sets player LEDs).
@@ -172,12 +227,23 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
                 if (s_dev[i].handle == param->close.handle) {
                     memcpy(closed_bda, s_dev[i].bda, sizeof(esp_bd_addr_t));
                     have_bda = true;
+#if CONFIG_JOYCON_HOST_AUTO_RECONNECT
+                    // Stash info for reconnect before clearing the slot.
+                    memcpy(s_last_bda, s_dev[i].bda, sizeof(esp_bd_addr_t));
+                    strncpy(s_last_name, s_dev[i].name, sizeof(s_last_name) - 1);
+                    s_last_name[sizeof(s_last_name) - 1] = 0;
+                    s_last_device_id = s_dev[i].device_id;
+                    s_have_last_bda = true;
+#endif
                     joycon_setup_stop(s_dev[i].device_id);
                     memset(&s_dev[i], 0, sizeof(s_dev[i]));
                     break;
                 }
             }
             bridge_send_bt_status(5, have_bda ? closed_bda : s_target_bda, NULL);
+#if CONFIG_JOYCON_HOST_AUTO_RECONNECT
+            schedule_reconnect();
+#endif
             break;
         case ESP_HIDH_DATA_IND_EVT:
             if (param->data_ind.status == ESP_HIDH_OK && param->data_ind.data && param->data_ind.len) {
@@ -424,6 +490,16 @@ esp_err_t bt_hid_host_start(void) {
     };
     ESP_ERROR_CHECK(esp_timer_create(&rssi_args, &s_rssi_timer));
     ESP_ERROR_CHECK(esp_timer_start_periodic(s_rssi_timer, 5000000));  // 5s
+
+#if CONFIG_JOYCON_HOST_AUTO_RECONNECT
+    esp_timer_create_args_t reconn_args = {
+        .callback = reconnect_timer_cb,
+        .arg = NULL,
+        .name = "bt_reconn",
+    };
+    ESP_ERROR_CHECK(esp_timer_create(&reconn_args, &s_reconnect_timer));
+    ESP_LOGI(TAG, "Auto-reconnect enabled (max %d retries)", CONFIG_JOYCON_HOST_AUTO_RECONNECT_MAX_RETRIES);
+#endif
 
     return ESP_OK;
 }

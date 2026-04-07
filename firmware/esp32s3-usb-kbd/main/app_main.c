@@ -28,6 +28,7 @@ static const char* status_id_to_state(uint8_t id) {
         case 3: return "connecting";
         case 4: return "connected";
         case 5: return "disconnected";
+        case 6: return "reconnecting";
         default: return "unknown";
     }
 }

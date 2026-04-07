@@ -28,14 +28,42 @@
 // Next step: once we capture real report bytes for your Joy-Con,
 // implement parsing here and emit KEY_ID_* events.
 
-static uint8_t s_threshold = 32;
+static uint8_t s_act_threshold  = 30;  // activation  (stick → key on)
+static uint8_t s_deact_threshold = 20;  // deactivation (key off), hysteresis band
 
 // --- Stick curve state ---
 static stick_curve_t s_curve = STICK_CURVE_LINEAR;
 static float s_exp = 1.0f;  // exponent for EXPONENTIAL curve
 
+// --- SOCD cleaning mode ---
+static socd_mode_t s_socd_mode = SOCD_NEUTRAL;
+
+// History for SOCD last-input-wins: which direction was pressed most recently.
+// <0 => negative (left/up), >0 => positive (right/down), 0 => neither.
+static int8_t s_socd_lr_last = 0;   // left stick horizontal
+static int8_t s_socd_ud_last = 0;   // left stick vertical
+static int8_t s_socd_rlr_last = 0;  // right stick horizontal
+static int8_t s_socd_rud_last = 0;  // right stick vertical
+
+void joycon_mapper_set_socd_mode(uint8_t mode) {
+    if (mode <= SOCD_FIRST_INPUT) {
+        s_socd_mode = (socd_mode_t)mode;
+    }
+    ESP_LOGI("joycon-mapper", "SOCD mode=%d", (int)s_socd_mode);
+}
+
 void joycon_mapper_set_stick_threshold(uint8_t threshold) {
-    s_threshold = threshold;
+    s_act_threshold  = threshold;
+    s_deact_threshold = threshold;
+}
+
+void joycon_mapper_set_rapid_trigger(uint8_t activation, uint8_t deactivation) {
+    if (activation < 1) activation = 1;
+    if (deactivation > activation) deactivation = activation;
+    s_act_threshold  = activation;
+    s_deact_threshold = deactivation;
+    ESP_LOGI("joycon-mapper", "Rapid trigger act=%u deact=%u",
+             (unsigned)s_act_threshold, (unsigned)s_deact_threshold);
 }
 
 void joycon_mapper_set_stick_curve(uint8_t curve, uint8_t exp_x100) {
@@ -57,6 +85,37 @@ static void emit_if_changed_ex(uint8_t device_id, uint8_t key_id, bool now_press
         bridge_send_key_event_ex(device_id, key_id, now_pressed);
     }
     *prev_pressed = now_pressed;
+}
+
+// SOCD clean an axis pair (neg = left/up, pos = right/down).
+// Updates *last_dir history for last-input-wins mode.
+static void socd_clean(bool *neg, bool *pos, int8_t *last_dir) {
+    if (!*neg && !*pos) {
+        *last_dir = 0;
+        return;
+    }
+    // Track last direction pressed for SOCD_LAST_INPUT.
+    if (*neg && !*pos) *last_dir = -1;
+    if (*pos && !*neg) *last_dir = 1;
+
+    if (*neg && *pos) {
+        switch (s_socd_mode) {
+            case SOCD_NEUTRAL:
+                *neg = false;
+                *pos = false;
+                break;
+            case SOCD_LAST_INPUT:
+                if (*last_dir < 0) { *pos = false; }
+                else if (*last_dir > 0) { *neg = false; }
+                else { *neg = false; *pos = false; }  // tie → neutral
+                break;
+            case SOCD_FIRST_INPUT:
+                if (*last_dir < 0) { *pos = false; }
+                else if (*last_dir > 0) { *neg = false; }
+                else { *neg = false; *pos = false; }
+                break;
+        }
+    }
 }
 
 #if CONFIG_JOYCON_HOST_NINTENDO_0X30_EMIT_KEYS
@@ -276,7 +335,8 @@ void joycon_mapper_clear_calibration(void) { /* no-op */ }
 #endif /* CONFIG_JOYCON_HOST_NINTENDO_0X30_EMIT_KEYS */
 
 void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16_t len) {
-    (void)s_threshold;
+    (void)s_act_threshold;
+    (void)s_deact_threshold;
 
     // Placeholder: treat certain byte patterns as demo-only.
     // This prevents "doing the wrong thing" with guessed Joy-Con layouts.
@@ -358,25 +418,24 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
             joycon_mapper_save_calibration();
         }
 
-        // --- Deadzone (scaled from threshold) ---
-        const int deadzone = ((int)s_threshold) << 5;  // 32 -> 1024 on 4096 scale
+        // --- Deadzone with hysteresis (rapid trigger) ---
+        const int act_dz   = ((int)s_act_threshold) << 5;   // activation deadzone
+        const int deact_dz = ((int)s_deact_threshold) << 5;  // deactivation deadzone
 
         // --- Left stick -> WASD (with curve + SOCD cleaning) ---
         {
             int dx = apply_stick_curve(cal_normalize(&s_cal.lx, st.lx));
             int dy = apply_stick_curve(cal_normalize(&s_cal.ly, st.ly));
 
-            bool now_right = dx > deadzone;
-            bool now_left  = dx < -deadzone;
-            bool now_up    = dy < -deadzone;
-            bool now_down  = dy > deadzone;
+            // Hysteresis: use lower threshold to keep active, higher to activate
+            bool now_right = prev_right ? (dx > deact_dz)  : (dx > act_dz);
+            bool now_left  = prev_left  ? (dx < -deact_dz) : (dx < -act_dz);
+            bool now_up    = prev_forward ? (dy < -deact_dz) : (dy < -act_dz);
+            bool now_down  = prev_back    ? (dy > deact_dz)  : (dy > act_dz);
 
-            // SOCD (Simultaneous Opposing Cardinal Directions) cleaning.
-            // Neutral mode: if opposing directions are both active, cancel both.
-            // This is the most anti-cheat safe behaviour — no real human input
-            // can produce perfectly simultaneous opposing keyboard key presses.
-            if (now_left && now_right) { now_left = false; now_right = false; }
-            if (now_up   && now_down)  { now_up   = false; now_down  = false; }
+            // SOCD cleaning using the selected mode.
+            socd_clean(&now_left, &now_right, &s_socd_lr_last);
+            socd_clean(&now_up,   &now_down,  &s_socd_ud_last);
 
             emit_if_changed_ex(device_id, KEY_ID_FORWARD, now_up, &prev_forward);
             emit_if_changed_ex(device_id, KEY_ID_BACK, now_down, &prev_back);
@@ -392,14 +451,14 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
             int rdx = apply_stick_curve(cal_normalize(&s_cal.rx, st.rx));
             int rdy = apply_stick_curve(cal_normalize(&s_cal.ry, st.ry));
 
-            bool now_rup = rdy < -deadzone;
-            bool now_rdn = rdy >  deadzone;
-            bool now_rlt = rdx < -deadzone;
-            bool now_rrt = rdx >  deadzone;
+            bool now_rup = prev_rup ? (rdy < -deact_dz) : (rdy < -act_dz);
+            bool now_rdn = prev_rdn ? (rdy >  deact_dz) : (rdy >  act_dz);
+            bool now_rlt = prev_rlt ? (rdx < -deact_dz) : (rdx < -act_dz);
+            bool now_rrt = prev_rrt ? (rdx >  deact_dz) : (rdx >  act_dz);
 
             // SOCD cleaning for right stick directions.
-            if (now_rlt && now_rrt) { now_rlt = false; now_rrt = false; }
-            if (now_rup && now_rdn) { now_rup = false; now_rdn = false; }
+            socd_clean(&now_rlt, &now_rrt, &s_socd_rlr_last);
+            socd_clean(&now_rup, &now_rdn, &s_socd_rud_last);
 
             emit_if_changed_ex(device_id, KEY_ID_RSTICK_UP,    now_rup, &prev_rup);
             emit_if_changed_ex(device_id, KEY_ID_RSTICK_DOWN,  now_rdn, &prev_rdn);

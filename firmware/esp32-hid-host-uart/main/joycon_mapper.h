@@ -82,3 +82,16 @@ void joycon_mapper_save_calibration(void);
 
 // Clear saved calibration from NVS (forces re-calibration on next boot).
 void joycon_mapper_clear_calibration(void);
+
+// SOCD (Simultaneous Opposing Cardinal Directions) cleaning modes.
+typedef enum {
+    SOCD_NEUTRAL     = 0,  // both cancel — safest for anti-cheat
+    SOCD_LAST_INPUT  = 1,  // last pressed direction wins
+    SOCD_FIRST_INPUT = 2,  // first pressed direction wins (holds)
+} socd_mode_t;
+
+void joycon_mapper_set_socd_mode(uint8_t mode);
+
+// Rapid trigger: set separate activation / deactivation thresholds for
+// stick-to-key hysteresis.  activation must be >= deactivation.
+void joycon_mapper_set_rapid_trigger(uint8_t activation, uint8_t deactivation);

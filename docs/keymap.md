@@ -150,6 +150,43 @@ Example profile stick settings:
 When a profile is loaded, stick curve settings are automatically forwarded
 to the ESP32 BT host over UART.
 
+## SOCD cleaning modes
+
+When both opposing directions are pressed on a stick simultaneously (e.g. left + right),
+the firmware applies SOCD (Simultaneous Opposing Cardinal Directions) cleaning.
+Set via profile JSON `stick.socd_mode` or the `set_socd_mode` serial command.
+
+| Mode          | Behavior                                   |
+|---------------|--------------------------------------------|
+| `neutral`     | Both directions cancel (default; safest)   |
+| `last_input`  | Most recently pressed direction wins       |
+| `first_input` | First pressed direction holds until released |
+
+## Rapid trigger (stick hysteresis)
+
+To prevent flickering when a stick hovers near the deadzone threshold, the firmware
+supports separate activation and deactivation thresholds creating a hysteresis band.
+Set via profile JSON `stick.rapid_trigger` or the `set_rapid_trigger` serial command.
+
+| Parameter     | Default | Description                                     |
+|---------------|---------|-------------------------------------------------|
+| `activation`  | 30      | Threshold to activate direction (stick → key on) |
+| `deactivation`| 20      | Threshold to deactivate (key off; must be ≤ activation) |
+
+When a direction is inactive, the stick must exceed the activation threshold to turn on.
+Once active, it stays on until the value drops below the deactivation threshold.
+
+## Timing humanization
+
+Macros and turbo repeat use randomized timing jitter to avoid perfectly regular intervals
+that anti-cheat software could detect:
+
+- **Macro delays**: ±15% random jitter on each delay step
+- **Turbo repeats**: ±10% random jitter on each press/release cycle (one-shot timer re-arm)
+
+Controlled by the profile JSON `"humanize": true` field or the `set_humanize` serial command.
+Enabled by default.
+
 ## Motion / IMU gesture detection
 
 When the Joy-Con sends 0x30 reports with IMU data (bytes 13-48), the firmware

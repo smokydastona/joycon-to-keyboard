@@ -40,6 +40,8 @@ static const char *TAG = "bridge-serial";
 #define CTRL_CMD_CALIBRATION     0x04
 #define CTRL_CMD_RUMBLE          0x05
 #define CTRL_CMD_HOME_LED        0x06
+#define CTRL_CMD_SET_SOCD_MODE   0x07
+#define CTRL_CMD_SET_RAPID_TRIGGER 0x08
 
 // OTA response IDs received from ESP32 via UART
 #define OTA_RSP_MARKER  0xFB
@@ -704,6 +706,42 @@ static void handle_line(const char *line) {
         handle_rumble(root);
     } else if (strcmp(cmd->valuestring, "home_led") == 0) {
         handle_home_led(root);
+    } else if (strcmp(cmd->valuestring, "set_socd_mode") == 0) {
+        cJSON *mode_j = cJSON_GetObjectItemCaseSensitive(root, "mode");
+        uint8_t mode = 0;
+        if (cJSON_IsString(mode_j) && mode_j->valuestring) {
+            if (strcmp(mode_j->valuestring, "last_input") == 0) mode = 1;
+            else if (strcmp(mode_j->valuestring, "first_input") == 0) mode = 2;
+        } else if (cJSON_IsNumber(mode_j)) {
+            mode = (uint8_t)mode_j->valueint;
+        }
+        if (mode > 2) mode = 0;
+        uart_proto_send_ctrl(CTRL_CMD_SET_SOCD_MODE, &mode, 1);
+        respond_ok_simple("set_socd_mode");
+    } else if (strcmp(cmd->valuestring, "set_rapid_trigger") == 0) {
+        cJSON *act_j = cJSON_GetObjectItemCaseSensitive(root, "activation");
+        cJSON *deact_j = cJSON_GetObjectItemCaseSensitive(root, "deactivation");
+        uint8_t act = 30, deact = 20;
+        if (cJSON_IsNumber(act_j)) act = (uint8_t)act_j->valueint;
+        if (cJSON_IsNumber(deact_j)) deact = (uint8_t)deact_j->valueint;
+        if (act < 1) act = 1;
+        if (deact > act) deact = act;
+        uint8_t payload[2] = {act, deact};
+        uart_proto_send_ctrl(CTRL_CMD_SET_RAPID_TRIGGER, payload, 2);
+        respond_ok_simple("set_rapid_trigger");
+    } else if (strcmp(cmd->valuestring, "set_humanize") == 0) {
+        cJSON *en = cJSON_GetObjectItemCaseSensitive(root, "enabled");
+        if (cJSON_IsBool(en)) {
+            profile_runtime_set_humanize(cJSON_IsTrue(en));
+        }
+        cJSON *rsp = cJSON_CreateObject();
+        if (rsp) {
+            cJSON_AddStringToObject(rsp, "rsp", "set_humanize");
+            cJSON_AddBoolToObject(rsp, "ok", true);
+            cJSON_AddBoolToObject(rsp, "enabled", profile_runtime_get_humanize());
+            cdc_write_json(rsp);
+            cJSON_Delete(rsp);
+        }
     } else {
         respond_error(cmd->valuestring, "unknown_cmd");
     }

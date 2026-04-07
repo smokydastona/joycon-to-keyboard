@@ -71,8 +71,14 @@ Profile schema (expected by the ESP32-S3 keyboard-side firmware):
 		"deadzone": 0.15,
 		"shape": "circle",
 		"curve": "linear",
-		"exp": 1.0
+		"exp": 1.0,
+		"socd_mode": "neutral",
+		"rapid_trigger": {
+			"activation": 30,
+			"deactivation": 20
+		}
 	},
+	"humanize": true,
 	"ui": {
 		"hotspots": {
 			"A": 130,
@@ -85,7 +91,8 @@ Profile schema (expected by the ESP32-S3 keyboard-side firmware):
 Notes:
 
 - `mappings` keys are strings (input `key_id`), for easier JSON interoperability.
-- `stick` is stored for future analog support; it may be ignored by current firmware.
+- `stick` is stored for future analog support; it may be ignored by current firmware. The `socd_mode` and `rapid_trigger` sub-fields are forwarded to the ESP32 BT host on profile load.
+- `humanize` enables ±15% timing jitter on macro delays and ±10% on turbo repeats (default true).
 - `ui.hotspots` is helper-app-only UI state (Controller tab). It maps a visual control name to an observed input `key_id`.
 - Firmware ignores unknown profile fields.
 
@@ -102,6 +109,7 @@ Notes:
 | `double_tap` | Single-tap sends one key, quick double-tap sends another. Contains `single_mod`/`single_keycode`, `double_mod`/`double_keycode`, and `timeout_ms`. See below. |
 | `turbo` | Rapid-fire (auto-repeat) key while held. Contains `mod`, `keycode`, and `delay_ms` (repeat interval). See below. |
 | `sticky` | Toggle modifier: first press activates, second press deactivates. Contains `mod` and `keycode`. See below. |
+| `oneshot` | One-shot modifier: press once to arm, next key press applies the modifier once, then auto-releases. Contains `mod` and `keycode`. See below. |
 
 ### Turbo mapping
 
@@ -138,6 +146,25 @@ The `sticky` type makes a key toggle on/off. First press sends key-down, second 
 |-------|------|-------------|
 | `mod` | int | HID modifier bitmask to toggle. |
 | `keycode` | int | HID keycode to toggle. 0 if modifier-only. |
+
+### One-shot mapping
+
+The `oneshot` type arms a modifier on press. The next non-oneshot key press automatically applies the armed modifier, then releases it:
+
+```json
+{
+	"type": "oneshot",
+	"mod": 2,
+	"keycode": 0
+}
+```
+
+| field | type | description |
+|-------|------|-------------|
+| `mod` | int | HID modifier bitmask to apply once. |
+| `keycode` | int | HID keycode to apply once. 0 if modifier-only. |
+
+State machine: press the oneshot key → modifier is armed → press any other key → modifier is applied for that key → modifier auto-releases. Arms expire after 3 seconds if no other key is pressed.
 
 ### Tap-hold mapping
 
@@ -420,6 +447,53 @@ Set the brightness of the Home button LED (right Joy-Con / Pro Controller only; 
 
 - `device_id`: `0` or `1`
 - `brightness`: 0–15 (0 = off, 15 = max)
+
+### Set SOCD mode
+
+Configure the Simultaneous Opposing Cardinal Directions cleaning mode on the ESP32 BT host.
+
+```json
+{"cmd":"set_socd_mode","mode":"neutral"}
+```
+
+- `mode`: `"neutral"` (opposing cancel), `"last_input"` (last pressed wins), `"first_input"` (first pressed wins), or `0`/`1`/`2`
+
+Response:
+
+```json
+{"rsp":"set_socd_mode","ok":true}
+```
+
+### Set rapid trigger (stick hysteresis)
+
+Configure stick-to-key activation/deactivation thresholds for hysteresis on the ESP32 BT host. This prevents flickering at the deadzone boundary.
+
+```json
+{"cmd":"set_rapid_trigger","activation":30,"deactivation":20}
+```
+
+- `activation`: threshold for direction to activate (default 30)
+- `deactivation`: threshold for direction to deactivate (default 20; must be ≤ activation)
+
+Response:
+
+```json
+{"rsp":"set_rapid_trigger","ok":true}
+```
+
+### Set humanize
+
+Enable or disable timing humanization (jitter) for macros and turbo repeats.
+
+```json
+{"cmd":"set_humanize","enabled":true}
+```
+
+Response:
+
+```json
+{"rsp":"set_humanize","ok":true,"enabled":true}
+```
 
 ## Events (device -> PC)
 

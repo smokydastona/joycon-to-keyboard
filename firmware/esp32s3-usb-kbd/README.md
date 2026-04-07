@@ -100,7 +100,12 @@ The profile system supports these mapping modes:
 - **turbo** — rapid-fire auto-repeat while held (configurable interval)
 - **sticky** — toggle key: first press activates, second press deactivates
 - **tap_hold** — different actions for quick tap vs long hold
+- **oneshot** — one-shot modifier: arms on press, applies to the next key, then auto-releases
 - **chords** — multi-button combos that fire a single action when pressed simultaneously
+
+### Timing humanization
+
+Macros and turbo repeat use random jitter (±15% on macro delays, ±10% on turbo intervals) to avoid perfectly regular patterns detectable by anti-cheat. Controlled by the profile `"humanize"` field (default true) or the `set_humanize` serial command.
 
 ### Layers
 

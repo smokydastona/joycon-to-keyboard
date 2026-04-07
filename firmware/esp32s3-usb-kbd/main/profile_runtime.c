@@ -17,6 +17,8 @@
 
 #include "cJSON.h"
 
+#include "esp_random.h"
+
 #include "bridge_serial.h"
 #include "keymap.h"
 #include "usb_kbd.h"
@@ -33,6 +35,21 @@ static const char *TAG = "profile";
 #define PROFILE_MAX_MACRO_ID 24
 
 #define INPUT_KEY_ID_MAX 256
+
+// Anti-cheat humanization: enabled by default, adds timing jitter
+// to macro delays and turbo intervals so they don't look robotic.
+static bool s_humanize = true;
+
+// Apply ±pct% random jitter to a delay value (min 1 ms result).
+static uint32_t humanize_delay(uint32_t base_ms, int pct) {
+    if (!s_humanize || base_ms == 0) return base_ms;
+    uint32_t rng = esp_random();
+    // Map rng to [-pct, +pct] range: offset = base_ms * (rng % (2*pct+1) - pct) / 100
+    int spread = (int)(rng % (uint32_t)(2 * pct + 1)) - pct;
+    int32_t delta = (int32_t)base_ms * spread / 100;
+    int32_t result = (int32_t)base_ms + delta;
+    return (result < 1) ? 1 : (uint32_t)result;
+}
 
 typedef enum {
     STEP_KEY = 1,
@@ -68,6 +85,7 @@ typedef enum {
     MAP_TURBO = 6,
     MAP_STICKY_MOD = 7,
     MAP_TAP_HOLD = 8,
+    MAP_ONESHOT_MOD = 9,
 } map_mode_t;
 
 typedef struct {
@@ -95,6 +113,9 @@ typedef struct {
     uint8_t th_hold_hid_mod;
     uint8_t th_hold_hid_keycode;
     uint16_t th_hold_ms;       // default 300
+    // One-shot modifier fields (MAP_ONESHOT_MOD)
+    uint8_t os_hid_mod;
+    uint8_t os_hid_keycode;
 } map_entry_t;
 
 // --- Layer system ---
@@ -207,6 +228,7 @@ typedef struct {
     bool key_pressed;  // toggle state
     uint8_t hid_mod;
     uint8_t hid_keycode;
+    uint16_t delay_ms;  // base interval for humanized re-arm
     esp_timer_handle_t timer;
 } turbo_tracker_t;
 
@@ -225,6 +247,10 @@ static void turbo_timer_cb(void *arg) {
     if (!tt->active) return;
     tt->key_pressed = !tt->key_pressed;
     usb_kbd_set_key(tt->hid_mod, tt->hid_keycode, tt->key_pressed);
+    // Re-arm as one-shot with ±10% humanized jitter so turbo doesn't
+    // look like a perfectly periodic bot to anti-cheat.
+    uint32_t next = humanize_delay(tt->delay_ms, 10);
+    esp_timer_start_once(tt->timer, (uint64_t)next * 1000);
 }
 
 static void register_turbo_tracker(uint8_t key_id) {
@@ -312,6 +338,94 @@ static void register_th_tracker(uint8_t key_id) {
     s_th_count++;
 }
 
+// --- One-shot modifier system ---
+// Press the one-shot key → modifier is armed.
+// Press any other key → modifier applied for that key press, then auto-released.
+// 3-second timeout: if no other key is pressed, modifier is disarmed.
+
+typedef enum {
+    OS_IDLE = 0,
+    OS_ARMED = 1,
+} os_state_t;
+
+#define MAX_ONESHOT_KEYS 8
+
+typedef struct {
+    uint8_t key_id;
+    os_state_t state;
+    uint8_t hid_mod;
+    uint8_t hid_keycode;
+    esp_timer_handle_t timer;
+} os_tracker_t;
+
+static os_tracker_t s_os_trackers[MAX_ONESHOT_KEYS];
+static size_t s_os_count = 0;
+
+static os_tracker_t *find_os_tracker(uint8_t key_id) {
+    for (size_t i = 0; i < s_os_count; i++) {
+        if (s_os_trackers[i].key_id == key_id) return &s_os_trackers[i];
+    }
+    return NULL;
+}
+
+static void os_timeout_cb(void *arg) {
+    os_tracker_t *os = (os_tracker_t *)arg;
+    if (os->state == OS_ARMED) {
+        // Timeout: disarm without firing.
+        os->state = OS_IDLE;
+        usb_kbd_set_key(os->hid_mod, os->hid_keycode, false);
+    }
+}
+
+static void register_os_tracker(uint8_t key_id) {
+    if (find_os_tracker(key_id)) return;
+    if (s_os_count >= MAX_ONESHOT_KEYS) {
+        ESP_LOGW(TAG, "Max one-shot keys reached (%d)", MAX_ONESHOT_KEYS);
+        return;
+    }
+    os_tracker_t *os = &s_os_trackers[s_os_count];
+    memset(os, 0, sizeof(*os));
+    os->key_id = key_id;
+    os->state = OS_IDLE;
+    esp_timer_create_args_t args = {
+        .callback = os_timeout_cb,
+        .arg = os,
+        .name = "os",
+    };
+    if (esp_timer_create(&args, &os->timer) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to create one-shot timer for key %u", key_id);
+        return;
+    }
+    s_os_count++;
+}
+
+// Consume armed one-shot modifiers: press the modifier, let the caller
+// handle the actual key, then schedule release on key-up.
+static bool s_oneshot_pending_release = false;
+static uint8_t s_oneshot_release_mod = 0;
+static uint8_t s_oneshot_release_kc = 0;
+
+static void oneshot_apply_if_armed(void) {
+    for (size_t i = 0; i < s_os_count; i++) {
+        if (s_os_trackers[i].state == OS_ARMED) {
+            esp_timer_stop(s_os_trackers[i].timer);
+            // Modifier is already pressed from arm; we just need to
+            // record that it should be released after the next key-up.
+            s_oneshot_pending_release = true;
+            s_oneshot_release_mod = s_os_trackers[i].hid_mod;
+            s_oneshot_release_kc = s_os_trackers[i].hid_keycode;
+            s_os_trackers[i].state = OS_IDLE;
+        }
+    }
+}
+
+static void oneshot_release_if_pending(void) {
+    if (s_oneshot_pending_release) {
+        usb_kbd_set_key(s_oneshot_release_mod, s_oneshot_release_kc, false);
+        s_oneshot_pending_release = false;
+    }
+}
+
 // --- Chord (combo) system ---
 
 #define MAX_CHORDS 8
@@ -359,6 +473,22 @@ static void free_profile(void) {
     }
     memset(s_th_trackers, 0, sizeof(s_th_trackers));
     s_th_count = 0;
+
+    // Clean up one-shot timers.
+    for (size_t i = 0; i < s_os_count; i++) {
+        if (s_os_trackers[i].timer) {
+            esp_timer_stop(s_os_trackers[i].timer);
+            // Release any armed one-shot modifier.
+            if (s_os_trackers[i].state == OS_ARMED) {
+                usb_kbd_set_key(s_os_trackers[i].hid_mod,
+                                s_os_trackers[i].hid_keycode, false);
+            }
+            esp_timer_delete(s_os_trackers[i].timer);
+        }
+    }
+    memset(s_os_trackers, 0, sizeof(s_os_trackers));
+    s_os_count = 0;
+    s_oneshot_pending_release = false;
 
     // Release any currently-held sticky modifiers before clearing state,
     // otherwise the USB HID report retains phantom key presses.
@@ -709,6 +839,17 @@ static void parse_mappings(cJSON *root) {
             continue;
         }
 
+        if (strcmp(type->valuestring, "oneshot") == 0) {
+            cJSON *mod_j = cJSON_GetObjectItemCaseSensitive(entry, "mod");
+            cJSON *kc_j = cJSON_GetObjectItemCaseSensitive(entry, "keycode");
+            if (!cJSON_IsNumber(mod_j) || !cJSON_IsNumber(kc_j)) continue;
+            s_map[key_id].mode = MAP_ONESHOT_MOD;
+            s_map[key_id].os_hid_mod = (uint8_t)mod_j->valueint;
+            s_map[key_id].os_hid_keycode = (uint8_t)kc_j->valueint;
+            register_os_tracker((uint8_t)key_id);
+            continue;
+        }
+
         ESP_LOGW(TAG, "Unknown mapping type '%s' for key %d", type->valuestring, key_id);
     }
 }
@@ -845,6 +986,14 @@ static void parse_layer_mappings(cJSON *mappings_obj, layer_t *layer) {
                 ov->entry.th_hold_ms = (uint16_t)hold_ms_j->valueint;
             }
             register_th_tracker((uint8_t)key_id);
+        } else if (strcmp(type->valuestring, "oneshot") == 0) {
+            cJSON *mod_j = cJSON_GetObjectItemCaseSensitive(entry, "mod");
+            cJSON *kc_j = cJSON_GetObjectItemCaseSensitive(entry, "keycode");
+            if (!cJSON_IsNumber(mod_j) || !cJSON_IsNumber(kc_j)) continue;
+            ov->entry.mode = MAP_ONESHOT_MOD;
+            ov->entry.os_hid_mod = (uint8_t)mod_j->valueint;
+            ov->entry.os_hid_keycode = (uint8_t)kc_j->valueint;
+            register_os_tracker((uint8_t)key_id);
         } else {
             continue;
         }
@@ -993,6 +1142,14 @@ static void load_profile_json(const char *json) {
     parse_layers(root);
     parse_chords(root);
 
+    // Optional humanize flag (default true).
+    cJSON *humanize_j = cJSON_GetObjectItemCaseSensitive(root, "humanize");
+    if (cJSON_IsBool(humanize_j)) {
+        s_humanize = cJSON_IsTrue(humanize_j);
+    } else {
+        s_humanize = true;  // default on
+    }
+
     // --- Forward stick settings to ESP32 BT host ---
     cJSON *stick = cJSON_GetObjectItemCaseSensitive(root, "stick");
     if (cJSON_IsObject(stick)) {
@@ -1016,6 +1173,31 @@ static void load_profile_json(const char *json) {
         uint8_t payload[2] = {curve, exp_x100};
         uart_proto_send_ctrl(0x03, payload, 2);
         ESP_LOGI(TAG, "Forwarded stick curve=%u exp_x100=%u to ESP32", curve, exp_x100);
+
+        // Forward SOCD mode if present in stick settings.
+        cJSON *socd_j = cJSON_GetObjectItemCaseSensitive(stick, "socd_mode");
+        if (cJSON_IsString(socd_j) && socd_j->valuestring) {
+            uint8_t socd = 0;
+            if (strcmp(socd_j->valuestring, "last_input") == 0) socd = 1;
+            else if (strcmp(socd_j->valuestring, "first_input") == 0) socd = 2;
+            uart_proto_send_ctrl(0x07, &socd, 1);
+            ESP_LOGI(TAG, "Forwarded SOCD mode=%u to ESP32", socd);
+        }
+
+        // Forward rapid trigger thresholds if present.
+        cJSON *rt_j = cJSON_GetObjectItemCaseSensitive(stick, "rapid_trigger");
+        if (cJSON_IsObject(rt_j)) {
+            cJSON *act_j = cJSON_GetObjectItemCaseSensitive(rt_j, "activation");
+            cJSON *deact_j = cJSON_GetObjectItemCaseSensitive(rt_j, "deactivation");
+            uint8_t act = 30, deact = 20;
+            if (cJSON_IsNumber(act_j)) act = (uint8_t)act_j->valueint;
+            if (cJSON_IsNumber(deact_j)) deact = (uint8_t)deact_j->valueint;
+            if (act < 1) act = 1;
+            if (deact > act) deact = act;
+            uint8_t rt_payload[2] = {act, deact};
+            uart_proto_send_ctrl(0x08, rt_payload, 2);
+            ESP_LOGI(TAG, "Forwarded rapid trigger act=%u deact=%u to ESP32", act, deact);
+        }
     }
 
     cJSON_Delete(root);
@@ -1048,6 +1230,7 @@ static void macro_task(void *arg) {
 
         // Hard safety limits: total duration and step count.
         uint32_t total_ms = 0;
+        const uint32_t macro_total_cap = 5000;
         size_t steps = m->step_count;
         if (steps > PROFILE_MAX_STEPS) steps = PROFILE_MAX_STEPS;
 
@@ -1055,8 +1238,10 @@ static void macro_task(void *arg) {
             macro_step_t *st = &m->steps[i];
 
             if (st->type == STEP_DELAY) {
-                uint32_t remaining = (total_ms < 4000) ? (4000 - total_ms) : 0;
-                uint32_t actual = (st->u.delay.ms > remaining) ? remaining : st->u.delay.ms;
+                uint32_t remaining = (total_ms < macro_total_cap) ? (macro_total_cap - total_ms) : 0;
+                uint32_t base = (st->u.delay.ms > remaining) ? remaining : st->u.delay.ms;
+                uint32_t actual = humanize_delay(base, 15);
+                if (actual > remaining) actual = remaining;
                 total_ms += actual;
                 if (actual == 0) break;
                 vTaskDelay(pdMS_TO_TICKS(actual));
@@ -1164,6 +1349,16 @@ static map_entry_t *find_layer_override(uint8_t key_id) {
 }
 
 static void dispatch_mapping(map_entry_t *m, bool pressed, uint8_t key_id) {
+    // One-shot modifier integration: when a non-oneshot key is pressed,
+    // consume any armed one-shot modifier. On release, release it.
+    if (m->mode != MAP_ONESHOT_MOD && s_os_count > 0) {
+        if (pressed) {
+            oneshot_apply_if_armed();
+        } else {
+            oneshot_release_if_pending();
+        }
+    }
+
     switch (m->mode) {
         case MAP_DISABLED:
             return;
@@ -1236,9 +1431,11 @@ static void dispatch_mapping(map_entry_t *m, bool pressed, uint8_t key_id) {
                 tt->key_pressed = true;
                 tt->hid_mod = m->turbo_hid_mod;
                 tt->hid_keycode = m->turbo_hid_keycode;
+                tt->delay_ms = m->turbo_delay_ms;
                 usb_kbd_set_key(tt->hid_mod, tt->hid_keycode, true);
-                esp_timer_start_periodic(tt->timer,
-                                         (uint64_t)m->turbo_delay_ms * 1000);
+                uint32_t first = humanize_delay(m->turbo_delay_ms, 10);
+                esp_timer_start_once(tt->timer,
+                                     (uint64_t)first * 1000);
             } else {
                 tt->active = false;
                 esp_timer_stop(tt->timer);
@@ -1295,6 +1492,24 @@ static void dispatch_mapping(map_entry_t *m, bool pressed, uint8_t key_id) {
                     }
                     break;
             }
+            return;
+        }
+
+        case MAP_ONESHOT_MOD: {
+            os_tracker_t *os = find_os_tracker(key_id);
+            if (!os) return;
+            if (pressed) {
+                if (os->state == OS_IDLE) {
+                    os->state = OS_ARMED;
+                    os->hid_mod = m->os_hid_mod;
+                    os->hid_keycode = m->os_hid_keycode;
+                    usb_kbd_set_key(os->hid_mod, os->hid_keycode, true);
+                    // 3-second timeout to auto-disarm.
+                    esp_timer_start_once(os->timer, 3000000);
+                }
+            }
+            // Release of the oneshot key itself is ignored; the modifier
+            // stays armed until consumed by another key or timeout.
             return;
         }
 
@@ -1442,4 +1657,12 @@ void profile_runtime_handle_input(bool pressed, uint8_t key_id) {
     map_entry_t *m = override ? override : &s_map[key_id];
 
     dispatch_mapping(m, pressed, key_id);
+}
+
+void profile_runtime_set_humanize(bool enabled) {
+    s_humanize = enabled;
+}
+
+bool profile_runtime_get_humanize(void) {
+    return s_humanize;
 }

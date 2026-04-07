@@ -52,6 +52,7 @@ Status payload format:
 	- `3` connecting
 	- `4` connected
 	- `5` disconnected
+	- `6` reconnecting
 - `bda[6]` — Bluetooth device address (or `00:00:00:00:00:00` if unknown)
 - `name_len` — 0..48
 - `name bytes` — UTF-8 device name (truncated)
@@ -106,6 +107,15 @@ Current control commands:
 	- payload: 2 bytes
 		- `[0]`: device_id (0 or 1)
 		- `[1]`: brightness (0–15; 0 = off)
+- `cmd_id=0x07` — set SOCD cleaning mode
+	- payload: 1 byte
+		- `0` = neutral (opposing directions cancel)
+		- `1` = last input wins
+		- `2` = first input wins
+- `cmd_id=0x08` — set rapid trigger (stick hysteresis thresholds)
+	- payload: 2 bytes
+		- `[0]`: activation threshold (stick → key on; default 30)
+		- `[1]`: deactivation threshold (key off; default 20; must be ≤ activation)
 
 ### OTA update control commands (ESP32-S3 → ESP32)
 
