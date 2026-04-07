@@ -156,6 +156,7 @@ This bundle is *not automatically loaded* by the helper app.
 
 
 LIGHT_OVERLAYS = {
+    "icon.png": Path("docs/ui/misc/icon.png"),
     "joycons.png": Path("joycons.png"),
     "backgrounds/joycons-both.png": Path("docs/ui/default/backgrounds/joycons-both.png"),
     "backgrounds/joycons-left.png": Path("docs/ui/default/backgrounds/joycons-left.png"),
@@ -170,6 +171,7 @@ LIGHT_OVERLAYS = {
 }
 
 DARK_OVERLAYS = {
+    "icon.png": Path("docs/ui/misc/icon.png"),
     "joycons.png": Path("joycons-dark.png"),
     "backgrounds/joycons-both.png": Path("docs/ui/dark/backgrounds/joycons-both.png"),
     "backgrounds/joycons-left.png": Path("docs/ui/dark/backgrounds/joycons-left.png"),

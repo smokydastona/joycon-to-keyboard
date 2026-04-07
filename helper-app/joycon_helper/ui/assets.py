@@ -213,9 +213,16 @@ class AssetManager:
         return variants
 
     def load_icon(self) -> Optional[QPixmap]:
-        path = self.find_file("icon.ico")
+        here = Path(__file__).resolve()
+        repo = here.parents[3]
+        icon_roots = [
+            repo / "docs" / "ui" / "misc",
+            here.parents[2],              # helper-app/
+            repo,
+        ]
+        path = self.find_file("icon.ico", extra_roots=icon_roots)
         if path is None:
-            path = self.find_file("icon.png")
+            path = self.find_file("icon.png", extra_roots=icon_roots)
         if path is None:
             return None
         return QPixmap(str(path))
