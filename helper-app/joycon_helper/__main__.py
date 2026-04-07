@@ -9,23 +9,17 @@ cleanup_old_logs()
 
 
 def _run() -> None:
-    """Select UI backend and run the application."""
-    if "--legacy" in sys.argv:
-        # Original Tkinter UI
-        from joycon_helper.app import main  # noqa: E402
-        main()
-    else:
-        # New PyQt6 UI (default)
-        from PyQt6.QtWidgets import QApplication
-        from joycon_helper.ui.main_window import MainWindow
+    """Launch the PyQt6 application."""
+    from PyQt6.QtWidgets import QApplication
+    from joycon_helper.ui.main_window import MainWindow
 
-        app = QApplication(sys.argv)
-        app.setApplicationName("Bind Bandit")
-        app.setOrganizationName("JoyConBridge")
+    app = QApplication(sys.argv)
+    app.setApplicationName("Bind Bandit")
+    app.setOrganizationName("JoyConBridge")
 
-        window = MainWindow()
-        window.show()
-        sys.exit(app.exec())
+    window = MainWindow()
+    window.show()
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

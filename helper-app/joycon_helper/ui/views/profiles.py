@@ -12,13 +12,14 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QComboBox, QFileDialog, QGroupBox, QHBoxLayout, QLabel,
+    QCheckBox, QComboBox, QFileDialog, QGroupBox, QHBoxLayout, QLabel,
     QLineEdit, QListWidget, QListWidgetItem, QMessageBox,
     QPushButton, QScrollArea, QTextEdit, QVBoxLayout, QWidget,
 )
 
 from ..theme import ThemeEngine
 from ..widgets.card import Card
+from ...app_switcher import load_rules, save_rules, _get_foreground_exe
 
 if TYPE_CHECKING:
     from ..main_window import MainWindow
@@ -141,6 +142,49 @@ class ProfilesView(QWidget):
         undo_lay.addWidget(self._redo_btn)
 
         left.addWidget(undo_group)
+
+        # App Switcher
+        switch_group = QGroupBox("App Switcher")
+        switch_lay = QVBoxLayout(switch_group)
+
+        self._switch_enable = QCheckBox("Auto-switch profiles by foreground app")
+        self._switch_enable.toggled.connect(self._toggle_app_switcher)
+        switch_lay.addWidget(self._switch_enable)
+
+        self._switch_list = QListWidget()
+        self._switch_list.setMaximumHeight(120)
+        switch_lay.addWidget(self._switch_list)
+
+        switch_btn_row = QHBoxLayout()
+        detect_btn = QPushButton("Detect App")
+        detect_btn.setToolTip("Add a rule for the currently active window")
+        detect_btn.clicked.connect(self._app_switch_detect)
+        switch_btn_row.addWidget(detect_btn)
+
+        add_btn = QPushButton("Add Rule")
+        add_btn.clicked.connect(self._app_switch_add)
+        switch_btn_row.addWidget(add_btn)
+
+        remove_btn = QPushButton("Remove")
+        remove_btn.clicked.connect(self._app_switch_remove)
+        switch_btn_row.addWidget(remove_btn)
+        switch_lay.addLayout(switch_btn_row)
+
+        # Default slot
+        default_row = QHBoxLayout()
+        default_row.addWidget(QLabel("Default slot:"))
+        self._default_slot_combo = QComboBox()
+        self._default_slot_combo.addItems(["0", "1", "2", "3"])
+        self._default_slot_combo.currentIndexChanged.connect(self._app_switch_default_changed)
+        default_row.addWidget(self._default_slot_combo)
+        default_row.addStretch()
+        switch_lay.addLayout(default_row)
+
+        left.addWidget(switch_group)
+
+        # Populate rules from disk
+        self._refresh_switch_list()
+
         left.addStretch()
 
         parent_layout.addLayout(left, 1)
@@ -377,6 +421,68 @@ class ProfilesView(QWidget):
         self._undo_btn.setEnabled(bool(self._undo_stack))
         self._redo_btn.setEnabled(bool(self._redo_stack))
         self._main._status_bar.set_undo_depth(len(self._undo_stack))
+
+    # -----------------------------------------------------------------
+    # App Switcher
+    # -----------------------------------------------------------------
+
+    def _toggle_app_switcher(self, checked: bool) -> None:
+        self._main._app_switcher.enabled = checked
+
+    def _refresh_switch_list(self) -> None:
+        self._switch_list.clear()
+        for rule in self._main._app_switcher.rules:
+            exe = rule.get("exe", "?")
+            slot = rule.get("slot", 0)
+            self._switch_list.addItem(f"{exe}  →  Slot {slot}")
+
+    def _app_switch_detect(self) -> None:
+        exe = _get_foreground_exe()
+        if not exe:
+            QMessageBox.information(self, "Detect", "Could not detect the foreground application.")
+            return
+        slot = self._main._slot
+        rules = self._main._app_switcher.rules
+        # Don't duplicate
+        for r in rules:
+            if r.get("exe", "").lower() == exe:
+                QMessageBox.information(self, "Detect", f"'{exe}' is already mapped.")
+                return
+        rules.append({"exe": exe, "slot": slot})
+        self._main._app_switcher.set_rules(rules)
+        save_rules(rules)
+        self._refresh_switch_list()
+
+    def _app_switch_add(self) -> None:
+        from PyQt6.QtWidgets import QInputDialog
+        exe, ok = QInputDialog.getText(self, "Add Rule", "Executable name (e.g. game.exe):")
+        if not ok or not exe.strip():
+            return
+        exe = exe.strip().lower()
+        slot = self._main._slot
+        rules = self._main._app_switcher.rules
+        for r in rules:
+            if r.get("exe", "").lower() == exe:
+                QMessageBox.information(self, "Add Rule", f"'{exe}' is already mapped.")
+                return
+        rules.append({"exe": exe, "slot": slot})
+        self._main._app_switcher.set_rules(rules)
+        save_rules(rules)
+        self._refresh_switch_list()
+
+    def _app_switch_remove(self) -> None:
+        row = self._switch_list.currentRow()
+        if row < 0:
+            return
+        rules = self._main._app_switcher.rules
+        if 0 <= row < len(rules):
+            rules.pop(row)
+            self._main._app_switcher.set_rules(rules)
+            save_rules(rules)
+            self._refresh_switch_list()
+
+    def _app_switch_default_changed(self, index: int) -> None:
+        self._main._app_switcher.set_default_slot(index)
 
     # -----------------------------------------------------------------
     # Event handlers

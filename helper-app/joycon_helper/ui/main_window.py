@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import (
 )
 
 from .._version import __version__
+from ..app_switcher import AppSwitcher, load_rules, save_rules
 from ..serial_client import SerialClient
 from .assets import AssetManager
 from .constants import KEYMAP_HOTSPOTS, KBD_HOTSPOTS
@@ -73,6 +74,11 @@ class MainWindow(QMainWindow):
         self._active_key_ids: set = set()
         self._bt_connected_left = False
         self._bt_connected_right = False
+
+        # App switcher (foreground-window → profile slot)
+        self._app_switcher = AppSwitcher(on_switch=self._on_app_switch_slot)
+        rules = load_rules()
+        self._app_switcher.set_rules(rules)
 
         self._setup_window()
         self._build_toolbar()
@@ -477,6 +483,19 @@ class MainWindow(QMainWindow):
         self._slot = index
         self._status_bar.set_slot(index)
 
+    def _on_app_switch_slot(self, slot: int) -> None:
+        """Called from AppSwitcher background thread — marshal to main thread."""
+        QTimer.singleShot(0, lambda s=slot: self._apply_app_switch(s))
+
+    def _apply_app_switch(self, slot: int) -> None:
+        """Apply profile-slot change triggered by the app switcher."""
+        if slot == self._slot:
+            return
+        self._slot_combo.setCurrentIndex(slot)
+        self.send_cmd({"cmd": "set_active_profile", "slot": slot})
+        self._cmd_read_profile()
+        self._log_line(f"[app-switch] → slot {slot}")
+
     # -----------------------------------------------------------------
     # Profile access (for views)
     # -----------------------------------------------------------------
@@ -567,6 +586,7 @@ class MainWindow(QMainWindow):
     # -----------------------------------------------------------------
 
     def closeEvent(self, event: Any) -> None:
+        self._app_switcher.stop()
         if self.bridge.is_connected:
             self.bridge.disconnect_serial()
         if self._overlay and not self._overlay.is_closed:

@@ -9,8 +9,6 @@ Bind Bandit is a standalone desktop app for configuring gaming peripherals. **No
 | **Razer mouse configuration** | Razer Basilisk X HyperSpeed (USB) | Devices → Razer |
 | **Both** | All of the above | All sections |
 
-> **Legacy Tkinter UI**: The original Tkinter interface is still available via `python -m joycon_helper --legacy`.
-
 ### Joy-Con bridge features (requires ESP32-S3 serial connection)
 
 The bridge talks over a **serial (COM) port** provided by the **ESP32-S3 USB keyboard firmware** (USB CDC-ACM). If you haven't flashed the ESP32-S3 yet, start with `docs/firmware-install.md`.
