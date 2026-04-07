@@ -47,6 +47,7 @@ class MappingView(QWidget):
         self._main = main
         self._selected_hotspot: Optional[str] = None
         self._learn_mode = False
+        self._m913_skin = "Stock"
         self._overlay_color = "violet"
         self._search_text = ""
         self._clipboard_binding: Optional[Dict[str, Any]] = None
@@ -110,19 +111,28 @@ class MappingView(QWidget):
         self._jc_canvas.hotspot_hovered.connect(self._on_hotspot_hovered)
         self._device_tabs.addTab(self._jc_canvas, "Joy-Con")
 
-        # M913 Stock canvas
+        # M913 tab (with optional Incedius skin)
+        m913_container = QWidget()
+        m913_lay = QVBoxLayout(m913_container)
+        m913_lay.setContentsMargins(0, 0, 0, 0)
+        m913_lay.setSpacing(4)
+
+        skin_row = QHBoxLayout()
+        skin_row.addWidget(QLabel("Skin:"))
+        self._m913_skin_combo = QComboBox()
+        self._m913_skin_combo.addItems(["Stock", "Incedius"])
+        self._m913_skin_combo.currentTextChanged.connect(self._on_m913_skin_changed)
+        skin_row.addWidget(self._m913_skin_combo)
+        skin_row.addStretch()
+        m913_lay.addLayout(skin_row)
+
         self._m913_canvas = HotspotCanvas(self._main.theme)
         self._m913_canvas.hotspot_clicked.connect(self._on_hotspot_clicked)
         self._m913_canvas.hotspot_right_clicked.connect(self._on_hotspot_right_click)
         self._m913_canvas.hotspot_hovered.connect(self._on_hotspot_hovered)
-        self._device_tabs.addTab(self._m913_canvas, "M913")
+        m913_lay.addWidget(self._m913_canvas, 1)
 
-        # Incedius M913 canvas
-        self._incedius_canvas = HotspotCanvas(self._main.theme)
-        self._incedius_canvas.hotspot_clicked.connect(self._on_hotspot_clicked)
-        self._incedius_canvas.hotspot_right_clicked.connect(self._on_hotspot_right_click)
-        self._incedius_canvas.hotspot_hovered.connect(self._on_hotspot_hovered)
-        self._device_tabs.addTab(self._incedius_canvas, "Incedius")
+        self._device_tabs.addTab(m913_container, "M913")
 
         # Mouse / Razer canvas
         self._mouse_canvas = HotspotCanvas(self._main.theme)
@@ -275,7 +285,6 @@ class MappingView(QWidget):
     def _load_hotspots(self) -> None:
         self._jc_canvas.set_hotspots(KEYMAP_HOTSPOTS)
         self._m913_canvas.set_hotspots(M913_HOTSPOTS)
-        self._incedius_canvas.set_hotspots(INCEDIUS_HOTSPOTS)
         self._mouse_canvas.set_hotspots(MOUSE_HOTSPOTS)
         self._kbd_canvas.set_hotspots(KBD_HOTSPOTS)
 
@@ -284,15 +293,10 @@ class MappingView(QWidget):
         if pm:
             self._jc_canvas.set_background(pm)
 
-        # M913 background
+        # M913 background (respects current skin)
         m913_pm = self._main.assets.load_pixmap("m913_none.png")
         if m913_pm:
             self._m913_canvas.set_background(m913_pm)
-
-        # Incedius background
-        inc_pm = self._main.assets.load_pixmap("incedius_none.png")
-        if inc_pm:
-            self._incedius_canvas.set_background(inc_pm)
 
         # Mouse / Razer background
         mouse_pm = self._main.assets.load_pixmap("razer_none.png")
@@ -312,10 +316,10 @@ class MappingView(QWidget):
 
     def _device_list(self):
         """Return list of (canvas, hotspot_list) in tab order."""
+        m913_hs = INCEDIUS_HOTSPOTS if self._m913_skin == "Incedius" else M913_HOTSPOTS
         return [
             (self._jc_canvas, KEYMAP_HOTSPOTS),
-            (self._m913_canvas, M913_HOTSPOTS),
-            (self._incedius_canvas, INCEDIUS_HOTSPOTS),
+            (self._m913_canvas, m913_hs),
             (self._mouse_canvas, MOUSE_HOTSPOTS),
         ]
 
@@ -331,6 +335,18 @@ class MappingView(QWidget):
         self._selected_hotspot = None
         self._sel_label.setText("No button selected")
         self._sel_mapping.setText("Click a button on the canvas to select it")
+
+    def _on_m913_skin_changed(self, skin: str) -> None:
+        self._m913_skin = skin
+        if skin == "Incedius":
+            self._m913_canvas.set_hotspots(INCEDIUS_HOTSPOTS)
+            pm = self._main.assets.load_pixmap("incedius_none.png")
+        else:
+            self._m913_canvas.set_hotspots(M913_HOTSPOTS)
+            pm = self._main.assets.load_pixmap("m913_none.png")
+        if pm:
+            self._m913_canvas.set_background(pm)
+        self._refresh_mapping_visuals()
 
     def _refresh_mapping_visuals(self) -> None:
         profile = self._main.get_profile()
