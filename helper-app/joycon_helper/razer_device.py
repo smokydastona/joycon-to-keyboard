@@ -531,7 +531,11 @@ class RazerDevice:
             raise RuntimeError("Device not open")
 
         # hidapi: send_feature_report expects report[0] = report ID (0x00)
-        self._dev.send_feature_report(bytes(report))
+        try:
+            self._dev.send_feature_report(bytes(report))
+        except Exception as e:
+            log.error("Razer HID write failed: %s", e)
+            raise RuntimeError(f"Razer USB write failed (device disconnected?): {e}") from e
 
         # Small delay for device to process
         time.sleep(0.02)

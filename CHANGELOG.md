@@ -11,6 +11,12 @@ Until then, entries are grouped by date.
 
 ### Fixed
 
+- **Macro queue overflow guard (H1)**: profile_runtime macro queue increased from 4→8 entries and `xQueueSend` return value is now checked — if the queue is full, a warning is logged instead of silently dropping the macro.
+- **OTA chunk retry (H2)**: individual OTA chunks now retry up to 3 times with linear backoff (0.5 s × attempt) before aborting. A single transient USB/serial error no longer kills the entire firmware update.
+- **Layout window size mismatch (M4)**: `generate_ui_bundle.py` DEFAULT_LAYOUT window dimensions corrected from 980×720 to 1280×760 to match the actual app geometry.
+- **HID write error surfacing (M7)**: `m913_device.py` and `razer_device.py` now catch exceptions from `send_feature_report()` and re-raise as `RuntimeError` with context (device disconnected, USB error), preventing silent failures.
+- **cJSON OOM fallback (L8)**: `bridge_serial.c` `cdc_write_json()` now sends a fixed-string `{"rsp":"error","ok":false,"error":"out_of_memory"}` when heap exhaustion prevents JSON serialization, instead of returning silently and leaving the host waiting.
+- **Target name override race (L9)**: `bt_hid_host.c` `s_target_name_override[]` is now protected by a `portMUX_TYPE` spinlock — writes from the ctrl task and reads from the BT GAP callback (which can run on different cores on ESP32) no longer race.
 - **Chord undo now handles all mapping modes (H2)**: when a chord completes, individual key actions for already-pressed member keys are now properly undone for turbo, sticky-mod, tap-hold, and double-tap modes — not just passthrough/remap/remap-HID. Previously only 3 of 9 modes were undone, leaving phantom key presses or orphaned timers.
 - **FSM timeout recovery (M5)**: the Joy-Con setup FSM now has a periodic timeout check (every 500 ms). If a subcommand reply is lost for longer than 1500 ms, the FSM automatically advances to the next step instead of stalling indefinitely. Uses the already-defined `SETUP_TIMEOUT_MS` constant.
 - **Calibration restore deferred until FSM ready (M6)**: stick calibration from SPI flash is no longer applied on the very first input report (when the setup FSM may still be reading calibration data). Instead, the restore is deferred until `joycon_setup_is_ready()` returns true, ensuring SPI factory calibration is available before falling back to NVS-saved data.

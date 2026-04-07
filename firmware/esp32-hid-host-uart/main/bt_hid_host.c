@@ -38,10 +38,15 @@ static uint8_t s_pending_device_id = 0;
 static char s_pending_name[64] = {0};
 
 static char s_target_name_override[64] = {0};
+static portMUX_TYPE s_name_mux = portMUX_INITIALIZER_UNLOCKED;
 
 static bool name_matches_target(const char* name) {
     if (!name) return false;
-    const char* needle = (s_target_name_override[0] != 0) ? s_target_name_override : CONFIG_JOYCON_HOST_NAME_SUBSTR;
+    char local_name[64];
+    portENTER_CRITICAL(&s_name_mux);
+    memcpy(local_name, s_target_name_override, sizeof(local_name));
+    portEXIT_CRITICAL(&s_name_mux);
+    const char* needle = (local_name[0] != 0) ? local_name : CONFIG_JOYCON_HOST_NAME_SUBSTR;
     if (!needle || needle[0] == 0) {
         return false;
     }
@@ -335,7 +340,9 @@ static void gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t* param) {
 
 void bt_hid_host_set_target_substr(const char* name_substr, uint8_t len) {
     if (!name_substr || len == 0) {
+        portENTER_CRITICAL(&s_name_mux);
         s_target_name_override[0] = 0;
+        portEXIT_CRITICAL(&s_name_mux);
         ESP_LOGI(TAG, "Target name substring override cleared; using Kconfig '%s'", CONFIG_JOYCON_HOST_NAME_SUBSTR);
         return;
     }
@@ -343,13 +350,19 @@ void bt_hid_host_set_target_substr(const char* name_substr, uint8_t len) {
     if (len >= sizeof(s_target_name_override)) {
         len = (uint8_t)(sizeof(s_target_name_override) - 1);
     }
+    portENTER_CRITICAL(&s_name_mux);
     memcpy(s_target_name_override, name_substr, len);
     s_target_name_override[len] = 0;
+    portEXIT_CRITICAL(&s_name_mux);
     ESP_LOGI(TAG, "Target name substring override='%s'", s_target_name_override);
 }
 
 esp_err_t bt_hid_host_start_discovery(void) {
-    const char* needle = (s_target_name_override[0] != 0) ? s_target_name_override : CONFIG_JOYCON_HOST_NAME_SUBSTR;
+    char local_name[64];
+    portENTER_CRITICAL(&s_name_mux);
+    memcpy(local_name, s_target_name_override, sizeof(local_name));
+    portEXIT_CRITICAL(&s_name_mux);
+    const char* needle = (local_name[0] != 0) ? local_name : CONFIG_JOYCON_HOST_NAME_SUBSTR;
     ESP_LOGI(TAG, "Starting inquiry scan (match='%s', %ds)...", needle, CONFIG_JOYCON_HOST_DISCOVERY_SECONDS);
     bridge_send_bt_status(1, NULL, needle);
 

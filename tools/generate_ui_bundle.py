@@ -88,7 +88,7 @@ DARK_THEME = {
 
 
 DEFAULT_LAYOUT = {
-    "window": {"width": 980, "height": 720},
+    "window": {"width": 1280, "height": 760},
     "regions": [
         {"id": "topbar", "type": "row", "items": ["port", "baud", "connect", "bt_status"]},
         {"id": "main", "type": "split", "left": "tabs", "right": "actions"},

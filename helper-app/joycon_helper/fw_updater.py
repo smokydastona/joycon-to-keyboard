@@ -50,6 +50,10 @@ _END_TIMEOUT = 30
 # How long to wait for GitHub API responses (seconds).
 _HTTP_TIMEOUT = 15
 
+# OTA chunk retry settings.
+_OTA_CHUNK_RETRIES = 3
+_OTA_CHUNK_RETRY_DELAY = 0.5  # seconds, multiplied by attempt number
+
 # Download retry settings.
 _MAX_RETRIES = 3
 _RETRY_BACKOFF_BASE = 1.0  # seconds; doubles each retry
@@ -323,15 +327,28 @@ class FirmwareFlasher:
                 chunk = firmware[offset:offset + OTA_CHUNK_SIZE]
                 b64 = base64.b64encode(chunk).decode("ascii")
 
-                cmd_data: Dict[str, Any] = {"cmd": "fw_update_data", "data": b64}
-                if board == BOARD_ESP32:
-                    cmd_data["board"] = "esp32"
-                self._ser.send_obj(cmd_data)
+                last_err = ""
+                for attempt in range(1, _OTA_CHUNK_RETRIES + 1):
+                    cmd_data: Dict[str, Any] = {"cmd": "fw_update_data", "data": b64}
+                    if board == BOARD_ESP32:
+                        cmd_data["board"] = "esp32"
+                    self._ser.send_obj(cmd_data)
 
-                rsp = self._wait_response("fw_update_data", timeout=_CMD_TIMEOUT)
-                if not rsp or not rsp.get("ok"):
-                    err = rsp.get("error", "unknown") if rsp else "no_response"
-                    raise RuntimeError(f"fw_update_data failed at offset {offset}: {err}")
+                    rsp = self._wait_response("fw_update_data", timeout=_CMD_TIMEOUT)
+                    if rsp and rsp.get("ok"):
+                        break
+                    last_err = rsp.get("error", "unknown") if rsp else "no_response"
+                    log.warning(
+                        "OTA chunk at offset %d failed (attempt %d/%d): %s",
+                        offset, attempt, _OTA_CHUNK_RETRIES, last_err,
+                    )
+                    if attempt < _OTA_CHUNK_RETRIES:
+                        time.sleep(_OTA_CHUNK_RETRY_DELAY * attempt)
+                else:
+                    raise RuntimeError(
+                        f"fw_update_data failed at offset {offset} after "
+                        f"{_OTA_CHUNK_RETRIES} attempts: {last_err}"
+                    )
 
                 offset += len(chunk)
                 if progress_cb:

@@ -1085,7 +1085,7 @@ static void macro_task(void *arg) {
 void profile_runtime_init(void) {
     free_profile();
 
-    s_macro_q = xQueueCreate(4, sizeof(macro_req_t));
+    s_macro_q = xQueueCreate(8, sizeof(macro_req_t));
     if (!s_macro_q) {
         ESP_LOGE(TAG, "Failed to create macro queue");
         return;
@@ -1166,7 +1166,9 @@ static void dispatch_mapping(map_entry_t *m, bool pressed, uint8_t key_id) {
         case MAP_MACRO:
             if (pressed && s_macro_q && m->macro_index >= 0) {
                 macro_req_t req = {.macro_index = m->macro_index};
-                (void)xQueueSend(s_macro_q, &req, 0);
+                if (xQueueSend(s_macro_q, &req, 0) != pdTRUE) {
+                    ESP_LOGW(TAG, "Macro queue full, dropped macro %d", m->macro_index);
+                }
             }
             return;
 

@@ -892,7 +892,11 @@ class M913Device:
         if self._dev is None:
             raise RuntimeError("Device not open")
         # hidapi send_feature_report: data[0] = report ID (0x08)
-        self._dev.send_feature_report(bytes(packet))
+        try:
+            self._dev.send_feature_report(bytes(packet))
+        except Exception as e:
+            log.error("M913 HID write failed: %s", e)
+            raise RuntimeError(f"M913 USB write failed (device disconnected?): {e}") from e
 
     def recv_packet(self, timeout_ms: int = 2000) -> Optional[bytes]:
         """Read a 17-byte response from the interrupt endpoint."""

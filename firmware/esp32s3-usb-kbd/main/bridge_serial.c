@@ -85,7 +85,11 @@ static void cdc_write_line(const char *line) {
 
 static void cdc_write_json(cJSON *obj) {
     char *out = cJSON_PrintUnformatted(obj);
-    if (!out) return;
+    if (!out) {
+        /* Heap exhausted — send a fixed-string error so the host doesn't hang. */
+        cdc_write_line("{\"rsp\":\"error\",\"ok\":false,\"error\":\"out_of_memory\"}");
+        return;
+    }
     cdc_write_line(out);
     cJSON_free(out);
 }
