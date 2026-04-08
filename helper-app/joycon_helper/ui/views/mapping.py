@@ -362,8 +362,10 @@ class MappingView(QWidget):
 
     def _on_device_tab_changed(self, index: int) -> None:
         self._selected_hotspot = None
-        self._sel_label.setText("No button selected")
-        self._sel_mapping.setText("Click a button on the canvas to select it")
+        # Guard: signal fires during _build_canvas_panel before _build_binding_panel
+        if hasattr(self, "_sel_label"):
+            self._sel_label.setText("No button selected")
+            self._sel_mapping.setText("Click a button on the canvas to select it")
 
     def _on_m913_skin_changed(self, skin: str) -> None:
         self._m913_skin = skin
