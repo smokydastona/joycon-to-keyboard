@@ -9,6 +9,19 @@ Until then, entries are grouped by date.
 
 - Capture real controller HID reports and implement evidence-based mapping in the ESP32 host mapper (no guessing report layouts).
 
+### Fixed (System Audit v2)
+
+- **Serial buffer backpressure (A1)**: `serial_client.py` buffer trimming now evicts only the oldest complete lines instead of clearing the entire buffer, preventing loss of in-flight partial frames.
+- **HID operations off main thread (A3)**: `devices.py` M913 and Razer HID read/write operations now run on background `QThread` workers, preventing the GUI from freezing during USB communication.
+- **Self-updater signature check (A4)**: downloaded `.exe` updates are now verified via Windows Authenticode (`WinVerifyTrust`) before replacing the running binary. Enforcement gated by `REQUIRE_SIGNATURE` flag for unsigned dev builds.
+- **Profile auto-save on edit (B1)**: `main_window.py` now auto-uploads the active profile to the device 2 seconds after the last edit (debounced single-shot timer), preventing unsaved changes from being lost on disconnect.
+- **Stick calibration mutex (B2)**: `joycon_mapper.c` `s_cal` struct is now protected by a `portMUX_TYPE` spinlock across all reads (`cal_normalize`, `save_calibration`) and writes (`cal_update`, `clear_calibration`), fixing a data race between the BT callback and bridge_ctrl tasks.
+- **Macro queue flush on profile switch (B5)**: `profile_runtime.c` `free_profile()` now calls `xQueueReset(s_macro_q)` before any cleanup, preventing the macro task from executing stale requests against freed step arrays (use-after-free).
+- **Timeline idle repaint (C1)**: `timeline.py` timer callback now skips `update()` when no events are in the visible window, reducing idle CPU usage from ~10 FPS constant repaint to near-zero.
+- **UWP app detection (C3)**: `app_switcher.py` now detects UWP apps (which report as `ApplicationFrameHost.exe`) and falls back to window title matching. Rules can specify a `title` field for substring matching.
+- **Overlay position persistence (C5)**: `overlay_window.py` saves the overlay position to QSettings on drag release and restores it on next launch, clamped to the union of all available screen geometries for multi-monitor safety.
+- **Toast accessibility (D2)**: `toast.py` now sets `accessibleName` and `accessibleDescription` on each notification widget for screen reader support.
+
 ### Added (UX polish — reWASD-inspired improvements)
 
 - **Visual Macro Builder**: dual-mode macro editor — drag-to-reorder step list (key press/release/delay) with inline editing, and a raw JSON toggle for power users.

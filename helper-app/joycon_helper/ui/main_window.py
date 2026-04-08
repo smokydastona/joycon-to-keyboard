@@ -86,6 +86,12 @@ class MainWindow(QMainWindow):
         self._undo_max = 50
         self._skip_undo = False  # prevents recursion during undo/redo
 
+        # Debounced auto-save: uploads profile to device after 2 s of inactivity
+        self._autosave_timer = QTimer(self)
+        self._autosave_timer.setSingleShot(True)
+        self._autosave_timer.setInterval(2000)
+        self._autosave_timer.timeout.connect(self._auto_upload_profile)
+
         # App switcher (foreground-window → profile slot)
         self._app_switcher = AppSwitcher(on_switch=self._on_app_switch_slot)
         rules = load_rules()
@@ -517,6 +523,14 @@ class MainWindow(QMainWindow):
         slot = int(self._slot_combo.currentText())
         self.send_cmd({"cmd": "write_profile", "slot": slot, "profile": self._profile})
 
+    def _auto_upload_profile(self) -> None:
+        """Debounced auto-upload: sends the current profile to the device."""
+        if self._profile and self.bridge.is_connected:
+            slot = int(self._slot_combo.currentText())
+            log.debug("Auto-saving profile to slot %d", slot)
+            self.send_cmd({"cmd": "write_profile", "slot": slot,
+                           "profile": self._profile})
+
     def _cmd_read_profile(self) -> None:
         slot = int(self._slot_combo.currentText())
         self.send_cmd({"cmd": "read_profile", "slot": slot})
@@ -554,6 +568,9 @@ class MainWindow(QMainWindow):
         self._profile = profile
         self._notify_views("profile_updated", profile=profile)
         self._update_undo_ui()
+        # Restart auto-save timer (debounced — waits for 2 s of inactivity)
+        if self.bridge.is_connected:
+            self._autosave_timer.start()
 
     # -----------------------------------------------------------------
     # Undo / Redo (centralized)

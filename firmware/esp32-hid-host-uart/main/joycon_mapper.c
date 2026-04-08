@@ -174,6 +174,7 @@ typedef struct {
 #define CAL_WARMUP_SAMPLES 8  // first N samples establish center
 
 static stick_cal_t s_cal = {0};
+static portMUX_TYPE s_cal_mux = portMUX_INITIALIZER_UNLOCKED;
 
 static void cal_update_axis(axis_cal_t* a, uint16_t raw) {
     if (!a->initialized) {
@@ -255,10 +256,12 @@ static void cal_restore_axis(axis_cal_t *a, uint16_t mn, uint16_t center, uint16
 
 void joycon_mapper_save_calibration(void) {
     cal_nvs_data_t d;
+    portENTER_CRITICAL(&s_cal_mux);
     cal_save_axis(&d, &s_cal.lx, &d.lx_min, &d.lx_center, &d.lx_max);
     cal_save_axis(&d, &s_cal.ly, &d.ly_min, &d.ly_center, &d.ly_max);
     cal_save_axis(&d, &s_cal.rx, &d.rx_min, &d.rx_center, &d.rx_max);
     cal_save_axis(&d, &s_cal.ry, &d.ry_min, &d.ry_center, &d.ry_max);
+    portEXIT_CRITICAL(&s_cal_mux);
 
     nvs_handle_t h;
     esp_err_t err = nvs_open(CAL_NVS_NS, NVS_READWRITE, &h);
@@ -282,7 +285,9 @@ void joycon_mapper_clear_calibration(void) {
     nvs_commit(h);
     nvs_close(h);
 
+    portENTER_CRITICAL(&s_cal_mux);
     memset(&s_cal, 0, sizeof(s_cal));
+    portEXIT_CRITICAL(&s_cal_mux);
     ESP_LOGI("joycon-mapper", "Calibration cleared");
 }
 
@@ -418,8 +423,10 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
             }
         }
 
-        // --- Auto-calibration ---
+        // --- Auto-calibration (mutex-protected — also accessed from bridge_ctrl) ---
+        portENTER_CRITICAL(&s_cal_mux);
         cal_update(&s_cal, &st);
+        portEXIT_CRITICAL(&s_cal_mux);
 
         // --- Auto-save calibration after warmup completes ---
         if (s_cal.sample_count == CAL_WARMUP_SAMPLES + 1) {
@@ -432,8 +439,10 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
 
         // --- Left stick -> WASD (with curve + SOCD cleaning) ---
         {
+            portENTER_CRITICAL(&s_cal_mux);
             int dx = apply_stick_curve(cal_normalize(&s_cal.lx, st.lx));
             int dy = apply_stick_curve(cal_normalize(&s_cal.ly, st.ly));
+            portEXIT_CRITICAL(&s_cal_mux);
 
             // Send left stick analog data for sprint zone detection.
             bridge_send_analog(device_id, (int16_t)dx, (int16_t)dy);
@@ -459,8 +468,10 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
             static bool prev_rup = false, prev_rdn = false;
             static bool prev_rlt = false, prev_rrt = false;
 
+            portENTER_CRITICAL(&s_cal_mux);
             int rdx = apply_stick_curve(cal_normalize(&s_cal.rx, st.rx));
             int rdy = apply_stick_curve(cal_normalize(&s_cal.ry, st.ry));
+            portEXIT_CRITICAL(&s_cal_mux);
 
             // Send right stick analog data for mouse/scroll modes.
             bridge_send_analog((uint8_t)(device_id | 0x80), (int16_t)rdx, (int16_t)rdy);

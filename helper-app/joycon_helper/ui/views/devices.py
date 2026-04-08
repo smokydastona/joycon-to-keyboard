@@ -7,9 +7,9 @@ Tkinter app.py M913 and Razer tabs.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, TYPE_CHECKING
+from typing import Any, Callable, Dict, List, TYPE_CHECKING
 
-from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtCore import QObject, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtWidgets import (
     QButtonGroup, QCheckBox, QColorDialog, QComboBox, QDialog,
@@ -26,6 +26,54 @@ if TYPE_CHECKING:
     from ..main_window import MainWindow
 
 log = logging.getLogger("joycon_helper.ui.views.devices")
+
+
+# ---------------------------------------------------------------------------
+# Background worker for HID operations (keeps UI responsive)
+# ---------------------------------------------------------------------------
+class _HidWorker(QObject):
+    """Runs a callable in a QThread and emits finished/error signals."""
+
+    finished = pyqtSignal(object)  # result of the callable
+    error = pyqtSignal(str)        # error message
+
+    def __init__(self, func: Callable[[], Any]) -> None:
+        super().__init__()
+        self._func = func
+
+    def run(self) -> None:
+        try:
+            result = self._func()
+            self.finished.emit(result)
+        except Exception as exc:
+            log.error("HID worker error: %s", exc, exc_info=True)
+            self.error.emit(str(exc))
+
+
+def _run_hid_task(
+    parent: QWidget,
+    func: Callable[[], Any],
+    on_done: Callable[[Any], None],
+    on_error: Callable[[str], None],
+) -> None:
+    """Execute *func* on a background QThread. Calls on_done/on_error on the GUI thread."""
+    from PyQt6.QtCore import QThread
+
+    thread = QThread(parent)
+    worker = _HidWorker(func)
+    worker.moveToThread(thread)
+
+    def _cleanup() -> None:
+        thread.quit()
+        thread.wait()
+        thread.deleteLater()
+        worker.deleteLater()
+
+    worker.finished.connect(lambda result: (on_done(result), _cleanup()))
+    worker.error.connect(lambda msg: (on_error(msg), _cleanup()))
+    thread.started.connect(worker.run)
+    thread.start()
+
 
 # Lazy-imported device modules (avoid import errors when hidapi missing)
 _m913_mod: Any = None
@@ -717,23 +765,32 @@ class DevicesView(QWidget):
             return
         dev_info = self._m913_devices[idx]
         self._m913_ui_to_profile()
-        try:
+        profile = self._m913_profile
+        self._m913_status.setText("Applying...")
+
+        def _work() -> tuple:
             mod = _get_m913_mod()
             dev = mod.M913Device()
             dev.open(dev_info)
-            sent, errors = dev.apply_profile(self._m913_profile)
+            sent, errors = dev.apply_profile(profile)
             dev.close()
+            return sent, errors, dev_info.display_name
+
+        def _done(result: tuple) -> None:
+            sent, errors, name = result
             if errors:
                 self._m913_status.setText(
                     f"Applied with {errors} error(s) — {sent} packets")
             else:
                 self._m913_status.setText(
-                    f"Applied — {sent} packets to {dev_info.display_name}")
+                    f"Applied — {sent} packets to {name}")
             self._main._log_line(
                 f"[M913] Config applied: {sent} packets, {errors} errors")
-        except Exception as e:
-            self._m913_status.setText(f"Error: {e}")
-            log.error("M913 apply failed: %s", e, exc_info=True)
+
+        def _err(msg: str) -> None:
+            self._m913_status.setText(f"Error: {msg}")
+
+        _run_hid_task(self, _work, _done, _err)
 
     def _m913_save_profile(self) -> None:
         self._m913_ui_to_profile()
@@ -1097,11 +1154,17 @@ class DevicesView(QWidget):
             self._razer_status.setText("No device selected")
             return
         dev_info = self._razer_devices[idx]
-        try:
+        self._razer_status.setText("Reading...")
+
+        def _work() -> Any:
             mod = _get_razer_mod()
             dev = mod.RazerDevice()
             dev.open(dev_info)
             state = dev.read_full_state()
+            dev.close()
+            return state
+
+        def _done(state: Any) -> None:
             self._razer_fw_label.setText(state.firmware_version or "—")
             self._razer_serial_label.setText(state.serial or "—")
             if state.battery_level >= 0:
@@ -1127,10 +1190,11 @@ class DevicesView(QWidget):
                 f"[Razer] State: FW={state.firmware_version}, "
                 f"DPI={state.dpi_x}x{state.dpi_y}, "
                 f"Poll={state.poll_rate}Hz")
-            dev.close()
-        except Exception as e:
-            self._razer_status.setText(f"Read error: {e}")
-            log.error("Razer read failed: %s", e, exc_info=True)
+
+        def _err(msg: str) -> None:
+            self._razer_status.setText(f"Read error: {msg}")
+
+        _run_hid_task(self, _work, _done, _err)
 
     def _razer_ui_to_profile(self) -> None:
         if not self._razer_profile:
@@ -1192,23 +1256,32 @@ class DevicesView(QWidget):
             return
         dev_info = self._razer_devices[idx]
         self._razer_ui_to_profile()
-        try:
+        profile = self._razer_profile
+        self._razer_status.setText("Applying...")
+
+        def _work() -> tuple:
             mod = _get_razer_mod()
             dev = mod.RazerDevice()
             dev.open(dev_info)
-            ok, errors = dev.apply_profile(self._razer_profile)
+            ok, errors = dev.apply_profile(profile)
             dev.close()
+            return ok, errors, dev_info.display_name
+
+        def _done(result: tuple) -> None:
+            ok, errors, name = result
             if errors:
                 self._razer_status.setText(
                     f"Applied with {errors} error(s) — {ok} ok")
             else:
                 self._razer_status.setText(
-                    f"Applied — {ok} commands to {dev_info.display_name}")
+                    f"Applied — {ok} commands to {name}")
             self._main._log_line(
                 f"[Razer] Config applied: {ok} ok, {errors} errors")
-        except Exception as e:
-            self._razer_status.setText(f"Error: {e}")
-            log.error("Razer apply failed: %s", e, exc_info=True)
+
+        def _err(msg: str) -> None:
+            self._razer_status.setText(f"Error: {msg}")
+
+        _run_hid_task(self, _work, _done, _err)
 
     def _razer_save_profile(self) -> None:
         self._razer_ui_to_profile()

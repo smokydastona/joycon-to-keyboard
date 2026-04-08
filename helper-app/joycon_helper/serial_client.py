@@ -94,10 +94,26 @@ class SerialClient:
             if chunk:
                 buffer.extend(chunk)
 
-                # A3: Cap buffer size to prevent memory exhaustion
+                # Cap buffer size — evict oldest data, keep partial frame
                 if len(buffer) > _MAX_BUFFER:
-                    log.warning("Serial RX buffer exceeded %d bytes — resetting", _MAX_BUFFER)
-                    buffer.clear()
+                    last_nl = buffer.rfind(b"\n")
+                    if last_nl >= 0:
+                        # Keep only the incomplete tail after the last newline
+                        discard = last_nl + 1
+                        log.warning(
+                            "Serial RX buffer exceeded %d bytes — "
+                            "evicting %d bytes of oldest data",
+                            _MAX_BUFFER, discard,
+                        )
+                        del buffer[:discard]
+                    else:
+                        # No newline at all — single enormous line; drop it
+                        log.warning(
+                            "Serial RX buffer exceeded %d bytes with no "
+                            "newline — dropping %d bytes",
+                            _MAX_BUFFER, len(buffer),
+                        )
+                        buffer.clear()
                     continue
 
                 while True:

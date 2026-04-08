@@ -7,9 +7,9 @@ from __future__ import annotations
 
 from typing import Optional, Set
 
-from PyQt6.QtCore import QPoint, QSettings, QTimer, Qt
+from PyQt6.QtCore import QPoint, QRect, QSettings, QTimer, Qt
 from PyQt6.QtGui import QAction, QColor, QFont, QPainter
-from PyQt6.QtWidgets import QMenu, QWidget
+from PyQt6.QtWidgets import QApplication, QMenu, QWidget
 
 from ..theme import ThemeEngine
 
@@ -48,6 +48,11 @@ class OverlayWindow(QWidget):
         # Load saved opacity or default
         settings = QSettings()
         self._opacity = settings.value("overlay_opacity", 0.85, type=float)
+
+        # Restore saved position (clamped to visible screen area)
+        saved_pos = settings.value("overlay_pos", None)
+        if saved_pos is not None and isinstance(saved_pos, QPoint):
+            self.move(self._clamp_to_screen(saved_pos))
 
         # Drag support
         self._drag_pos: Optional[QPoint] = None
@@ -255,11 +260,28 @@ class OverlayWindow(QWidget):
             self.move(event.globalPosition().toPoint() - self._drag_pos)
 
     def mouseReleaseEvent(self, event: object) -> None:
+        if self._drag_pos is not None:
+            # Persist position for next launch
+            pos = self._clamp_to_screen(self.pos())
+            self.move(pos)
+            QSettings().setValue("overlay_pos", pos)
         self._drag_pos = None
 
     def closeEvent(self, event: object) -> None:
         self.is_closed = True
         super().closeEvent(event)
+
+    @staticmethod
+    def _clamp_to_screen(pos: QPoint) -> QPoint:
+        """Clamp *pos* so the overlay stays within a visible screen."""
+        combined = QRect()
+        for screen in QApplication.screens():
+            combined = combined.united(screen.availableGeometry())
+        if combined.isNull():
+            return pos
+        x = max(combined.left(), min(pos.x(), combined.right() - 100))
+        y = max(combined.top(), min(pos.y(), combined.bottom() - 40))
+        return QPoint(x, y)
 
     def apply_theme(self, theme: ThemeEngine) -> None:
         self._theme = theme

@@ -598,6 +598,12 @@ static bool s_key_pressed[INPUT_KEY_ID_MAX];
 static bool s_chord_suppressed[INPUT_KEY_ID_MAX];
 
 static void free_profile(void) {
+    // Drain any pending macro requests first — prevents use-after-free
+    // when the macro task executes a stale request after steps are freed.
+    if (s_macro_q) {
+        xQueueReset(s_macro_q);
+    }
+
     // Clean up double-tap timers.
     for (size_t i = 0; i < s_dt_count; i++) {
         if (s_dt_trackers[i].timer) {

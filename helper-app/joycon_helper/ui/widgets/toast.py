@@ -53,6 +53,10 @@ class Toast(QWidget):
         self._text = f"{icon}  {message}"
         self._opacity = 1.0
 
+        # Accessibility
+        self.setAccessibleName(message)
+        self.setAccessibleDescription(f"{kind}: {message}")
+
         # Position: stack from bottom-right of parent
         _active_toasts.append(self)
         if len(_active_toasts) > _MAX_VISIBLE:

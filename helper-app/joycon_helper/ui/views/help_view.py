@@ -153,7 +153,9 @@ def _sections() -> List[Tuple[str, str, bool]]:
                 "4 on-device profile slots. Use Import/Export to share as files "
                 "or share codes (JCB1: prefix). The App Switcher table lets you "
                 "auto-switch profiles by foreground application — browse for .exe "
-                "files or detect the currently running app.\n\n"
+                "files or detect the currently running app. For UWP / Microsoft Store "
+                "apps, add a 'title' keyword to distinguish apps that share "
+                "ApplicationFrameHost.exe.\n\n"
                 "## Macros\n"
                 "The Macros tab now features a visual drag-to-reorder step editor. "
                 "Add key press/release steps and delays, or toggle to raw JSON mode "
@@ -161,7 +163,9 @@ def _sections() -> List[Tuple[str, str, bool]]:
                 "## Overlay\n"
                 "Toggle the floating overlay from Dashboard → Quick Actions or the "
                 "system tray to see active keys, profile name, layer, and turbo state "
-                "on-screen during gameplay. Right-click the overlay for opacity presets "
+                "on-screen during gameplay. Drag to reposition — the position is "
+                "remembered across sessions and clamped to visible screens. "
+                "Right-click the overlay for opacity presets "
                 "and compact mode."
             ),
             False,

@@ -36,21 +36,39 @@ class TimelineWidget(QWidget):
         self._theme = theme
         self._events: Deque[TimelineEvent] = deque(maxlen=self.MAX_EVENTS)
         self._start_time = time.monotonic()
+        self._dirty = True  # True when a repaint is needed
         self.setMinimumHeight(60)
         self.setMaximumHeight(120)
 
         self._timer = QTimer(self)
         self._timer.setInterval(100)
-        self._timer.timeout.connect(self.update)
+        self._timer.timeout.connect(self._tick)
         self._timer.start()
+
+    def _tick(self) -> None:
+        """Only repaint when the timeline has visible events."""
+        if not self._events:
+            if self._dirty:
+                self._dirty = False
+                self.update()
+            return
+        # Check if any event is still within the visible window
+        cutoff = time.monotonic() - self.WINDOW_SECONDS
+        if self._events[-1].time >= cutoff:
+            self.update()
+        elif self._dirty:
+            self._dirty = False
+            self.update()
 
     def add_event(self, name: str, color: str) -> None:
         self._events.append(TimelineEvent(name, color, time.monotonic()))
+        self._dirty = True
         self.update()
 
     def clear(self) -> None:
         self._events.clear()
         self._start_time = time.monotonic()
+        self._dirty = True
         self.update()
 
     def paintEvent(self, event: object) -> None:

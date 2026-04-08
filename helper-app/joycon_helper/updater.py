@@ -43,6 +43,98 @@ _PENDING_FW_DIR = "pending_fw"
 # How long to wait for GitHub API responses (seconds).
 _TIMEOUT = 15
 
+# Whether Authenticode verification is enforced on downloaded updates.
+# Set False during development when builds are unsigned.
+REQUIRE_SIGNATURE = False
+
+
+# ---------------------------------------------------------------------------
+# Authenticode signature verification (Windows only)
+# ---------------------------------------------------------------------------
+
+def _verify_authenticode(path: Path) -> bool:
+    """Return True if *path* has a valid Authenticode signature on Windows.
+
+    On non-Windows platforms or when the WinTrust API is unavailable this
+    returns True (verification skipped).  When ``REQUIRE_SIGNATURE`` is
+    False the result is logged but never blocks the update.
+    """
+    if sys.platform != "win32":
+        return True
+
+    try:
+        import ctypes.wintypes
+
+        class _WINTRUST_FILE_INFO(ctypes.Structure):
+            _fields_ = [
+                ("cbStruct", ctypes.wintypes.DWORD),
+                ("pcwszFilePath", ctypes.c_wchar_p),
+                ("hFile", ctypes.wintypes.HANDLE),
+                ("pgKnownSubject", ctypes.c_void_p),
+            ]
+
+        class _WINTRUST_DATA(ctypes.Structure):
+            _fields_ = [
+                ("cbStruct", ctypes.wintypes.DWORD),
+                ("pPolicyCallbackData", ctypes.c_void_p),
+                ("pSIPClientData", ctypes.c_void_p),
+                ("dwUIChoice", ctypes.wintypes.DWORD),
+                ("fdwRevocationChecks", ctypes.wintypes.DWORD),
+                ("dwUnionChoice", ctypes.wintypes.DWORD),
+                ("pFile", ctypes.c_void_p),
+                ("dwStateAction", ctypes.wintypes.DWORD),
+                ("hWVTStateData", ctypes.wintypes.HANDLE),
+                ("pwszURLReference", ctypes.c_wchar_p),
+                ("dwProvFlags", ctypes.wintypes.DWORD),
+                ("dwUIContext", ctypes.wintypes.DWORD),
+                ("pSignatureSettings", ctypes.c_void_p),
+            ]
+
+        WINTRUST_ACTION_GENERIC_VERIFY_V2 = (
+            ctypes.c_byte * 16
+        )(*[0x00, 0xAA, 0xC5, 0x6B, 0x11, 0xD0, 0x8C, 0xC5,
+            0x00, 0xC0, 0x4F, 0xC2, 0x95, 0xEE, 0x46, 0x02])
+
+        WTD_UI_NONE = 2
+        WTD_CHOICE_FILE = 1
+        WTD_REVOKE_NONE = 0
+
+        wintrust = ctypes.windll.wintrust  # type: ignore[attr-defined]
+        wintrust.WinVerifyTrust.restype = ctypes.c_long
+        wintrust.WinVerifyTrust.argtypes = [
+            ctypes.wintypes.HWND, ctypes.c_void_p, ctypes.c_void_p,
+        ]
+
+        file_info = _WINTRUST_FILE_INFO()
+        file_info.cbStruct = ctypes.sizeof(_WINTRUST_FILE_INFO)
+        file_info.pcwszFilePath = str(path)
+
+        trust_data = _WINTRUST_DATA()
+        trust_data.cbStruct = ctypes.sizeof(_WINTRUST_DATA)
+        trust_data.dwUIChoice = WTD_UI_NONE
+        trust_data.fdwRevocationChecks = WTD_REVOKE_NONE
+        trust_data.dwUnionChoice = WTD_CHOICE_FILE
+        trust_data.pFile = ctypes.pointer(file_info)
+
+        result = wintrust.WinVerifyTrust(
+            0,
+            ctypes.byref(WINTRUST_ACTION_GENERIC_VERIFY_V2),
+            ctypes.byref(trust_data),
+        )
+
+        if result == 0:
+            log.info("Authenticode signature valid: %s", path)
+            return True
+        else:
+            log.warning(
+                "Authenticode verification failed (0x%08X): %s", result, path)
+            return False
+
+    except Exception:
+        log.debug("WinTrust API unavailable — skipping signature check",
+                  exc_info=True)
+        return True
+
 
 # ---------------------------------------------------------------------------
 # Version comparison
@@ -223,6 +315,14 @@ def download_and_install(
 
     tmp_path = Path(tmp_path_str)
 
+    # Verify Authenticode signature before installing
+    if not _verify_authenticode(tmp_path) and REQUIRE_SIGNATURE:
+        tmp_path.unlink(missing_ok=True)
+        raise RuntimeError(
+            "Downloaded update failed Authenticode signature verification. "
+            "The file may be tampered with — update aborted."
+        )
+
     # Swap: current → .old, temp → current
     try:
         if old_exe.exists():
@@ -343,6 +443,15 @@ def install_exe(exe_bytes: bytes) -> Path:
         raise
 
     tmp_path = Path(tmp_path_str)
+
+    # Verify Authenticode signature before installing
+    if not _verify_authenticode(tmp_path) and REQUIRE_SIGNATURE:
+        tmp_path.unlink(missing_ok=True)
+        raise RuntimeError(
+            "Update exe failed Authenticode signature verification — "
+            "update aborted."
+        )
+
     try:
         if old_exe.exists():
             old_exe.unlink()

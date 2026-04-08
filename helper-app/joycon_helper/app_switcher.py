@@ -176,10 +176,18 @@ class AppSwitcher:
         except Exception:
             return
 
+        # UWP apps report as ApplicationFrameHost.exe — use window title
+        title: Optional[str] = None
+        if exe == "applicationframehost.exe":
+            title = _get_foreground_title()
+
+        # Build a composite key so UWP title changes are detected
+        fg_key = f"{exe}|{title}" if title else exe
+
         with self._lock:
-            if exe == self._last_exe:
+            if fg_key == self._last_exe:
                 return
-            self._last_exe = exe
+            self._last_exe = fg_key
 
             if not exe:
                 return
@@ -188,7 +196,12 @@ class AppSwitcher:
             matched_slot: Optional[int] = None
             for rule in self._rules:
                 rule_exe = rule.get("exe", "")
+                rule_title = rule.get("title", "")
                 if isinstance(rule_exe, str) and rule_exe.lower() == exe:
+                    # For UWP rules that specify a title, require title match
+                    if rule_title and title:
+                        if rule_title.lower() not in title.lower():
+                            continue
                     slot = rule.get("slot")
                     if isinstance(slot, int) and 0 <= slot <= 3:
                         matched_slot = slot
