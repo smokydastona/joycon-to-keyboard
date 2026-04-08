@@ -5,7 +5,7 @@ extracted from the original Tkinter ``app.py``.
 """
 from __future__ import annotations
 
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Tuple
 
 # ---------------------------------------------------------------------------
 # Image dimensions (native resolution of the source PNGs)
@@ -54,10 +54,10 @@ KEYMAP_HOTSPOTS: Dict[str, List[Tuple[str, float, float]]] = {
         ("Capture", 0.251386, 0.674677),
         ("Home",    0.740604, 0.674677),
         ("LStick",  0.230437, 0.436229),
-        ("LSUp",    0.230437, 0.401109),
-        ("LSDown",  0.230437, 0.475046),
-        ("LSLeft",  0.207024, 0.436229),
-        ("LSRight", 0.255083, 0.436229),
+        ("LSUp",    0.230437, 0.436229),
+        ("LSDown",  0.230437, 0.436229),
+        ("LSLeft",  0.230437, 0.436229),
+        ("LSRight", 0.230437, 0.436229),
         ("DUp",     0.232902, 0.537893),
         ("DDown",   0.230437, 0.613678),
         ("DLeft",   0.199630, 0.576710),
@@ -67,10 +67,10 @@ KEYMAP_HOTSPOTS: Dict[str, List[Tuple[str, float, float]]] = {
         ("X",       0.768946, 0.410351),
         ("Y",       0.735675, 0.456562),
         ("RStick",  0.767714, 0.587800),
-        ("RSUp",    0.768946, 0.552680),
-        ("RSDown",  0.768946, 0.626617),
-        ("RSLeft",  0.744301, 0.587800),
-        ("RSRight", 0.792360, 0.587800),
+        ("RSUp",    0.767714, 0.587800),
+        ("RSDown",  0.767714, 0.587800),
+        ("RSLeft",  0.767714, 0.587800),
+        ("RSRight", 0.767714, 0.587800),
         ("Shake",   0.423177, 0.849609),
         ("TiltUp",  0.500000, 0.810547),
         ("TiltDn",  0.500000, 0.888672),
@@ -92,10 +92,10 @@ KEYMAP_HOTSPOTS: Dict[str, List[Tuple[str, float, float]]] = {
         ("Capture", 0.251386, 0.674677),
         ("Home",    0.740604, 0.674677),
         ("LStick",  0.230437, 0.436229),
-        ("LSUp",    0.230437, 0.401109),
-        ("LSDown",  0.230437, 0.475046),
-        ("LSLeft",  0.207024, 0.436229),
-        ("LSRight", 0.255083, 0.436229),
+        ("LSUp",    0.230437, 0.436229),
+        ("LSDown",  0.230437, 0.436229),
+        ("LSLeft",  0.230437, 0.436229),
+        ("LSRight", 0.230437, 0.436229),
         ("DUp",     0.232902, 0.537893),
         ("DDown",   0.230437, 0.613678),
         ("DLeft",   0.199630, 0.576710),
@@ -105,10 +105,10 @@ KEYMAP_HOTSPOTS: Dict[str, List[Tuple[str, float, float]]] = {
         ("X",       0.768946, 0.410351),
         ("Y",       0.735675, 0.456562),
         ("RStick",  0.767714, 0.587800),
-        ("RSUp",    0.768946, 0.552680),
-        ("RSDown",  0.768946, 0.626617),
-        ("RSLeft",  0.744301, 0.587800),
-        ("RSRight", 0.792360, 0.587800),
+        ("RSUp",    0.767714, 0.587800),
+        ("RSDown",  0.767714, 0.587800),
+        ("RSLeft",  0.767714, 0.587800),
+        ("RSRight", 0.767714, 0.587800),
         ("Shake",   0.423177, 0.849609),
         ("TiltUp",  0.500000, 0.810547),
         ("TiltDn",  0.500000, 0.888672),
@@ -125,10 +125,17 @@ KEYMAP_HOTSPOTS: Dict[str, List[Tuple[str, float, float]]] = {
 # ---------------------------------------------------------------------------
 # Joy-Con button shapes — pixel dimensions at native 1536×1024 resolution
 #
-# Format:  ("circle", radius)  |  ("rrect", width, height, corner_radius)
+# Shape spec formats:
+#   ("circle", radius)
+#   ("rrect", width, height, corner_radius)
+#   ("plus", arm_length, thickness)
+#   ("home", size)
+#   ("camera", size)
+#   ("arrow_up"|"arrow_down"|"arrow_left"|"arrow_right", size)
+#   ("arc_top"|"arc_bottom"|"arc_left"|"arc_right", inner_r, outer_r)
 # If a button name is absent the default circle of _DOT_RADIUS is used.
 # ---------------------------------------------------------------------------
-ShapeSpec = Union[Tuple[str, int], Tuple[str, int, int, int]]
+ShapeSpec = tuple
 
 JOYCON_BUTTON_SHAPES: Dict[str, ShapeSpec] = {
     # Triggers — wide rounded bumper shapes
@@ -145,26 +152,26 @@ JOYCON_BUTTON_SHAPES: Dict[str, ShapeSpec] = {
     # Thumbsticks — larger circles
     "LStick":  ("circle", 22),
     "RStick":  ("circle", 22),
-    # Stick directions — small circles
-    "LSUp":    ("circle", 10),
-    "LSDown":  ("circle", 10),
-    "LSLeft":  ("circle", 10),
-    "LSRight": ("circle", 10),
-    "RSUp":    ("circle", 10),
-    "RSDown":  ("circle", 10),
-    "RSLeft":  ("circle", 10),
-    "RSRight": ("circle", 10),
-    # D-pad — small rounded squares
-    "DUp":     ("rrect", 18, 18, 4),
-    "DDown":   ("rrect", 18, 18, 4),
-    "DLeft":   ("rrect", 18, 18, 4),
-    "DRight":  ("rrect", 18, 18, 4),
-    # Plus / Minus
-    "Plus":    ("rrect", 14, 14, 3),
+    # Stick directions — quarter-ring arcs around thumbstick
+    "LSUp":    ("arc_top", 26, 38),
+    "LSDown":  ("arc_bottom", 26, 38),
+    "LSLeft":  ("arc_left", 26, 38),
+    "LSRight": ("arc_right", 26, 38),
+    "RSUp":    ("arc_top", 26, 38),
+    "RSDown":  ("arc_bottom", 26, 38),
+    "RSLeft":  ("arc_left", 26, 38),
+    "RSRight": ("arc_right", 26, 38),
+    # D-pad — directional arrows
+    "DUp":     ("arrow_up", 12),
+    "DDown":   ("arrow_down", 12),
+    "DLeft":   ("arrow_left", 12),
+    "DRight":  ("arrow_right", 12),
+    # Plus — cross/plus shape, Minus — wide pill
+    "Plus":    ("plus", 10, 4),
     "Minus":   ("rrect", 22, 10, 4),
-    # Capture — small square, Home — small circle
-    "Capture": ("rrect", 14, 14, 3),
-    "Home":    ("circle", 10),
+    # Capture — camera shape, Home — house shape
+    "Capture": ("camera", 10),
+    "Home":    ("home", 10),
     # Side-rail buttons — tall narrow pills
     "SL(L)":   ("rrect", 12, 44, 5),
     "SR(L)":   ("rrect", 12, 44, 5),

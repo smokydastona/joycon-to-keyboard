@@ -244,27 +244,33 @@ class HotspotCanvas(QGraphicsView):
 
     def _pick_hotspot(self, view_pos: Any) -> Optional[str]:
         scene_pos = self.mapToScene(int(view_pos.x()), int(view_pos.y()))
+        rect = self._scene.sceneRect()
+        if rect.width() <= 0:
+            return None
+        # Pass 1: exact shape containment
         best_name: Optional[str] = None
         best_dist = float("inf")
-        rect = self._scene.sceneRect()
         for hs in self._hotspots:
             hx = hs.norm_x * rect.width()
             hy = hs.norm_y * rect.height()
-            dx = scene_pos.x() - hx
-            dy = scene_pos.y() - hy
-            spec = self._shapes.get(hs.name)
-            if spec and spec[0] == "rrect":
-                hw, hh = spec[1] / 2, spec[2] / 2
-                margin = 6
-                if abs(dx) <= hw + margin and abs(dy) <= hh + margin:
-                    dist = math.sqrt(dx * dx + dy * dy)
-                    if dist < best_dist:
-                        best_dist = dist
-                        best_name = hs.name
-            else:
-                r = spec[1] if spec and spec[0] == "circle" else _DOT_RADIUS
+            if self._make_shape_path(hx, hy, hs.name).contains(scene_pos):
+                dx = scene_pos.x() - hx
+                dy = scene_pos.y() - hy
                 dist = math.sqrt(dx * dx + dy * dy)
-                if dist < r * 2.5 and dist < best_dist:
+                if dist < best_dist:
+                    best_dist = dist
+                    best_name = hs.name
+        if best_name:
+            return best_name
+        # Pass 2: sloppy (grown) containment for near-miss clicks
+        for hs in self._hotspots:
+            hx = hs.norm_x * rect.width()
+            hy = hs.norm_y * rect.height()
+            if self._make_shape_path(hx, hy, hs.name, grow=6).contains(scene_pos):
+                dx = scene_pos.x() - hx
+                dy = scene_pos.y() - hy
+                dist = math.sqrt(dx * dx + dy * dy)
+                if dist < best_dist:
                     best_dist = dist
                     best_name = hs.name
         return best_name
@@ -274,14 +280,100 @@ class HotspotCanvas(QGraphicsView):
         """Build a QPainterPath for the hotspot shape centred at (cx, cy)."""
         path = QPainterPath()
         spec = self._shapes.get(name)
-        if spec and spec[0] == "rrect":
+        if not spec:
+            r = _DOT_RADIUS + grow
+            path.addEllipse(cx - r, cy - r, r * 2, r * 2)
+        elif spec[0] == "circle":
+            r = spec[1] + grow
+            path.addEllipse(cx - r, cy - r, r * 2, r * 2)
+        elif spec[0] == "rrect":
             w, h, cr = spec[1], spec[2], spec[3]
             path.addRoundedRect(
                 cx - w / 2 - grow, cy - h / 2 - grow,
                 w + grow * 2, h + grow * 2, cr, cr,
             )
+        elif spec[0] == "plus":
+            arm = spec[1] + grow
+            t = spec[2] + grow * 0.4
+            path.setFillRule(Qt.FillRule.WindingFill)
+            path.addRect(cx - arm, cy - t, arm * 2, t * 2)
+            path.addRect(cx - t, cy - arm, t * 2, arm * 2)
+        elif spec[0] == "home":
+            s = spec[1] + grow
+            path.setFillRule(Qt.FillRule.WindingFill)
+            path.moveTo(cx, cy - s * 1.2)
+            path.lineTo(cx + s, cy - s * 0.1)
+            path.lineTo(cx - s, cy - s * 0.1)
+            path.closeSubpath()
+            path.addRect(cx - s * 0.7, cy - s * 0.1, s * 1.4, s * 1.1)
+        elif spec[0] == "camera":
+            s = spec[1] + grow
+            path.setFillRule(Qt.FillRule.WindingFill)
+            path.addRoundedRect(
+                cx - s * 1.2, cy - s * 0.5,
+                s * 2.4, s * 1.3, s * 0.2, s * 0.2,
+            )
+            path.addRect(cx - s * 0.35, cy - s * 0.9, s * 0.7, s * 0.4)
+        elif spec[0].startswith("arrow_"):
+            s = spec[1] + grow
+            d = spec[0][6:]  # "up", "down", "left", "right"
+            if d == "up":
+                path.moveTo(cx, cy - s)
+                path.lineTo(cx + s * 0.7, cy + s * 0.1)
+                path.lineTo(cx + s * 0.25, cy + s * 0.1)
+                path.lineTo(cx + s * 0.25, cy + s)
+                path.lineTo(cx - s * 0.25, cy + s)
+                path.lineTo(cx - s * 0.25, cy + s * 0.1)
+                path.lineTo(cx - s * 0.7, cy + s * 0.1)
+                path.closeSubpath()
+            elif d == "down":
+                path.moveTo(cx, cy + s)
+                path.lineTo(cx + s * 0.7, cy - s * 0.1)
+                path.lineTo(cx + s * 0.25, cy - s * 0.1)
+                path.lineTo(cx + s * 0.25, cy - s)
+                path.lineTo(cx - s * 0.25, cy - s)
+                path.lineTo(cx - s * 0.25, cy - s * 0.1)
+                path.lineTo(cx - s * 0.7, cy - s * 0.1)
+                path.closeSubpath()
+            elif d == "left":
+                path.moveTo(cx - s, cy)
+                path.lineTo(cx + s * 0.1, cy - s * 0.7)
+                path.lineTo(cx + s * 0.1, cy - s * 0.25)
+                path.lineTo(cx + s, cy - s * 0.25)
+                path.lineTo(cx + s, cy + s * 0.25)
+                path.lineTo(cx + s * 0.1, cy + s * 0.25)
+                path.lineTo(cx + s * 0.1, cy + s * 0.7)
+                path.closeSubpath()
+            else:  # right
+                path.moveTo(cx + s, cy)
+                path.lineTo(cx - s * 0.1, cy - s * 0.7)
+                path.lineTo(cx - s * 0.1, cy - s * 0.25)
+                path.lineTo(cx - s, cy - s * 0.25)
+                path.lineTo(cx - s, cy + s * 0.25)
+                path.lineTo(cx - s * 0.1, cy + s * 0.25)
+                path.lineTo(cx - s * 0.1, cy + s * 0.7)
+                path.closeSubpath()
+        elif spec[0].startswith("arc_"):
+            inner_r = max(1, spec[1] - grow * 0.5)
+            outer_r = spec[2] + grow
+            d = spec[0][4:]  # "top", "bottom", "left", "right"
+            gap = 8  # degrees between arc segments
+            if d == "top":
+                start, sweep = 45 + gap / 2, 90 - gap
+            elif d == "right":
+                start, sweep = -45 + gap / 2, 90 - gap
+            elif d == "bottom":
+                start, sweep = 225 + gap / 2, 90 - gap
+            else:  # left
+                start, sweep = 135 + gap / 2, 90 - gap
+            o = QRectF(cx - outer_r, cy - outer_r, outer_r * 2, outer_r * 2)
+            i = QRectF(cx - inner_r, cy - inner_r, inner_r * 2, inner_r * 2)
+            path.arcMoveTo(o, start)
+            path.arcTo(o, start, sweep)
+            path.arcTo(i, start + sweep, -sweep)
+            path.closeSubpath()
         else:
-            r = (spec[1] if spec and spec[0] == "circle" else _DOT_RADIUS) + grow
+            r = _DOT_RADIUS + grow
             path.addEllipse(cx - r, cy - r, r * 2, r * 2)
         return path
 
@@ -312,7 +404,20 @@ class HotspotCanvas(QGraphicsView):
             font = QFont(self._theme.typo("font_family"), 11, QFont.Weight.Bold)
             label.setFont(font)
             lw = label.boundingRect().width()
-            label.setPos(cx - lw / 2, cy + _TEXT_OFFSET_Y)
+            spec = self._shapes.get(hs.name)
+            if spec and spec[0].startswith("arc_"):
+                d = spec[0][4:]
+                outer_r = spec[2]
+                if d == "top":
+                    label.setPos(cx - lw / 2, cy - outer_r - 20)
+                elif d == "bottom":
+                    label.setPos(cx - lw / 2, cy + outer_r + 4)
+                elif d == "left":
+                    label.setPos(cx - outer_r - lw - 4, cy - 8)
+                else:
+                    label.setPos(cx + outer_r + 4, cy - 8)
+            else:
+                label.setPos(cx - lw / 2, cy + _TEXT_OFFSET_Y)
             label.setZValue(11)
             self._scene.addItem(label)
             hs.label = label
