@@ -46,6 +46,8 @@ DEFAULT_OVERLAY_COLOR = "violet"
 KEYMAP_HOTSPOTS: List[Tuple[str, float, float]] = [
     ("ZL",   420 / JOYCONS_IMAGE_W,  150 / JOYCONS_IMAGE_H),
     ("ZR",  1115 / JOYCONS_IMAGE_W,  150 / JOYCONS_IMAGE_H),
+    ("L",    420 / JOYCONS_IMAGE_W,  220 / JOYCONS_IMAGE_H),
+    ("R",   1115 / JOYCONS_IMAGE_W,  220 / JOYCONS_IMAGE_H),
     ("-",    420 / JOYCONS_IMAGE_W,  335 / JOYCONS_IMAGE_H),
     ("+",   1110 / JOYCONS_IMAGE_W,  335 / JOYCONS_IMAGE_H),
     ("CAP",  395 / JOYCONS_IMAGE_W,  720 / JOYCONS_IMAGE_H),
@@ -60,6 +62,18 @@ KEYMAP_HOTSPOTS: List[Tuple[str, float, float]] = [
     ("X",   1260 / JOYCONS_IMAGE_W,  385 / JOYCONS_IMAGE_H),
     ("Y",   1190 / JOYCONS_IMAGE_W,  460 / JOYCONS_IMAGE_H),
     ("RSTK",1260 / JOYCONS_IMAGE_W,  605 / JOYCONS_IMAGE_H),
+    # Right stick virtual directions
+    ("RS-UP",  1260 / JOYCONS_IMAGE_W,  545 / JOYCONS_IMAGE_H),
+    ("RS-DN",  1260 / JOYCONS_IMAGE_W,  665 / JOYCONS_IMAGE_H),
+    ("RS-L",   1195 / JOYCONS_IMAGE_W,  605 / JOYCONS_IMAGE_H),
+    ("RS-R",   1330 / JOYCONS_IMAGE_W,  605 / JOYCONS_IMAGE_H),
+    # IMU / motion gestures
+    ("Shake",    650 / JOYCONS_IMAGE_W,  870 / JOYCONS_IMAGE_H),
+    ("TiltUp",   768 / JOYCONS_IMAGE_W,  830 / JOYCONS_IMAGE_H),
+    ("TiltDn",   768 / JOYCONS_IMAGE_W,  910 / JOYCONS_IMAGE_H),
+    ("TiltL",    700 / JOYCONS_IMAGE_W,  870 / JOYCONS_IMAGE_H),
+    ("TiltR",    836 / JOYCONS_IMAGE_W,  870 / JOYCONS_IMAGE_H),
+    ("Flick",    890 / JOYCONS_IMAGE_W,  870 / JOYCONS_IMAGE_H),
 ]
 
 # ---------------------------------------------------------------------------
@@ -192,23 +206,26 @@ KBD_HOTSPOTS: List[Tuple[str, float, float]] = [
 # ---------------------------------------------------------------------------
 M913_HOTSPOTS: List[Tuple[str, float, float]] = [
     # Main buttons
-    ("left",    670 / M913_IMAGE_W,  250 / M913_IMAGE_H),
-    ("right",   890 / M913_IMAGE_W,  250 / M913_IMAGE_H),
-    ("middle",  785 / M913_IMAGE_W,  225 / M913_IMAGE_H),
-    ("fire",    700 / M913_IMAGE_W,  360 / M913_IMAGE_H),
+    ("left",       670 / M913_IMAGE_W,  250 / M913_IMAGE_H),
+    ("right",      890 / M913_IMAGE_W,  250 / M913_IMAGE_H),
+    ("middle",     785 / M913_IMAGE_W,  225 / M913_IMAGE_H),
+    ("fire",       700 / M913_IMAGE_W,  360 / M913_IMAGE_H),
+    # Scroll wheel
+    ("scroll_up",  785 / M913_IMAGE_W,  190 / M913_IMAGE_H),
+    ("scroll_down",785 / M913_IMAGE_W,  260 / M913_IMAGE_H),
     # Side buttons — 4 rows × 3 cols
-    ("side1",   530 / M913_IMAGE_W,  380 / M913_IMAGE_H),
-    ("side2",   575 / M913_IMAGE_W,  380 / M913_IMAGE_H),
-    ("side3",   620 / M913_IMAGE_W,  380 / M913_IMAGE_H),
-    ("side4",   530 / M913_IMAGE_W,  435 / M913_IMAGE_H),
-    ("side5",   575 / M913_IMAGE_W,  435 / M913_IMAGE_H),
-    ("side6",   620 / M913_IMAGE_W,  435 / M913_IMAGE_H),
-    ("side7",   530 / M913_IMAGE_W,  490 / M913_IMAGE_H),
-    ("side8",   575 / M913_IMAGE_W,  490 / M913_IMAGE_H),
-    ("side9",   620 / M913_IMAGE_W,  490 / M913_IMAGE_H),
-    ("side10",  530 / M913_IMAGE_W,  540 / M913_IMAGE_H),
-    ("side11",  575 / M913_IMAGE_W,  540 / M913_IMAGE_H),
-    ("side12",  620 / M913_IMAGE_W,  540 / M913_IMAGE_H),
+    ("side1",      530 / M913_IMAGE_W,  380 / M913_IMAGE_H),
+    ("side2",      575 / M913_IMAGE_W,  380 / M913_IMAGE_H),
+    ("side3",      620 / M913_IMAGE_W,  380 / M913_IMAGE_H),
+    ("side4",      530 / M913_IMAGE_W,  435 / M913_IMAGE_H),
+    ("side5",      575 / M913_IMAGE_W,  435 / M913_IMAGE_H),
+    ("side6",      620 / M913_IMAGE_W,  435 / M913_IMAGE_H),
+    ("side7",      530 / M913_IMAGE_W,  490 / M913_IMAGE_H),
+    ("side8",      575 / M913_IMAGE_W,  490 / M913_IMAGE_H),
+    ("side9",      620 / M913_IMAGE_W,  490 / M913_IMAGE_H),
+    ("side10",     530 / M913_IMAGE_W,  540 / M913_IMAGE_H),
+    ("side11",     575 / M913_IMAGE_W,  540 / M913_IMAGE_H),
+    ("side12",     620 / M913_IMAGE_W,  540 / M913_IMAGE_H),
 ]
 
 # ---------------------------------------------------------------------------
@@ -216,24 +233,27 @@ M913_HOTSPOTS: List[Tuple[str, float, float]] = [
 # ---------------------------------------------------------------------------
 INCEDIUS_HOTSPOTS: List[Tuple[str, float, float]] = [
     # Main buttons (unchanged)
-    ("left",    670 / M913_IMAGE_W,  250 / M913_IMAGE_H),
-    ("right",   890 / M913_IMAGE_W,  250 / M913_IMAGE_H),
-    ("middle",  785 / M913_IMAGE_W,  225 / M913_IMAGE_H),
-    ("fire",    700 / M913_IMAGE_W,  360 / M913_IMAGE_H),
+    ("left",       670 / M913_IMAGE_W,  250 / M913_IMAGE_H),
+    ("right",      890 / M913_IMAGE_W,  250 / M913_IMAGE_H),
+    ("middle",     785 / M913_IMAGE_W,  225 / M913_IMAGE_H),
+    ("fire",       700 / M913_IMAGE_W,  360 / M913_IMAGE_H),
+    # Scroll wheel
+    ("scroll_up",  785 / M913_IMAGE_W,  190 / M913_IMAGE_H),
+    ("scroll_down",785 / M913_IMAGE_W,  260 / M913_IMAGE_H),
     # Thumb buttons (side1-6 → Thumb 1-6)
-    ("Thumb1",  530 / M913_IMAGE_W,  380 / M913_IMAGE_H),
-    ("Thumb2",  575 / M913_IMAGE_W,  380 / M913_IMAGE_H),
-    ("Thumb3",  620 / M913_IMAGE_W,  380 / M913_IMAGE_H),
-    ("Thumb4",  530 / M913_IMAGE_W,  435 / M913_IMAGE_H),
-    ("Thumb5",  575 / M913_IMAGE_W,  435 / M913_IMAGE_H),
-    ("Thumb6",  620 / M913_IMAGE_W,  435 / M913_IMAGE_H),
+    ("Thumb1",     530 / M913_IMAGE_W,  380 / M913_IMAGE_H),
+    ("Thumb2",     575 / M913_IMAGE_W,  380 / M913_IMAGE_H),
+    ("Thumb3",     620 / M913_IMAGE_W,  380 / M913_IMAGE_H),
+    ("Thumb4",     530 / M913_IMAGE_W,  435 / M913_IMAGE_H),
+    ("Thumb5",     575 / M913_IMAGE_W,  435 / M913_IMAGE_H),
+    ("Thumb6",     620 / M913_IMAGE_W,  435 / M913_IMAGE_H),
     # Finger buttons (side7-12 → Finger 1-6)
-    ("Finger1", 530 / M913_IMAGE_W,  490 / M913_IMAGE_H),
-    ("Finger2", 575 / M913_IMAGE_W,  490 / M913_IMAGE_H),
-    ("Finger3", 620 / M913_IMAGE_W,  490 / M913_IMAGE_H),
-    ("Finger4", 530 / M913_IMAGE_W,  540 / M913_IMAGE_H),
-    ("Finger5", 575 / M913_IMAGE_W,  540 / M913_IMAGE_H),
-    ("Finger6", 620 / M913_IMAGE_W,  540 / M913_IMAGE_H),
+    ("Finger1",    530 / M913_IMAGE_W,  490 / M913_IMAGE_H),
+    ("Finger2",    575 / M913_IMAGE_W,  490 / M913_IMAGE_H),
+    ("Finger3",    620 / M913_IMAGE_W,  490 / M913_IMAGE_H),
+    ("Finger4",    530 / M913_IMAGE_W,  540 / M913_IMAGE_H),
+    ("Finger5",    575 / M913_IMAGE_W,  540 / M913_IMAGE_H),
+    ("Finger6",    620 / M913_IMAGE_W,  540 / M913_IMAGE_H),
 ]
 
 # ---------------------------------------------------------------------------

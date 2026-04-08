@@ -121,6 +121,8 @@ def _draw_crosshatch_fill(
 JOYCON_HOTSPOTS: list[tuple[str, int, int]] = [
     ("ZL",     420,  150),
     ("ZR",    1115,  150),
+    ("L",      420,  220),
+    ("R",     1115,  220),
     ("Minus",  420,  335),
     ("Plus",  1110,  335),
     ("Capture", 395, 720),
@@ -135,32 +137,47 @@ JOYCON_HOTSPOTS: list[tuple[str, int, int]] = [
     ("X",     1260,  385),
     ("Y",     1190,  460),
     ("RStick",1260,  605),
+    # Right stick virtual directions
+    ("RSUp",  1260,  545),
+    ("RSDown", 1260,  665),
+    ("RSLeft", 1195,  605),
+    ("RSRight",1330,  605),
+    # IMU / motion gestures
+    ("Shake",  650,  870),
+    ("TiltUp", 768,  830),
+    ("TiltDn", 768,  910),
+    ("TiltL",  700,  870),
+    ("TiltR",  836,  870),
+    ("Flick",  890,  870),
 ]
 
-JOYCON_WIDE = {"ZL", "ZR", "LStick", "RStick"}
+JOYCON_WIDE = {"ZL", "ZR", "L", "R", "LStick", "RStick"}
 
 # ── M913 Stock (16 buttons) ──────────────────────────────────────────────
 # Positions approximate on the composited m913.png (mouse centered ~782, 459).
 # Side buttons are the 12-key thumb grid on the left side of the mouse body.
 M913_HOTSPOTS: list[tuple[str, int, int]] = [
     # Main buttons
-    ("left",    670,  250),
-    ("right",   890,  250),
-    ("middle",  785,  225),
-    ("fire",    700,  360),
+    ("left",       670,  250),
+    ("right",      890,  250),
+    ("middle",     785,  225),
+    ("fire",       700,  360),
+    # Scroll wheel
+    ("scroll_up",  785,  190),
+    ("scroll_down",785,  260),
     # Side buttons — 4 rows × 3 cols
-    ("side1",   530,  380),
-    ("side2",   575,  380),
-    ("side3",   620,  380),
-    ("side4",   530,  435),
-    ("side5",   575,  435),
-    ("side6",   620,  435),
-    ("side7",   530,  490),
-    ("side8",   575,  490),
-    ("side9",   620,  490),
-    ("side10",  530,  540),
-    ("side11",  575,  540),
-    ("side12",  620,  540),
+    ("side1",      530,  380),
+    ("side2",      575,  380),
+    ("side3",      620,  380),
+    ("side4",      530,  435),
+    ("side5",      575,  435),
+    ("side6",      620,  435),
+    ("side7",      530,  490),
+    ("side8",      575,  490),
+    ("side9",      620,  490),
+    ("side10",     530,  540),
+    ("side11",     575,  540),
+    ("side12",     620,  540),
 ]
 
 M913_WIDE = {"left", "right"}
@@ -169,24 +186,27 @@ M913_WIDE = {"left", "right"}
 # Uses the same pixel positions as M913 stock but with IncediusMod naming.
 INCEDIUS_HOTSPOTS: list[tuple[str, int, int]] = [
     # Main buttons (unchanged)
-    ("left",    670,  250),
-    ("right",   890,  250),
-    ("middle",  785,  225),
-    ("fire",    700,  360),
+    ("left",       670,  250),
+    ("right",      890,  250),
+    ("middle",     785,  225),
+    ("fire",       700,  360),
+    # Scroll wheel
+    ("scroll_up",  785,  190),
+    ("scroll_down",785,  260),
     # Thumb buttons (side1-6 → Thumb 1-6)
-    ("Thumb1",  530,  380),
-    ("Thumb2",  575,  380),
-    ("Thumb3",  620,  380),
-    ("Thumb4",  530,  435),
-    ("Thumb5",  575,  435),
-    ("Thumb6",  620,  435),
+    ("Thumb1",     530,  380),
+    ("Thumb2",     575,  380),
+    ("Thumb3",     620,  380),
+    ("Thumb4",     530,  435),
+    ("Thumb5",     575,  435),
+    ("Thumb6",     620,  435),
     # Finger buttons (side7-12 → Finger 1-6)
-    ("Finger1", 530,  490),
-    ("Finger2", 575,  490),
-    ("Finger3", 620,  490),
-    ("Finger4", 530,  540),
-    ("Finger5", 575,  540),
-    ("Finger6", 620,  540),
+    ("Finger1",    530,  490),
+    ("Finger2",    575,  490),
+    ("Finger3",    620,  490),
+    ("Finger4",    530,  540),
+    ("Finger5",    575,  540),
+    ("Finger6",    620,  540),
 ]
 
 INCEDIUS_WIDE = {"left", "right"}
