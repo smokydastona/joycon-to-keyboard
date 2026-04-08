@@ -478,7 +478,7 @@ class MainWindow(QMainWindow):
                                 method, type(view).__name__, exc_info=True)
 
     def _get_hotspot_name(self, key_id: int) -> str:
-        for name, _, _ in KEYMAP_HOTSPOTS:
+        for name, _, _ in KEYMAP_HOTSPOTS["dark"]:
             from .constants import KBD_LABEL_TO_KEYCODE
             for lbl, code in KBD_LABEL_TO_KEYCODE.items():
                 if code == key_id:

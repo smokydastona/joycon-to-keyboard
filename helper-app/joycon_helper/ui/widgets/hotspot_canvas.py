@@ -27,7 +27,7 @@ log = logging.getLogger("joycon_helper.ui.widgets.hotspot_canvas")
 
 # Size of hotspot dots at native image resolution
 _DOT_RADIUS = 18
-_TEXT_OFFSET_Y = -26
+_TEXT_OFFSET_Y = -32
 _HOVER_GROW = 6
 _PULSE_RANGE = 4
 
@@ -281,7 +281,7 @@ class HotspotCanvas(QGraphicsView):
             hs.dot = dot
 
             label = QGraphicsSimpleTextItem(hs.name)
-            font = QFont(self._theme.typo("font_family"), 8, QFont.Weight.Bold)
+            font = QFont(self._theme.typo("font_family"), 11, QFont.Weight.Bold)
             label.setFont(font)
             lw = label.boundingRect().width()
             label.setPos(cx - lw / 2, cy + _TEXT_OFFSET_Y)

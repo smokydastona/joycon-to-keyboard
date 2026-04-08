@@ -72,6 +72,15 @@ class MappingView(QWidget):
         self._load_hotspots()
 
     # -----------------------------------------------------------------
+    # Theme key helper
+    # -----------------------------------------------------------------
+
+    @property
+    def _theme_key(self) -> str:
+        """Return the current theme key ('dark' or 'default')."""
+        return "dark" if self._main.theme.is_dark else "default"
+
+    # -----------------------------------------------------------------
     # Canvas panel (left)
     # -----------------------------------------------------------------
 
@@ -298,10 +307,11 @@ class MappingView(QWidget):
     # -----------------------------------------------------------------
 
     def _load_hotspots(self) -> None:
-        self._jc_canvas.set_hotspots(KEYMAP_HOTSPOTS)
-        self._m913_canvas.set_hotspots(M913_HOTSPOTS)
-        self._mouse_canvas.set_hotspots(MOUSE_HOTSPOTS)
-        self._kbd_canvas.set_hotspots(KBD_HOTSPOTS)
+        tk = self._theme_key
+        self._jc_canvas.set_hotspots(KEYMAP_HOTSPOTS[tk])
+        self._m913_canvas.set_hotspots(M913_HOTSPOTS[tk])
+        self._mouse_canvas.set_hotspots(MOUSE_HOTSPOTS[tk])
+        self._kbd_canvas.set_hotspots(KBD_HOTSPOTS[tk])
 
         # Joy-Con background
         pm = self._main.assets.load_pixmap("joycons_none.png")
@@ -331,11 +341,12 @@ class MappingView(QWidget):
 
     def _device_list(self):
         """Return list of (canvas, hotspot_list) in tab order."""
-        m913_hs = INCEDIUS_HOTSPOTS if self._m913_skin == "Incedius" else M913_HOTSPOTS
+        tk = self._theme_key
+        m913_hs = INCEDIUS_HOTSPOTS[tk] if self._m913_skin == "Incedius" else M913_HOTSPOTS[tk]
         return [
-            (self._jc_canvas, KEYMAP_HOTSPOTS),
+            (self._jc_canvas, KEYMAP_HOTSPOTS[tk]),
             (self._m913_canvas, m913_hs),
-            (self._mouse_canvas, MOUSE_HOTSPOTS),
+            (self._mouse_canvas, MOUSE_HOTSPOTS[tk]),
         ]
 
     def _active_canvas(self) -> HotspotCanvas:
@@ -353,11 +364,12 @@ class MappingView(QWidget):
 
     def _on_m913_skin_changed(self, skin: str) -> None:
         self._m913_skin = skin
+        tk = self._theme_key
         if skin == "Incedius":
-            self._m913_canvas.set_hotspots(INCEDIUS_HOTSPOTS)
+            self._m913_canvas.set_hotspots(INCEDIUS_HOTSPOTS[tk])
             pm = self._main.assets.load_pixmap("incedius_none.png")
         else:
-            self._m913_canvas.set_hotspots(M913_HOTSPOTS)
+            self._m913_canvas.set_hotspots(M913_HOTSPOTS[tk])
             pm = self._main.assets.load_pixmap("m913_none.png")
         if pm:
             self._m913_canvas.set_background(pm)
@@ -662,7 +674,8 @@ class MappingView(QWidget):
         )
 
     def _export_positions(self) -> None:
-        m913_hs = INCEDIUS_HOTSPOTS if self._m913_skin == "Incedius" else M913_HOTSPOTS
+        tk = self._theme_key
+        m913_hs = INCEDIUS_HOTSPOTS[tk] if self._m913_skin == "Incedius" else M913_HOTSPOTS[tk]
         device_map = {
             "joycon":   self._jc_canvas,
             "m913":     self._m913_canvas,
@@ -820,7 +833,8 @@ class MappingView(QWidget):
         self._refresh_mapping_visuals()
 
     def apply_theme(self, theme: ThemeEngine) -> None:
-        # Reload backgrounds from the new theme's asset paths
+        # Reload hotspot positions and backgrounds for the new theme
+        self._load_hotspots()
         self._reload_backgrounds()
         for canvas, _ in self._device_list():
             canvas.apply_theme(theme)
