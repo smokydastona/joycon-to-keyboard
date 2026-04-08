@@ -3,9 +3,8 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor
-from PyQt6.QtWidgets import QFrame, QGraphicsDropShadowEffect, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QFrame, QGraphicsDropShadowEffect, QWidget
 
 from ..theme import ThemeEngine
 

@@ -5,11 +5,11 @@ slot information, active layer, and turbo state over other applications.
 """
 from __future__ import annotations
 
-from typing import Dict, Optional, Set
+from typing import Optional, Set
 
 from PyQt6.QtCore import QPoint, QSettings, QTimer, Qt
 from PyQt6.QtGui import QAction, QColor, QFont, QPainter
-from PyQt6.QtWidgets import QLabel, QMenu, QVBoxLayout, QWidget
+from PyQt6.QtWidgets import QMenu, QWidget
 
 from ..theme import ThemeEngine
 

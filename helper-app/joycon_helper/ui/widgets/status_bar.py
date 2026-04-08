@@ -3,8 +3,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QHBoxLayout, QLabel, QStatusBar, QWidget
+from PyQt6.QtWidgets import QLabel, QStatusBar, QWidget
 
 from ..theme import ThemeEngine
 

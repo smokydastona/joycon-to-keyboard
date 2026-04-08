@@ -10,7 +10,6 @@ import logging
 import time
 from typing import Any, Dict, List, Optional
 
-import os
 import sys
 
 from PyQt6.QtCore import QSettings, QSize, QTimer, Qt
@@ -19,15 +18,14 @@ from PyQt6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
     QDockWidget, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
     QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QPushButton,
-    QSizePolicy, QSlider, QSpinBox, QSplitter, QStackedWidget,
+    QSizePolicy, QSlider, QSpinBox, QStackedWidget,
     QSystemTrayIcon, QTabWidget, QToolBar, QVBoxLayout, QWidget,
 )
 
 from .._version import __version__
-from ..app_switcher import AppSwitcher, load_rules, save_rules
-from ..serial_client import SerialClient
+from ..app_switcher import AppSwitcher, load_rules
 from .assets import AssetManager
-from .constants import KEYMAP_HOTSPOTS, KBD_HOTSPOTS
+from .constants import KEYMAP_HOTSPOTS
 from .serial_bridge import SerialBridge
 from .theme import ThemeEngine
 from .widgets.overlay_window import OverlayWindow
@@ -440,7 +438,6 @@ class MainWindow(QMainWindow):
         if evt == "bt_status":
             state = str(obj.get("state", "-"))
             name = obj.get("name")
-            bda = obj.get("bda")
             self._bt_status = state
             if state == "connected":
                 side = None

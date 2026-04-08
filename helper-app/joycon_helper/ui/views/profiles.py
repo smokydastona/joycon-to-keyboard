@@ -6,21 +6,19 @@ from __future__ import annotations
 
 import json
 import logging
-from pathlib import Path
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import List, TYPE_CHECKING
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QCheckBox, QComboBox, QFileDialog, QGroupBox, QHBoxLayout, QInputDialog,
-    QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox,
-    QPushButton, QScrollArea, QTableWidget, QTableWidgetItem, QTextEdit,
+    QLabel, QLineEdit, QMessageBox,
+    QPushButton, QTableWidget, QTableWidgetItem, QTextEdit,
     QVBoxLayout, QWidget,
 )
 
 from ..theme import ThemeEngine
-from ..widgets.card import Card
-from ...app_switcher import load_rules, save_rules, _get_foreground_exe
+from ...app_switcher import save_rules, _get_foreground_exe
 
 if TYPE_CHECKING:
     from ..main_window import MainWindow

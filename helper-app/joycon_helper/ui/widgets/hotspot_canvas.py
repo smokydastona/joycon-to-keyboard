@@ -8,20 +8,20 @@ from __future__ import annotations
 
 import math
 import logging
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from PyQt6.QtCore import (
-    QPointF, QRectF, QSize, QTimer, Qt, pyqtSignal,
+    QRectF, QTimer, Qt, pyqtSignal,
 )
 from PyQt6.QtGui import (
-    QBrush, QColor, QFont, QPainter, QPen, QPixmap, QTransform,
+    QBrush, QColor, QFont, QPainter, QPen, QPixmap,
 )
 from PyQt6.QtWidgets import (
     QGraphicsEllipseItem, QGraphicsPixmapItem, QGraphicsScene,
-    QGraphicsSimpleTextItem, QGraphicsView, QMenu, QWidget,
+    QGraphicsSimpleTextItem, QGraphicsView, QWidget,
 )
 
-from ..theme import ThemeEngine, hex_to_rgb
+from ..theme import ThemeEngine
 
 log = logging.getLogger("joycon_helper.ui.widgets.hotspot_canvas")
 

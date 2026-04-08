@@ -5,17 +5,16 @@ diagnostics into a single view.
 """
 from __future__ import annotations
 
-import json
 import logging
 import threading
-from typing import Any, Dict, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import QSize, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QColor, QFont, QTextCursor
+from PyQt6.QtCore import QTimer, pyqtSignal
+from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QCheckBox, QComboBox, QFileDialog, QGroupBox, QHBoxLayout, QLabel,
+    QCheckBox, QFileDialog, QGroupBox, QHBoxLayout, QLabel,
     QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QScrollArea,
-    QSplitter, QVBoxLayout, QWidget,
+    QVBoxLayout, QWidget,
 )
 
 from ..theme import ThemeEngine
@@ -309,10 +308,9 @@ class DiagnosticsView(QWidget):
                 from ...fw_updater import FwUpdater
                 updater = FwUpdater()
                 info = updater.check_versions()
-                from PyQt6.QtCore import QMetaObject, Q_ARG, Qt as QtNs
                 QTimer.singleShot(0, lambda: self._on_fw_versions(info))
-            except Exception as e:
-                QTimer.singleShot(0, lambda: self._on_fw_versions({"error": str(e)}))
+            except Exception as exc:
+                QTimer.singleShot(0, lambda err=str(exc): self._on_fw_versions({"error": err}))
 
         threading.Thread(target=_check, daemon=True).start()
 

@@ -7,16 +7,15 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING
+from typing import Any, Dict, Optional, Set, TYPE_CHECKING
 
-from PyQt6.QtCore import QSize, Qt, QTimer
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QButtonGroup, QComboBox, QDialog, QDialogButtonBox, QFileDialog,
+    QComboBox, QDialog, QFileDialog,
     QGridLayout,
     QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListWidget,
-    QListWidgetItem, QMenu, QMessageBox, QPushButton, QRadioButton,
-    QScrollArea, QSizePolicy, QSplitter, QTabWidget, QVBoxLayout, QWidget,
+    QListWidgetItem, QMenu, QMessageBox, QPushButton, QScrollArea, QSplitter, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from ..constants import (
@@ -453,7 +452,6 @@ class MappingView(QWidget):
         learn_act.triggered.connect(lambda: self._ctx_learn(name))
 
         if is_mapped:
-            label = _KEYCODE_TO_KBD_LABEL.get(keycode, f"0x{keycode:02X}")
             menu.addSeparator()
 
             # Unbind
@@ -618,7 +616,7 @@ class MappingView(QWidget):
             f"Turbo: {'ON' if turbo else 'OFF'}",
             f"Locked: {'YES' if name in self._locked_hotspots else 'no'}",
         ]
-        QMessageBox.information(self, f"Info — {name}", "\n".join(l for l in lines if l))
+        QMessageBox.information(self, f"Info — {name}", "\n".join(line for line in lines if line))
 
     def _on_hotspot_hovered(self, name: str) -> None:
         if name:
@@ -679,8 +677,6 @@ class MappingView(QWidget):
         )
 
     def _export_positions(self) -> None:
-        tk = self._theme_key
-        m913_hs = INCEDIUS_HOTSPOTS[tk] if self._m913_skin == "Incedius" else M913_HOTSPOTS[tk]
         device_map = {
             "joycon":   self._jc_canvas,
             "m913":     self._m913_canvas,

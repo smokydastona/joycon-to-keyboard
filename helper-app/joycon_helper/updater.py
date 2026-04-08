@@ -17,10 +17,9 @@ import ssl
 import sys
 import tempfile
 import threading
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional, Tuple
-from urllib.error import URLError
 from urllib.request import Request, urlopen
 
 from ._version import __version__

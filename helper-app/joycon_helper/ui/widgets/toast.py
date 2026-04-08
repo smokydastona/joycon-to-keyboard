@@ -9,11 +9,10 @@ Usage:
 """
 from __future__ import annotations
 
-from typing import Optional
 
 from PyQt6.QtCore import QPoint, QPropertyAnimation, QTimer, Qt
 from PyQt6.QtGui import QColor, QFont, QPainter
-from PyQt6.QtWidgets import QLabel, QWidget
+from PyQt6.QtWidgets import QWidget
 
 # Maximum visible toasts stacked at once
 _MAX_VISIBLE = 3

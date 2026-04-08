@@ -5,11 +5,9 @@ for derived colours (blend, contrast, luma).
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 import sys
-from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 log = logging.getLogger("joycon_helper.ui.theme")

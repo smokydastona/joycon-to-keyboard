@@ -15,13 +15,12 @@ import hashlib
 import json
 import logging
 import ssl
-import threading
 import time
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import datetime
 from typing import Any, Callable, Dict, List, Optional, Tuple
-from urllib.error import URLError
 from urllib.request import Request, urlopen
+
+from .updater import RELEASES_URL
 
 # Import build date — may be empty for local dev runs.
 try:
@@ -58,8 +57,7 @@ _OTA_CHUNK_RETRY_DELAY = 0.5  # seconds, multiplied by attempt number
 _MAX_RETRIES = 3
 _RETRY_BACKOFF_BASE = 1.0  # seconds; doubles each retry
 
-# Re-use releases URL from updater module.
-from .updater import RELEASES_URL
+# RELEASES_URL imported at top from .updater
 
 
 # ---------------------------------------------------------------------------

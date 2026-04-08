@@ -19,7 +19,6 @@ from __future__ import annotations
 import io
 import logging
 import sys
-import threading
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
@@ -378,7 +377,8 @@ def download_and_flash_initial(
     # Fetch SHA-256 checksums for integrity verification.
     sha256sums = fw_updater._fetch_sha256sums(release)
 
-    import tempfile, os
+    import tempfile
+    import os  # noqa: F811
 
     with tempfile.TemporaryDirectory(prefix="bindbnd_") as tmpdir:
         # Download app binary (required).

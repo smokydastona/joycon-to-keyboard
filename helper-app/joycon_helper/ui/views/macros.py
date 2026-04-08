@@ -8,19 +8,17 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Dict, List, TYPE_CHECKING
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QComboBox, QDoubleSpinBox, QGroupBox, QHBoxLayout, QLabel,
     QLineEdit, QListWidget, QListWidgetItem, QMessageBox,
-    QPushButton, QScrollArea, QSlider, QSpinBox, QSplitter,
-    QStackedWidget, QTabWidget, QTextEdit, QVBoxLayout, QWidget,
+    QPushButton, QSpinBox, QStackedWidget, QTabWidget, QTextEdit, QVBoxLayout, QWidget,
 )
 
 from ..theme import ThemeEngine
-from ..widgets.card import Card
 from ..widgets.curve_preview import CurvePreviewWidget
 from ...hid_keycodes import _KEYCODE_NAMES
 

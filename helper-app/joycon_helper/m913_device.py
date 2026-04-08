@@ -14,7 +14,6 @@ import configparser
 import json
 import logging
 import os
-import copy
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -494,11 +493,19 @@ def build_button_mapping(changes: Dict[int, bytes],
                 # Multimedia key sub-packet
                 extra, code, extra2 = ab[1], ab[2], ab[3]
                 sub = bytearray(PACKET_SIZE)
-                sub[0] = 0x08; sub[1] = 0x07; sub[2] = 0x00
-                sub[3] = addr_hi; sub[4] = addr_lo; sub[5] = 0x08
-                sub[6] = 0x02; sub[7] = 0x82
-                sub[8] = code; sub[9] = extra
-                sub[10] = 0x42; sub[11] = code; sub[12] = extra2
+                sub[0] = 0x08
+                sub[1] = 0x07
+                sub[2] = 0x00
+                sub[3] = addr_hi
+                sub[4] = addr_lo
+                sub[5] = 0x08
+                sub[6] = 0x02
+                sub[7] = 0x82
+                sub[8] = code
+                sub[9] = extra
+                sub[10] = 0x42
+                sub[11] = code
+                sub[12] = extra2
                 isum = 0x02 + 0x82 + code + extra + 0x42 + code + extra2
                 sub[13] = (0x55 - isum) & 0xFF
                 sub[16] = compute_checksum(sub)
@@ -521,9 +528,12 @@ def build_button_mapping(changes: Dict[int, bytes],
                 if mods_byte != 0 and not keys:
                     # Modifier-only
                     sub = _packet(_KB_KEY_TEMPLATE)
-                    sub[3] = addr_hi; sub[4] = addr_lo
-                    sub[7] = 0x80; sub[8] = mods_byte
-                    sub[10] = 0x40; sub[11] = mods_byte
+                    sub[3] = addr_hi
+                    sub[4] = addr_lo
+                    sub[7] = 0x80
+                    sub[8] = mods_byte
+                    sub[10] = 0x40
+                    sub[11] = mods_byte
                     isum = 0x02 + 0x80 + mods_byte + 0x40 + mods_byte
                     sub[13] = (0x55 - isum) & 0xFF
                     sub[16] = compute_checksum(sub)
@@ -532,8 +542,10 @@ def build_button_mapping(changes: Dict[int, bytes],
                 elif mods_byte == 0 and len(keys) == 1:
                     # Plain single key
                     sub = _packet(_KB_KEY_TEMPLATE)
-                    sub[3] = addr_hi; sub[4] = addr_lo
-                    sub[8] = keys[0]; sub[11] = keys[0]
+                    sub[3] = addr_hi
+                    sub[4] = addr_lo
+                    sub[8] = keys[0]
+                    sub[11] = keys[0]
                     sub[13] = (0x91 - 2 * keys[0]) & 0xFF
                     sub[16] = compute_checksum(sub)
                     result.append(sub)
@@ -559,8 +571,12 @@ def build_button_mapping(changes: Dict[int, bytes],
 
                     # Packet 1
                     p1 = bytearray(PACKET_SIZE)
-                    p1[0] = 0x08; p1[1] = 0x07; p1[2] = 0x00
-                    p1[3] = addr_hi; p1[4] = addr_lo; p1[5] = 0x0A
+                    p1[0] = 0x08
+                    p1[1] = 0x07
+                    p1[2] = 0x00
+                    p1[3] = addr_hi
+                    p1[4] = addr_lo
+                    p1[5] = 0x0A
                     p1[6] = count
                     for i in range(min(9, len(evts))):
                         p1[7 + i] = evts[i]
@@ -571,8 +587,11 @@ def build_button_mapping(changes: Dict[int, bytes],
                     p1_evts = min(9, len(evts))
                     remaining = len(evts) - p1_evts
                     p2 = bytearray(PACKET_SIZE)
-                    p2[0] = 0x08; p2[1] = 0x07; p2[2] = 0x00
-                    p2[3] = addr_hi; p2[4] = (addr_lo + 0x0A) & 0xFF
+                    p2[0] = 0x08
+                    p2[1] = 0x07
+                    p2[2] = 0x00
+                    p2[3] = addr_hi
+                    p2[4] = (addr_lo + 0x0A) & 0xFF
                     p2[5] = remaining + 1
                     for i in range(remaining):
                         p2[6 + i] = evts[p1_evts + i]
@@ -678,7 +697,9 @@ def build_led_packets(mode: str, color: int = 0x00FF00,
 
     if mode_lower == "respiration":
         p1 = _packet(_LED_BREATHING[0])
-        p1[6] = r_val; p1[7] = g_val; p1[8] = b_val
+        p1[6] = r_val
+        p1[7] = g_val
+        p1[8] = b_val
         p1[9] = (0x55 - r_val - g_val - b_val) & 0xFF
         p1[10] = 0x02  # respiration mode
         p1[11] = (0x55 - 0x02) & 0xFF
@@ -698,7 +719,9 @@ def build_led_packets(mode: str, color: int = 0x00FF00,
     if mode_lower == "wave":
         # Wave: mode byte 0x04, uses speed + color
         p1 = _packet(_LED_BREATHING[0])
-        p1[6] = r_val; p1[7] = g_val; p1[8] = b_val
+        p1[6] = r_val
+        p1[7] = g_val
+        p1[8] = b_val
         p1[9] = (0x55 - r_val - g_val - b_val) & 0xFF
         p1[10] = 0x04  # wave mode
         p1[11] = (0x55 - 0x04) & 0xFF
@@ -715,7 +738,9 @@ def build_led_packets(mode: str, color: int = 0x00FF00,
     if mode_lower == "reactive":
         # Reactive: mode byte 0x05, lights on click then fades
         p1 = _packet(_LED_BREATHING[0])
-        p1[6] = r_val; p1[7] = g_val; p1[8] = b_val
+        p1[6] = r_val
+        p1[7] = g_val
+        p1[8] = b_val
         p1[9] = (0x55 - r_val - g_val - b_val) & 0xFF
         p1[10] = 0x05  # reactive mode
         p1[11] = (0x55 - 0x05) & 0xFF
@@ -732,7 +757,9 @@ def build_led_packets(mode: str, color: int = 0x00FF00,
     if mode_lower == "random":
         # Random: mode byte 0x06, random color cycle
         p1 = _packet(_LED_BREATHING[0])
-        p1[6] = r_val; p1[7] = g_val; p1[8] = b_val
+        p1[6] = r_val
+        p1[7] = g_val
+        p1[8] = b_val
         p1[9] = (0x55 - r_val - g_val - b_val) & 0xFF
         p1[10] = 0x06  # random mode
         p1[11] = (0x55 - 0x06) & 0xFF
@@ -749,7 +776,9 @@ def build_led_packets(mode: str, color: int = 0x00FF00,
     if mode_lower == "alternating":
         # Alternating: mode byte 0x07, alternates between color and secondary
         p1 = _packet(_LED_BREATHING[0])
-        p1[6] = r_val; p1[7] = g_val; p1[8] = b_val
+        p1[6] = r_val
+        p1[7] = g_val
+        p1[8] = b_val
         p1[9] = (0x55 - r_val - g_val - b_val) & 0xFF
         p1[10] = 0x07  # alternating mode
         p1[11] = (0x55 - 0x07) & 0xFF
@@ -766,7 +795,9 @@ def build_led_packets(mode: str, color: int = 0x00FF00,
     if mode_lower == "flashing":
         # Flashing: mode byte 0x08, on/off blink at speed
         p1 = _packet(_LED_BREATHING[0])
-        p1[6] = r_val; p1[7] = g_val; p1[8] = b_val
+        p1[6] = r_val
+        p1[7] = g_val
+        p1[8] = b_val
         p1[9] = (0x55 - r_val - g_val - b_val) & 0xFF
         p1[10] = 0x08  # flashing mode
         p1[11] = (0x55 - 0x08) & 0xFF
@@ -782,7 +813,9 @@ def build_led_packets(mode: str, color: int = 0x00FF00,
 
     # Steady (static color with brightness)
     p = _packet(_LED_STATIC)
-    p[6] = r_val; p[7] = g_val; p[8] = b_val
+    p[6] = r_val
+    p[7] = g_val
+    p[8] = b_val
     p[9] = (0x55 - r_val - g_val - b_val) & 0xFF
     p[10] = 0x01  # steady
     p[11] = (0x55 - 0x01) & 0xFF
@@ -804,8 +837,10 @@ def build_polling_rate_packet(hz: int) -> bytearray:
         code = 0x08  # 125 Hz
 
     p = bytearray(PACKET_SIZE)
-    p[0] = 0x08; p[1] = 0x07
-    p[4] = 0x00; p[5] = 0x02
+    p[0] = 0x08
+    p[1] = 0x07
+    p[4] = 0x00
+    p[5] = 0x02
     p[6] = code
     p[7] = (0x55 - code) & 0xFF
     p[16] = compute_checksum(p)
@@ -865,8 +900,12 @@ def build_macro_packets(slot_num: int, macro: MacroSlot) -> List[bytearray]:
     # Header packet: tells the device how many events
     result: List[bytearray] = []
     hdr = bytearray(PACKET_SIZE)
-    hdr[0] = 0x08; hdr[1] = 0x07; hdr[2] = 0x00
-    hdr[3] = addr_hi; hdr[4] = addr_lo; hdr[5] = 0x02
+    hdr[0] = 0x08
+    hdr[1] = 0x07
+    hdr[2] = 0x00
+    hdr[3] = addr_hi
+    hdr[4] = addr_lo
+    hdr[5] = 0x02
     hdr[6] = len(events)
     hdr[7] = (0x55 - len(events)) & 0xFF
     hdr[16] = compute_checksum(hdr)
@@ -878,8 +917,11 @@ def build_macro_packets(slot_num: int, macro: MacroSlot) -> List[bytearray]:
     while offset < len(event_bytes):
         chunk = event_bytes[offset:offset + 10]
         p = bytearray(PACKET_SIZE)
-        p[0] = 0x08; p[1] = 0x07; p[2] = 0x00
-        p[3] = addr_hi; p[4] = pkt_addr & 0xFF
+        p[0] = 0x08
+        p[1] = 0x07
+        p[2] = 0x00
+        p[3] = addr_hi
+        p[4] = pkt_addr & 0xFF
         p[5] = len(chunk)
         for i, b in enumerate(chunk):
             p[6 + i] = b
@@ -1148,7 +1190,8 @@ class M913Device:
         # Buttons
         try:
             s, e = self.apply_buttons(profile.buttons)
-            sent += s; errors += e
+            sent += s
+            errors += e
         except Exception as ex:
             log.error("Button mapping failed: %s", ex)
             errors += 1
@@ -1156,7 +1199,8 @@ class M913Device:
         # DPI
         try:
             s, e = self.apply_dpi(profile.dpi_values, profile.dpi_enabled)
-            sent += s; errors += e
+            sent += s
+            errors += e
         except Exception as ex:
             log.error("DPI config failed: %s", ex)
             errors += 1
@@ -1165,7 +1209,8 @@ class M913Device:
         try:
             s, e = self.apply_led(profile.led_mode, profile.led_color,
                                   profile.led_brightness, profile.led_speed)
-            sent += s; errors += e
+            sent += s
+            errors += e
         except Exception as ex:
             log.error("LED config failed: %s", ex)
             errors += 1
@@ -1173,7 +1218,8 @@ class M913Device:
         # Polling rate
         try:
             s, e = self.apply_polling_rate(profile.polling_rate)
-            sent += s; errors += e
+            sent += s
+            errors += e
         except Exception as ex:
             log.error("Polling rate failed: %s", ex)
             errors += 1
@@ -1182,7 +1228,8 @@ class M913Device:
         if profile.macros:
             try:
                 s, e = self.apply_macros(profile.macros)
-                sent += s; errors += e
+                sent += s
+                errors += e
             except Exception as ex:
                 log.error("Macro config failed: %s", ex)
                 errors += 1

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import time
 from collections import deque
-from typing import Deque, Optional, Tuple
+from typing import Deque, Optional
 
 from PyQt6.QtCore import QRectF, Qt, QTimer
 from PyQt6.QtGui import QColor, QFont, QPainter, QPen

@@ -11,13 +11,12 @@ No personal data is collected.
 from __future__ import annotations
 
 import logging
-import os
 import platform
 import sys
 import threading
 import time
 import traceback
-from datetime import datetime, timedelta
+from datetime import datetime
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
