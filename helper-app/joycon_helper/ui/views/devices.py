@@ -7,14 +7,14 @@ Tkinter app.py M913 and Razer tabs.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, List, TYPE_CHECKING
+from typing import Any, Callable, List, TYPE_CHECKING
 
 from PyQt6.QtCore import QObject, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtWidgets import (
     QButtonGroup, QCheckBox, QColorDialog, QComboBox, QDialog,
-    QDialogButtonBox, QFileDialog, QGridLayout, QGroupBox, QHBoxLayout,
-    QInputDialog, QLabel, QLineEdit, QListWidget,
+    QFileDialog, QGroupBox, QHBoxLayout,
+    QInputDialog, QLabel, QLineEdit,
     QMessageBox, QPlainTextEdit, QPushButton, QRadioButton, QScrollArea,
     QSlider, QSpinBox, QTabWidget, QVBoxLayout, QWidget,
 )
@@ -207,46 +207,8 @@ class DevicesView(QWidget):
         self._m913_sister_combo.addItems(
             ["None", "Slot 0", "Slot 1", "Slot 2", "Slot 3"])
         profile_row.addWidget(self._m913_sister_combo)
-        profile_row.addSpacing(16)
-        profile_row.addWidget(QLabel("Layout:"))
-        self._m913_layout_combo = QComboBox()
-        self._m913_layout_combo.setToolTip("Button layout — Stock is factory, IncediusMod has custom key positions")
-        self._m913_layout_combo.addItems(["Stock M913", "IncediusMod"])
-        self._m913_layout_combo.currentTextChanged.connect(
-            self._m913_on_layout_changed)
-        profile_row.addWidget(self._m913_layout_combo)
-        self._m913_edit_layout_btn = QPushButton("Edit Map…")
-        self._m913_edit_layout_btn.setToolTip("Open the IncediusMod button layout editor")
-        self._m913_edit_layout_btn.setEnabled(False)
-        self._m913_edit_layout_btn.clicked.connect(self._m913_edit_incedius)
-        profile_row.addWidget(self._m913_edit_layout_btn)
         profile_row.addStretch()
         lay.addLayout(profile_row)
-
-        # Button remapping (16 buttons)
-        btn_group = QGroupBox("Button Remapping")
-        btn_lay = QGridLayout(btn_group)
-        self._m913_button_combos: Dict[str, QComboBox] = {}
-        self._m913_button_labels: Dict[str, QLabel] = {}
-        try:
-            mod = _get_m913_mod()
-            actions = list(mod.MOUSE_ACTIONS.keys()) + ["macro"]
-            btn_order = mod.BUTTON_ORDER
-            display_names = mod.BUTTON_DISPLAY_NAMES
-        except Exception:
-            actions = ["left", "right", "middle", "none"]
-            btn_order = []
-            display_names = {}
-
-        for i, btn_name in enumerate(btn_order):
-            label = QLabel(f"{display_names.get(btn_name, btn_name)}:")
-            self._m913_button_labels[btn_name] = label
-            btn_lay.addWidget(label, i // 4, (i % 4) * 2)
-            combo = QComboBox()
-            combo.addItems(actions)
-            btn_lay.addWidget(combo, i // 4, (i % 4) * 2 + 1)
-            self._m913_button_combos[btn_name] = combo
-        lay.addWidget(btn_group)
 
         # DPI settings (5 stages with enable checkboxes)
         dpi_group = QGroupBox("DPI Settings (5 stages)")
@@ -361,9 +323,6 @@ class DevicesView(QWidget):
         ini_import_btn.clicked.connect(self._m913_import_ini)
         actions_lay.addWidget(ini_import_btn)
         actions_lay.addSpacing(16)
-        macro_btn = QPushButton("Macro Builder…")
-        macro_btn.clicked.connect(self._m913_macro_popup)
-        actions_lay.addWidget(macro_btn)
         diag_btn = QPushButton("Diagnostics…")
         diag_btn.clicked.connect(self._m913_diag_popup)
         actions_lay.addWidget(diag_btn)
@@ -485,29 +444,6 @@ class DevicesView(QWidget):
             dpi_lay.addLayout(row)
         lay.addWidget(dpi_group)
 
-        # Button remapping
-        try:
-            r_mod = _get_razer_mod()
-            razer_actions = r_mod.REMAP_ACTIONS
-            razer_btn_order = r_mod.BUTTON_ORDER
-            razer_display = r_mod.BUTTON_DISPLAY_NAMES
-        except Exception:
-            razer_actions = ["default"]
-            razer_btn_order = []
-            razer_display = {}
-
-        btn_group = QGroupBox("Button Remapping")
-        btn_lay = QGridLayout(btn_group)
-        self._razer_button_combos: Dict[str, QComboBox] = {}
-        for i, btn_name in enumerate(razer_btn_order):
-            display = razer_display.get(btn_name, btn_name)
-            btn_lay.addWidget(QLabel(f"{display}:"), i // 3, (i % 3) * 2)
-            combo = QComboBox()
-            combo.addItems(razer_actions)
-            btn_lay.addWidget(combo, i // 3, (i % 3) * 2 + 1)
-            self._razer_button_combos[btn_name] = combo
-        lay.addWidget(btn_group)
-
         # Polling rate
         poll_group = QGroupBox("Polling Rate")
         poll_lay = QHBoxLayout(poll_group)
@@ -614,82 +550,11 @@ class DevicesView(QWidget):
         self._m913_status.setText(
             f"Selected {dev_info.display_name} (no saved profile)")
 
-    def _m913_on_layout_changed(self, text: str) -> None:
-        is_incedius = text == "IncediusMod"
-        self._m913_edit_layout_btn.setEnabled(is_incedius)
-        try:
-            mod = _get_m913_mod()
-            mode = "incedius" if is_incedius else "stock"
-            names = mod.LAYOUT_DISPLAY_NAMES.get(
-                mode, mod.BUTTON_DISPLAY_NAMES)
-            for btn_name, lbl in self._m913_button_labels.items():
-                lbl.setText(f"{names.get(btn_name, btn_name)}:")
-        except Exception:
-            pass
-
-    def _m913_edit_incedius(self) -> None:
-        try:
-            mod = _get_m913_mod()
-        except Exception:
-            return
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Edit IncediusMod Button Map")
-        dlg.setFixedSize(400, 480)
-        d_lay = QVBoxLayout(dlg)
-        d_lay.addWidget(QLabel(
-            "Assign each M913 side button to the matching\n"
-            "physical position on your IncediusMod mouse."))
-        combos: Dict[str, QComboBox] = {}
-        current_map = dict(
-            self._m913_profile.incedius_map) if self._m913_profile else {}
-        for key in mod.INCEDIUS_SIDE_KEYS:
-            row = QHBoxLayout()
-            row.addWidget(QLabel(
-                f"{mod.BUTTON_DISPLAY_NAMES.get(key, key)} →"))
-            cb = QComboBox()
-            cb.addItems(mod.INCEDIUS_LABEL_CHOICES)
-            cur = current_map.get(key,
-                                  mod.DEFAULT_INCEDIUS_MAP.get(key, ""))
-            idx = cb.findText(cur)
-            if idx >= 0:
-                cb.setCurrentIndex(idx)
-            combos[key] = cb
-            row.addWidget(cb)
-            d_lay.addLayout(row)
-        buttons = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok
-            | QDialogButtonBox.StandardButton.Cancel)
-        buttons.accepted.connect(dlg.accept)
-        buttons.rejected.connect(dlg.reject)
-        d_lay.addWidget(buttons)
-        if dlg.exec() == QDialog.DialogCode.Accepted and self._m913_profile:
-            new_map: Dict[str, str] = {}
-            used: Dict[str, str] = {}
-            for key in mod.INCEDIUS_SIDE_KEYS:
-                label = combos[key].currentText()
-                if label in used:
-                    QMessageBox.warning(
-                        self, "Duplicate",
-                        f"'{label}' assigned to both "
-                        f"{mod.BUTTON_DISPLAY_NAMES[used[label]]} and "
-                        f"{mod.BUTTON_DISPLAY_NAMES[key]}")
-                    return
-                used[label] = key
-                new_map[key] = label
-            self._m913_profile.incedius_map = new_map
-            self._m913_on_layout_changed(
-                self._m913_layout_combo.currentText())
-
     def _m913_ui_to_profile(self) -> None:
         if not self._m913_profile:
             return
         p = self._m913_profile
         p.name = self._m913_prof_name.text().strip() or "Default"
-        p.layout = ("incedius"
-                     if self._m913_layout_combo.currentText() == "IncediusMod"
-                     else "stock")
-        for btn_name, combo in self._m913_button_combos.items():
-            p.buttons[btn_name] = combo.currentText().strip().lower() or "none"
         p.dpi_values = [s.value() for s in self._m913_dpi_spins]
         p.dpi_enabled = [c.isChecked() for c in self._m913_dpi_checks]
         p.led_mode = self._m913_led_mode.currentText()
@@ -716,10 +581,6 @@ class DevicesView(QWidget):
             return
         p = self._m913_profile
         self._m913_prof_name.setText(p.name)
-        for btn_name, combo in self._m913_button_combos.items():
-            idx = combo.findText(p.buttons.get(btn_name, "none"))
-            if idx >= 0:
-                combo.setCurrentIndex(idx)
         for i in range(min(5, len(p.dpi_values))):
             self._m913_dpi_spins[i].setValue(p.dpi_values[i])
         for i in range(min(5, len(p.dpi_enabled))):
@@ -738,9 +599,6 @@ class DevicesView(QWidget):
             self._m913_sister_combo.setCurrentText(f"Slot {p.sister_slot}")
         else:
             self._m913_sister_combo.setCurrentIndex(0)
-        layout_text = ("IncediusMod" if p.layout == "incedius"
-                       else "Stock M913")
-        self._m913_layout_combo.setCurrentText(layout_text)
 
     def _m913_pick_led_color(self) -> None:
         cur = self._m913_led_color_edit.text().strip().lstrip("#")
@@ -889,135 +747,6 @@ class DevicesView(QWidget):
             self._main._log_line(f"[M913] Imported INI: {path}")
         except Exception as e:
             self._m913_status.setText(f"Import error: {e}")
-
-    def _m913_macro_popup(self) -> None:
-        try:
-            mod = _get_m913_mod()
-        except Exception:
-            QMessageBox.warning(self, "Error", "M913 module not available")
-            return
-        dlg = QDialog(self)
-        dlg.setWindowTitle("M913 Macro Builder")
-        dlg.setMinimumSize(540, 480)
-        main_lay = QVBoxLayout(dlg)
-        top = QHBoxLayout()
-        top.addWidget(QLabel("Macro Slot:"))
-        slot_spin = QSpinBox()
-        slot_spin.setRange(1, mod.MACRO_SLOT_COUNT)
-        slot_spin.setValue(1)
-        top.addWidget(slot_spin)
-        top.addStretch()
-        main_lay.addLayout(top)
-
-        event_list = QListWidget()
-        event_list.setFont(QFont("Consolas", 10))
-        event_list.setMinimumHeight(200)
-        main_lay.addWidget(event_list)
-
-        ctrl = QHBoxLayout()
-        ctrl.addWidget(QLabel("Key:"))
-        key_combo = QComboBox()
-        key_combo.addItems(mod.ALL_KEY_NAMES)
-        ctrl.addWidget(key_combo)
-
-        def _add(kind: str) -> None:
-            k = key_combo.currentText()
-            if k not in mod.KEY_CODES:
-                return
-            sc = mod.KEY_CODES[k]
-            if kind in ("both", "press"):
-                event_list.addItem(f"Press   {k}  (0x{sc:02X})")
-            if kind in ("both", "release"):
-                event_list.addItem(f"Release {k}  (0x{sc:02X})")
-
-        pr_btn = QPushButton("Press+Release")
-        pr_btn.clicked.connect(lambda: _add("both"))
-        ctrl.addWidget(pr_btn)
-        p_btn = QPushButton("Press")
-        p_btn.clicked.connect(lambda: _add("press"))
-        ctrl.addWidget(p_btn)
-        r_btn = QPushButton("Release")
-        r_btn.clicked.connect(lambda: _add("release"))
-        ctrl.addWidget(r_btn)
-        rm_btn = QPushButton("Remove")
-        rm_btn.clicked.connect(
-            lambda: event_list.takeItem(event_list.currentRow())
-            if event_list.currentRow() >= 0 else None)
-        ctrl.addWidget(rm_btn)
-        clr_btn = QPushButton("Clear")
-        clr_btn.clicked.connect(event_list.clear)
-        ctrl.addWidget(clr_btn)
-        main_lay.addLayout(ctrl)
-
-        status_lbl = QLabel("")
-        main_lay.addWidget(status_lbl)
-
-        def _parse_events():
-            events = []
-            for i in range(event_list.count()):
-                parts = event_list.item(i).text().split()
-                if len(parts) < 3:
-                    continue
-                evt = (mod.MACRO_EVENT_DOWN if parts[0] == "Press"
-                       else mod.MACRO_EVENT_UP)
-                try:
-                    sc = int(parts[-1].strip("()"), 16)
-                    events.append((evt, sc))
-                except ValueError:
-                    pass
-            return events
-
-        def _load_slot():
-            slot = slot_spin.value()
-            event_list.clear()
-            if not self._m913_profile:
-                return
-            macro = self._m913_profile.macros.get(slot)
-            if macro and not macro.is_empty():
-                sc_to_name = {v: k for k, v in mod.KEY_CODES.items()}
-                for evt_type, sc in macro.events:
-                    kind = ("Press" if evt_type == mod.MACRO_EVENT_DOWN
-                            else "Release")
-                    name = sc_to_name.get(sc, f"?{sc:02X}")
-                    event_list.addItem(
-                        f"{kind:7s} {name}  (0x{sc:02X})")
-                status_lbl.setText(
-                    f"Loaded slot {slot}: {len(macro.events)} events")
-            else:
-                status_lbl.setText(f"Slot {slot} is empty")
-
-        def _save_slot():
-            slot = slot_spin.value()
-            events = _parse_events()
-            if not self._m913_profile:
-                return
-            if not events:
-                self._m913_profile.macros.pop(slot, None)
-                status_lbl.setText(f"Slot {slot} cleared")
-            elif len(events) > mod.MACRO_MAX_ACTIONS:
-                status_lbl.setText(
-                    f"Too many events "
-                    f"({len(events)}/{mod.MACRO_MAX_ACTIONS})")
-            else:
-                self._m913_profile.macros[slot] = mod.MacroSlot(
-                    events=events)
-                status_lbl.setText(
-                    f"Saved slot {slot}: {len(events)} events")
-
-        bot = QHBoxLayout()
-        load_s = QPushButton("Load Slot")
-        load_s.clicked.connect(_load_slot)
-        bot.addWidget(load_s)
-        save_s = QPushButton("Save Slot")
-        save_s.clicked.connect(_save_slot)
-        bot.addWidget(save_s)
-        bot.addStretch()
-        close_btn = QPushButton("Close")
-        close_btn.clicked.connect(dlg.accept)
-        bot.addWidget(close_btn)
-        main_lay.addLayout(bot)
-        _load_slot()
-        dlg.exec()
 
     def _m913_diag_popup(self) -> None:
         dlg = QDialog(self)
@@ -1180,9 +909,6 @@ class DevicesView(QWidget):
                 self._razer_profile.poll_rate = state.poll_rate
             if state.idle_time:
                 self._razer_profile.idle_time = state.idle_time
-            if state.button_bindings:
-                for name, action in state.button_bindings.items():
-                    self._razer_profile.button_bindings[name] = action
             self._razer_ui_from_profile()
             self._razer_status.setText(
                 f"Read state from {dev_info.display_name}")
@@ -1209,8 +935,6 @@ class DevicesView(QWidget):
         p.dpi_stages = stages
         p.poll_rate = self._razer_poll_group.checkedId()
         p.idle_time = self._razer_idle_spin.value()
-        for name, combo in self._razer_button_combos.items():
-            p.button_bindings[name] = combo.currentText()
         sister = self._razer_sister_combo.currentText()
         if sister.startswith("Slot "):
             try:
@@ -1239,11 +963,6 @@ class DevicesView(QWidget):
         if poll_btn:
             poll_btn.setChecked(True)
         self._razer_idle_spin.setValue(getattr(p, "idle_time", 300))
-        for name, combo in self._razer_button_combos.items():
-            action = p.button_bindings.get(name, "default")
-            idx = combo.findText(action)
-            if idx >= 0:
-                combo.setCurrentIndex(idx)
         if p.sister_slot is not None:
             self._razer_sister_combo.setCurrentText(f"Slot {p.sister_slot}")
         else:
