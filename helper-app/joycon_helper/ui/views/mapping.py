@@ -12,7 +12,8 @@ from typing import Any, Dict, List, Optional, Set, TYPE_CHECKING
 from PyQt6.QtCore import QSize, Qt, QTimer
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QButtonGroup, QComboBox, QDialog, QDialogButtonBox, QGridLayout,
+    QButtonGroup, QComboBox, QDialog, QDialogButtonBox, QFileDialog,
+    QGridLayout,
     QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListWidget,
     QListWidgetItem, QMenu, QMessageBox, QPushButton, QRadioButton,
     QScrollArea, QSizePolicy, QSplitter, QTabWidget, QVBoxLayout, QWidget,
@@ -163,6 +164,20 @@ class MappingView(QWidget):
         self._learn_btn.setProperty("accent", True)
         self._learn_btn.toggled.connect(self._on_learn_toggled)
         color_row.addWidget(self._learn_btn)
+
+        # Position-edit mode (temporary drag-to-adjust)
+        self._edit_pos_btn = QPushButton("📐 Edit Positions")
+        self._edit_pos_btn.setCheckable(True)
+        self._edit_pos_btn.setToolTip(
+            "Enable drag mode to move hotspot dots — positions are saved to JSON"
+        )
+        self._edit_pos_btn.toggled.connect(self._on_edit_positions_toggled)
+        color_row.addWidget(self._edit_pos_btn)
+
+        self._export_pos_btn = QPushButton("💾 Export Positions")
+        self._export_pos_btn.setToolTip("Save current hotspot positions to a JSON file")
+        self._export_pos_btn.clicked.connect(self._export_positions)
+        color_row.addWidget(self._export_pos_btn)
 
         lay.addLayout(color_row)
         self._splitter.addWidget(panel)
@@ -637,6 +652,39 @@ class MappingView(QWidget):
             self._learn_btn.setText("🔴 Learning... (press a controller button)")
         else:
             self._learn_btn.setText("🎯 Learn Mode")
+
+    def _on_edit_positions_toggled(self, checked: bool) -> None:
+        for canvas, _ in self._device_list():
+            canvas.set_edit_mode(checked)
+        self._kbd_canvas.set_edit_mode(checked)
+        self._edit_pos_btn.setText(
+            "📐 Editing..." if checked else "📐 Edit Positions"
+        )
+
+    def _export_positions(self) -> None:
+        m913_hs = INCEDIUS_HOTSPOTS if self._m913_skin == "Incedius" else M913_HOTSPOTS
+        device_map = {
+            "joycon":   self._jc_canvas,
+            "m913":     self._m913_canvas,
+            "mouse":    self._mouse_canvas,
+            "keyboard": self._kbd_canvas,
+        }
+        data: Dict[str, list] = {}
+        for device, canvas in device_map.items():
+            data[device] = [
+                [name, nx, ny]
+                for name, nx, ny in canvas.export_positions()
+            ]
+
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Hotspot Positions", "hotspot_positions.json",
+            "JSON Files (*.json)",
+        )
+        if not path:
+            return
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, indent=2)
+        QMessageBox.information(self, "Exported", f"Positions saved to:\n{path}")
 
     def _on_search(self, text: str) -> None:
         self._search_text = text.strip().lower()

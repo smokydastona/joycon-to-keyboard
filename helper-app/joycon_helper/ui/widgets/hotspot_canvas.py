@@ -81,6 +81,10 @@ class HotspotCanvas(QGraphicsView):
         self._overlay_color = "#a03cc8"  # violet default
         self._mapping_labels: Dict[str, str] = {}
 
+        # Drag-edit mode (temporary position tweaking)
+        self._edit_mode = False
+        self._dragging: Optional[HotspotItem] = None
+
         # Pulse animation
         self._pulse_phase = 0.0
         self._pulse_timer = QTimer(self)
@@ -154,6 +158,18 @@ class HotspotCanvas(QGraphicsView):
     def get_hotspot_names(self) -> List[str]:
         return [hs.name for hs in self._hotspots]
 
+    def set_edit_mode(self, enabled: bool) -> None:
+        self._edit_mode = enabled
+        self._dragging = None
+        self.setCursor(
+            Qt.CursorShape.OpenHandCursor if enabled
+            else Qt.CursorShape.ArrowCursor
+        )
+
+    def export_positions(self) -> List[Tuple[str, float, float]]:
+        return [(hs.name, round(hs.norm_x, 6), round(hs.norm_y, 6))
+                for hs in self._hotspots]
+
     # -----------------------------------------------------------------
     # Events
     # -----------------------------------------------------------------
@@ -164,6 +180,15 @@ class HotspotCanvas(QGraphicsView):
             self.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
 
     def mousePressEvent(self, event: Any) -> None:
+        if self._edit_mode and event.button() == Qt.MouseButton.LeftButton:
+            name = self._pick_hotspot(event.position())
+            if name:
+                for hs in self._hotspots:
+                    if hs.name == name:
+                        self._dragging = hs
+                        self.setCursor(Qt.CursorShape.ClosedHandCursor)
+                        break
+            return
         if event.button() == Qt.MouseButton.LeftButton:
             name = self._pick_hotspot(event.position())
             if name:
@@ -175,12 +200,38 @@ class HotspotCanvas(QGraphicsView):
         super().mousePressEvent(event)
 
     def mouseMoveEvent(self, event: Any) -> None:
+        if self._edit_mode and self._dragging:
+            scene_pos = self.mapToScene(int(event.position().x()),
+                                        int(event.position().y()))
+            rect = self._scene.sceneRect()
+            if rect.width() > 0 and rect.height() > 0:
+                nx = max(0.0, min(1.0, scene_pos.x() / rect.width()))
+                ny = max(0.0, min(1.0, scene_pos.y() / rect.height()))
+                self._dragging.norm_x = nx
+                self._dragging.norm_y = ny
+                cx = nx * rect.width()
+                cy = ny * rect.height()
+                self._dragging.dot.setRect(
+                    cx - _DOT_RADIUS, cy - _DOT_RADIUS,
+                    _DOT_RADIUS * 2, _DOT_RADIUS * 2,
+                )
+                if self._dragging.label:
+                    lw = self._dragging.label.boundingRect().width()
+                    self._dragging.label.setPos(cx - lw / 2, cy + _TEXT_OFFSET_Y)
+            return
         name = self._pick_hotspot(event.position())
         if name != self._hovered:
             self._hovered = name
             self.hotspot_hovered.emit(name or "")
             self._update_hotspot_visuals()
         super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event: Any) -> None:
+        if self._edit_mode and self._dragging:
+            self._dragging = None
+            self.setCursor(Qt.CursorShape.OpenHandCursor)
+            return
+        super().mouseReleaseEvent(event)
 
     # -----------------------------------------------------------------
     # Internals
