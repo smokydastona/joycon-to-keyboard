@@ -194,6 +194,10 @@ DEFAULT_KEYMAP: Dict[int, Tuple[int, int]] = {
     29: (0, 0x20),           # 3
     30: (0, 0x21),           # 4
     31: (0, 0x1B),           # X
+    32: (0, 0x22),           # 5  (SL left Joy-Con)
+    33: (0, 0x23),           # 6  (SR left Joy-Con)
+    34: (0, 0x24),           # 7  (SL right Joy-Con)
+    35: (0, 0x25),           # 8  (SR right Joy-Con)
 }
 
 

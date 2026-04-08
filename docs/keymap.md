@@ -1,6 +1,6 @@
 # Key mapping
 
-This repo supports a full Joy-Con button set: movement, face buttons, shoulders/triggers, system buttons, stick clicks, and right stick directions.
+This repo supports a full Joy-Con button set: movement, face buttons, shoulders/triggers, system buttons, stick clicks, right stick directions, side-rail buttons (SL/SR), and motion gestures.
 
 ## Logical actions (key_id)
 
@@ -70,6 +70,15 @@ This repo supports a full Joy-Con button set: movement, face buttons, shoulders/
 | `30`   | Tilt Right  | Sustained right tilt (accelerometer X+)           |
 | `31`   | Flick       | Quick gyroscope twist (high angular velocity)    |
 
+### Side-rail buttons
+
+| key_id | Button | Description                        |
+|--------|--------|------------------------------------|
+| `32`   | SL(L)  | SL on left Joy-Con (inner rail)    |
+| `33`   | SR(L)  | SR on left Joy-Con (inner rail)    |
+| `34`   | SL(R)  | SL on right Joy-Con (inner rail)   |
+| `35`   | SR(R)  | SR on right Joy-Con (inner rail)   |
+
 ## Default USB outputs
 
 | key_id | Action       | Default output |
@@ -105,6 +114,10 @@ This repo supports a full Joy-Con button set: movement, face buttons, shoulders/
 | 29     | Tilt Left   | `3`            |
 | 30     | Tilt Right  | `4`            |
 | 31     | Flick       | `X`            |
+| 32     | SL(L)       | `5`            |
+| 33     | SR(L)       | `6`            |
+| 34     | SL(R)       | `7`            |
+| 35     | SR(R)       | `8`            |
 
 ## Stick auto-calibration
 

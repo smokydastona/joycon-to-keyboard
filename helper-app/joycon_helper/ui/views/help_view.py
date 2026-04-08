@@ -174,17 +174,17 @@ def _sections() -> List[Tuple[str, str, bool]]:
             "⌨️ Default Key Mapping",
             (
                 "## Joy-Con (R)\n"
-                "  A → Space    B → E    X → R    Y → Q\n"
-                "  R → Right Mouse    ZR → Left Mouse\n"
-                "  SR → 1    SL → 2\n"
-                "  Plus → Escape    Home → Tab\n"
-                "  Stick Press → Left Shift\n\n"
+                "  A → E    B → Q    X → R    Y → F\n"
+                "  R → Enter    ZR → Left Alt\n"
+                "  SL(R) → 7    SR(R) → 8\n"
+                "  Plus → Escape    Home → (unmapped)\n"
+                "  RStick Press → V\n\n"
                 "## Joy-Con (L)\n"
-                "  Up → W    Down → S    Left → A    Right → D\n"
-                "  L → Left Ctrl    ZL → Left Alt\n"
-                "  SL → 3    SR → 4\n"
-                "  Minus → M    Capture → G\n"
-                "  Stick Press → C\n\n"
+                "  DUp → W    DDown → S    DLeft → A    DRight → D\n"
+                "  L → Tab    ZL → Right Alt\n"
+                "  SL(L) → 5    SR(L) → 6\n"
+                "  Minus → ` (Grave)    Capture → G\n"
+                "  LStick Press → Left Shift\n\n"
                 "These defaults can be fully customized in the Mapping view."
             ),
             False,

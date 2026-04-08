@@ -118,6 +118,20 @@ bool keymap_lookup(uint8_t key_id, uint8_t* modifier, uint8_t* keycode) {
             *keycode = HID_KEY_X;
             return true;
 
+        // --- Side-rail buttons (SL / SR) ---
+        case 32: // SL (left Joy-Con) -> 5 (weapon slot 5)
+            *keycode = HID_KEY_5;
+            return true;
+        case 33: // SR (left Joy-Con) -> 6 (weapon slot 6)
+            *keycode = HID_KEY_6;
+            return true;
+        case 34: // SL (right Joy-Con) -> 7 (weapon slot 7)
+            *keycode = HID_KEY_7;
+            return true;
+        case 35: // SR (right Joy-Con) -> 8 (weapon slot 8)
+            *keycode = HID_KEY_8;
+            return true;
+
         default:
             return false;
     }

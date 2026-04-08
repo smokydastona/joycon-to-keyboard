@@ -51,6 +51,12 @@ enum {
     KEY_ID_MOTION_TILT_LEFT = 29,  // Sustained left tilt
     KEY_ID_MOTION_TILT_RIGHT = 30, // Sustained right tilt
     KEY_ID_MOTION_FLICK     = 31,  // Quick gyro flick (twist)
+
+    // Side-rail buttons (inner edge of each Joy-Con)
+    KEY_ID_BTN_SL_L         = 32,  // SL on left Joy-Con
+    KEY_ID_BTN_SR_L         = 33,  // SR on left Joy-Con
+    KEY_ID_BTN_SL_R         = 34,  // SL on right Joy-Con
+    KEY_ID_BTN_SR_R         = 35,  // SR on right Joy-Con
 };
 
 // Feed raw HID report bytes into the mapper.

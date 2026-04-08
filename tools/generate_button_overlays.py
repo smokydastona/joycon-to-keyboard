@@ -154,6 +154,11 @@ JOYCON_HOTSPOTS: list[tuple[str, int, int]] = [
     ("TiltL",  700,  870),
     ("TiltR",  836,  870),
     ("Flick",  890,  870),
+    # Side-rail buttons (inner edge of each Joy-Con)
+    ("SL(L)",  505,  355),
+    ("SR(L)",  505,  455),
+    ("SL(R)", 1030,  355),
+    ("SR(R)", 1030,  455),
 ]
 
 JOYCON_WIDE = {"ZL", "ZR", "L", "R", "LStick", "RStick"}

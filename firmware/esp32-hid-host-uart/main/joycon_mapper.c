@@ -513,6 +513,17 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
             emit_if_changed_ex(device_id, KEY_ID_BTN_ZR, (st.buttons1 & NIN_BTN1_ZR) != 0, &prev_zr);
         }
 
+        // --- Side-rail buttons (SL / SR) ---
+        {
+            static bool prev_sl_l = false, prev_sr_l = false;
+            static bool prev_sl_r = false, prev_sr_r = false;
+
+            emit_if_changed_ex(device_id, KEY_ID_BTN_SL_L, (st.buttons3 & NIN_BTN3_SL_L) != 0, &prev_sl_l);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_SR_L, (st.buttons3 & NIN_BTN3_SR_L) != 0, &prev_sr_l);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_SL_R, (st.buttons1 & NIN_BTN1_SL_R) != 0, &prev_sl_r);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_SR_R, (st.buttons1 & NIN_BTN1_SR_R) != 0, &prev_sr_r);
+        }
+
         // --- System buttons ---
         {
             static bool prev_plus = false, prev_minus = false;
