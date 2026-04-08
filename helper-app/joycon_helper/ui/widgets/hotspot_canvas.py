@@ -95,6 +95,11 @@ class HotspotCanvas(QGraphicsView):
     # -----------------------------------------------------------------
 
     def set_background(self, pixmap: QPixmap) -> None:
+        # Null out refs before clear(); clear() deletes the C++ objects,
+        # so any leftover hs.dot / hs.label would become dangling pointers.
+        for hs in self._hotspots:
+            hs.dot = None
+            hs.label = None
         self._scene.clear()
         self._bg_item = self._scene.addPixmap(pixmap)
         self._scene.setSceneRect(QRectF(pixmap.rect()))

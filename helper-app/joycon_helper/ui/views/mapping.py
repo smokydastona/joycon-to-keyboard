@@ -772,6 +772,29 @@ class MappingView(QWidget):
         self._refresh_mapping_visuals()
 
     def apply_theme(self, theme: ThemeEngine) -> None:
+        # Reload backgrounds from the new theme's asset paths
+        self._reload_backgrounds()
         for canvas, _ in self._device_list():
             canvas.apply_theme(theme)
         self._kbd_canvas.apply_theme(theme)
+        self._refresh_mapping_visuals()
+
+    def _reload_backgrounds(self) -> None:
+        """Reload all device backgrounds from current asset search roots."""
+        pm = self._main.assets.load_pixmap("joycons_none.png")
+        if pm:
+            self._jc_canvas.set_background(pm)
+
+        # Respect current M913 skin
+        m913_file = "incedius_none.png" if self._m913_skin == "Incedius" else "m913_none.png"
+        m913_pm = self._main.assets.load_pixmap(m913_file)
+        if m913_pm:
+            self._m913_canvas.set_background(m913_pm)
+
+        mouse_pm = self._main.assets.load_pixmap("razer_none.png")
+        if mouse_pm:
+            self._mouse_canvas.set_background(mouse_pm)
+
+        kbd_pm = self._main.assets.load_pixmap("keyboard.png")
+        if kbd_pm:
+            self._kbd_canvas.set_background(kbd_pm)
