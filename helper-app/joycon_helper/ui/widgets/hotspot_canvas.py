@@ -82,6 +82,12 @@ class HotspotCanvas(QGraphicsView):
         self._mapping_labels: Dict[str, str] = {}
         self._shapes: Dict[str, Any] = {}
 
+        # Pale composite (all buttons dimmed) and bright individual overlay
+        self._pale_pixmap: Optional[QPixmap] = None
+        self._pale_item: Optional[QGraphicsPixmapItem] = None
+        self._bright_pixmap: Optional[QPixmap] = None
+        self._bright_item: Optional[QGraphicsPixmapItem] = None
+
         # Drag-edit mode (temporary position tweaking)
         self._edit_mode = False
         self._dragging: Optional[HotspotItem] = None
@@ -105,9 +111,18 @@ class HotspotCanvas(QGraphicsView):
         for hs in self._hotspots:
             hs.dot = None
             hs.label = None
+        self._pale_item = None
+        self._bright_item = None
         self._scene.clear()
         self._bg_item = self._scene.addPixmap(pixmap)
         self._scene.setSceneRect(QRectF(pixmap.rect()))
+        # Re-add pale/bright overlay layers after clear
+        if self._pale_pixmap and not self._pale_pixmap.isNull():
+            self._pale_item = self._scene.addPixmap(self._pale_pixmap)
+            self._pale_item.setZValue(5)
+        if self._bright_pixmap and not self._bright_pixmap.isNull():
+            self._bright_item = self._scene.addPixmap(self._bright_pixmap)
+            self._bright_item.setZValue(8)
         self._rebuild_hotspot_items()
         self.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
 
@@ -127,6 +142,26 @@ class HotspotCanvas(QGraphicsView):
     def set_overlay_color(self, hex_color: str) -> None:
         self._overlay_color = hex_color
         self._update_hotspot_visuals()
+
+    def set_pale_overlay(self, pixmap: Optional[QPixmap]) -> None:
+        """Set (or clear) the pale composite overlay showing all buttons dimmed."""
+        self._pale_pixmap = pixmap
+        if self._pale_item and self._pale_item.scene():
+            self._scene.removeItem(self._pale_item)
+            self._pale_item = None
+        if pixmap and not pixmap.isNull():
+            self._pale_item = self._scene.addPixmap(pixmap)
+            self._pale_item.setZValue(5)
+
+    def set_bright_overlay(self, pixmap: Optional[QPixmap]) -> None:
+        """Set (or clear) the bright overlay for the currently selected button."""
+        self._bright_pixmap = pixmap
+        if self._bright_item and self._bright_item.scene():
+            self._scene.removeItem(self._bright_item)
+            self._bright_item = None
+        if pixmap and not pixmap.isNull():
+            self._bright_item = self._scene.addPixmap(pixmap)
+            self._bright_item.setZValue(8)
 
     def update_hotspot_state(self, name: str, *,
                              key_id: Optional[int] = None,
@@ -450,9 +485,17 @@ class HotspotCanvas(QGraphicsView):
                 fill_color = c["muted"]
                 border_color = c["border"]
 
-            # Hover effect
+            # Hover effect — reduce dot opacity when pale overlay supplies the texture
             is_hovered = hs.name == self._hovered
-            opacity = 0.95 if is_hovered or hs.name == self._selected else 0.75
+            has_pale = self._pale_item is not None
+            if hs.name == self._selected or is_hovered:
+                opacity = 0.85
+            elif has_pale and hs.mapped:
+                opacity = 0.25
+            elif has_pale:
+                opacity = 0.15
+            else:
+                opacity = 0.75 if not is_hovered else 0.95
 
             fc = QColor(fill_color)
             fc.setAlphaF(opacity)

@@ -255,5 +255,19 @@ class AssetManager:
         extra_roots.append(repo / "docs" / "ui" / "button_overlays" / color / device)
         return self.find_file(filename, extra_roots)
 
+    def find_pale_overlay(self, device: str, color: str) -> Optional[Path]:
+        """Return path to the pale composite PNG for *device* and *color*."""
+        filename = f"pale_{device}.png"
+        extra_roots: List[Path] = []
+        try:
+            cwd = Path.cwd()
+            extra_roots.append(cwd / "docs" / "ui" / "button_overlays" / color / device)
+        except Exception:
+            pass
+        here = Path(__file__).resolve()
+        repo = here.parents[3]
+        extra_roots.append(repo / "docs" / "ui" / "button_overlays" / color / device)
+        return self.find_file(filename, extra_roots)
+
     def clear_cache(self) -> None:
         self._cache.clear()

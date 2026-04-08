@@ -337,6 +337,62 @@ class MappingView(QWidget):
         if kbd_pm:
             self._kbd_canvas.set_background(kbd_pm)
 
+        # Load pale composite overlays for each device canvas
+        self._load_pale_overlays()
+
+    # -----------------------------------------------------------------
+    # Overlay helpers (pale composite + bright individual)
+    # -----------------------------------------------------------------
+
+    # Maps canvas object-id → (device_name_for_overlays, overlay_prefix)
+    _CANVAS_DEVICE_INFO = {
+        "_jc_canvas":    ("joycon",   "jc"),
+        "_m913_canvas":  ("m913",     "m913"),
+        "_mouse_canvas": ("mouse",    "mouse"),
+        "_kbd_canvas":   ("keyboard", "kbd"),
+    }
+
+    def _load_pale_overlays(self) -> None:
+        """Load pale composite overlays for all device canvases."""
+        color = getattr(self, "_overlay_color", "violet")
+        for attr, (device, _prefix) in self._CANVAS_DEVICE_INFO.items():
+            canvas: HotspotCanvas = getattr(self, attr, None)
+            if canvas is None:
+                continue
+            # Use incedius device name when that skin is active
+            actual_device = device
+            if attr == "_m913_canvas" and getattr(self, "_m913_skin", "Stock") == "Incedius":
+                actual_device = "incedius"
+            path = self._main.assets.find_pale_overlay(actual_device, color)
+            if path:
+                pm = self._main.assets.load_pixmap(path.name, extra_roots=[path.parent])
+                canvas.set_pale_overlay(pm)
+            else:
+                canvas.set_pale_overlay(None)
+
+    def _load_bright_overlay(self, canvas: HotspotCanvas, button_name: str) -> None:
+        """Load the full-brightness individual overlay for *button_name*."""
+        color = getattr(self, "_overlay_color", "violet")
+        # Determine device & prefix from the canvas
+        device = "joycon"
+        prefix = "jc"
+        for attr, (d, p) in self._CANVAS_DEVICE_INFO.items():
+            if getattr(self, attr, None) is canvas:
+                device = d
+                prefix = p
+                if attr == "_m913_canvas" and getattr(self, "_m913_skin", "Stock") == "Incedius":
+                    device = "incedius"
+                    prefix = "inc"
+                break
+        safe_name = button_name.replace("/", "_").replace("\\", "_").replace(".", "_dot_")
+        overlay_name = f"{prefix}_{safe_name}"
+        path = self._main.assets.find_overlay_image(device, overlay_name, color)
+        if path:
+            pm = self._main.assets.load_pixmap(path.name, extra_roots=[path.parent])
+            canvas.set_bright_overlay(pm)
+        else:
+            canvas.set_bright_overlay(None)
+
     # -----------------------------------------------------------------
     # Active device helpers
     # -----------------------------------------------------------------
@@ -362,6 +418,10 @@ class MappingView(QWidget):
         return self._device_list()[idx][1]
 
     def _on_device_tab_changed(self, index: int) -> None:
+        # Clear bright overlay + selection on all canvases
+        for canvas, _ in self._device_list():
+            canvas.set_bright_overlay(None)
+            canvas.set_selected(None)
         self._selected_hotspot = None
         # Guard: signal fires during _build_canvas_panel before _build_binding_panel
         if hasattr(self, "_sel_label"):
@@ -422,7 +482,9 @@ class MappingView(QWidget):
 
     def _on_hotspot_clicked(self, name: str) -> None:
         self._selected_hotspot = name
-        self._active_canvas().set_selected(name)
+        canvas = self._active_canvas()
+        canvas.set_selected(name)
+        self._load_bright_overlay(canvas, name)
         self._sel_label.setText(f"Selected: {name}")
 
         profile = self._main.get_profile()
@@ -662,6 +724,11 @@ class MappingView(QWidget):
         hex_color = RAINBOW_COLORS.get(color_name, "#a03cc8")
         for canvas, _ in self._device_list():
             canvas.set_overlay_color(hex_color)
+        # Reload pale + bright overlays for new colour
+        self._load_pale_overlays()
+        if self._selected_hotspot:
+            canvas = self._active_canvas()
+            self._load_bright_overlay(canvas, self._selected_hotspot)
 
     def _on_learn_toggled(self, checked: bool) -> None:
         self._learn_mode = checked
