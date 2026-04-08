@@ -131,6 +131,7 @@ class MappingView(QWidget):
         skin_row.addWidget(QLabel("Skin:"))
         self._m913_skin_combo = QComboBox()
         self._m913_skin_combo.addItems(["Stock", "Incedius"])
+        self._m913_skin_combo.setToolTip("Select the M913 keypad skin overlay")
         self._m913_skin_combo.currentTextChanged.connect(self._on_m913_skin_changed)
         skin_row.addWidget(self._m913_skin_combo)
         skin_row.addStretch()
@@ -163,6 +164,7 @@ class MappingView(QWidget):
         self._color_combo = QComboBox()
         self._color_combo.addItems(RAINBOW_NAMES)
         self._color_combo.setCurrentText(self._overlay_color)
+        self._color_combo.setToolTip("Color used to highlight hotspot dots on the canvas")
         self._color_combo.currentTextChanged.connect(self._on_color_changed)
         color_row.addWidget(self._color_combo)
         color_row.addStretch()
@@ -171,6 +173,7 @@ class MappingView(QWidget):
         self._learn_btn = QPushButton("🎯 Learn Mode")
         self._learn_btn.setCheckable(True)
         self._learn_btn.setProperty("accent", True)
+        self._learn_btn.setToolTip("Click a hotspot then press a key on your controller to bind it")
         self._learn_btn.toggled.connect(self._on_learn_toggled)
         color_row.addWidget(self._learn_btn)
 

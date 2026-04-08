@@ -85,6 +85,7 @@ class DiagnosticsView(QWidget):
         # Performance stats
         perf_row = QHBoxLayout()
         self._perf_check = QCheckBox("Show performance stats")
+        self._perf_check.setToolTip("Display input latency and throughput statistics")
         self._perf_check.stateChanged.connect(self._toggle_perf)
         perf_row.addWidget(self._perf_check)
         self._perf_label = QLabel("")
@@ -222,15 +223,18 @@ class DiagnosticsView(QWidget):
         btn_row = QHBoxLayout()
         self._fw_check_btn = QPushButton("Check Versions")
         self._fw_check_btn.setProperty("accent", True)
+        self._fw_check_btn.setToolTip("Query the device and GitHub for available firmware versions")
         self._fw_check_btn.clicked.connect(self._fw_check_versions)
         btn_row.addWidget(self._fw_check_btn)
 
         self._fw_update_btn = QPushButton("Update Firmware")
         self._fw_update_btn.setEnabled(False)
+        self._fw_update_btn.setToolTip("Download and flash the latest firmware via OTA")
         self._fw_update_btn.clicked.connect(self._fw_do_update)
         btn_row.addWidget(self._fw_update_btn)
 
         self._fw_flash_file_btn = QPushButton("Flash from File…")
+        self._fw_flash_file_btn.setToolTip("Flash a local firmware binary you already downloaded")
         self._fw_flash_file_btn.clicked.connect(self._fw_flash_from_file)
         btn_row.addWidget(self._fw_flash_file_btn)
 
@@ -259,14 +263,17 @@ class DiagnosticsView(QWidget):
         btn_row = QHBoxLayout()
         self._init_auto_btn = QPushButton("Download && Flash Latest")
         self._init_auto_btn.setProperty("accent", True)
+        self._init_auto_btn.setToolTip("Auto-download the latest firmware and flash it to a blank board")
         self._init_auto_btn.clicked.connect(self._init_flash_auto)
         btn_row.addWidget(self._init_auto_btn)
 
         self._init_file_btn = QPushButton("Flash Files…")
+        self._init_file_btn.setToolTip("Flash firmware from pre-downloaded binary files")
         self._init_file_btn.clicked.connect(self._init_flash_from_files)
         btn_row.addWidget(self._init_file_btn)
 
         self._init_backup_btn = QPushButton("Backup Flash…")
+        self._init_backup_btn.setToolTip("Read and save the current flash contents before making changes")
         self._init_backup_btn.clicked.connect(self._init_flash_backup)
         btn_row.addWidget(self._init_backup_btn)
 

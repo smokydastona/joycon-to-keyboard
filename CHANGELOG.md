@@ -9,6 +9,18 @@ Until then, entries are grouped by date.
 
 - Capture real controller HID reports and implement evidence-based mapping in the ESP32 host mapper (no guessing report layouts).
 
+### Added (UX polish — reWASD-inspired improvements)
+
+- **Visual Macro Builder**: dual-mode macro editor — drag-to-reorder step list (key press/release/delay) with inline editing, and a raw JSON toggle for power users.
+- **App Auto-Switch Table**: replaced the app switcher list with a 3-column table (Application, Slot combo, Remove button) plus Browse (`.exe` file picker) and Detect App buttons.
+- **Enhanced Tray Menu**: right-click tray icon now includes Profiles ► submenu (switch slots 0–3 with radio checks), Toggle Overlay, and Auto-Switch toggle.
+- **First-Run Onboarding Wizard**: 5-page QDialog wizard (Welcome → Connect USB → Pair Controller → Test Input → Done) gated by QSettings; re-run from Settings → Developer.
+- **Enhanced Overlay**: shows profile name, active layer, and turbo state. Right-click context menu with opacity presets (30/50/70/100%) and compact mode toggle. Double-click toggles compact. Auto-hide timer support.
+- **Centralized Settings Dialog**: 4-tab QTabWidget (General, Overlay, Theme, Developer) with opacity slider, auto-hide spinner, baud rate, log level, and onboarding reset.
+- **Toast Notifications**: non-blocking slide-in alerts for serial connect/disconnect and quick warnings. Click to dismiss, auto-dismiss after 3.5s, stacks up to 3.
+- **Comprehensive Tooltips**: 31 interactive controls across all views now have descriptive tooltips.
+- **Help tab updated**: Settings & System Tray section reflects new tabbed dialog, overlay features, onboarding wizard, and toast notifications. Using Bind Bandit section documents visual macro builder and enhanced overlay.
+
 ### Added (Mouse — M913 & Razer improvements, pass 3)
 
 - **M913 wireless PID support**: enumerate now detects both wired (PID 0xFA07) and wireless dongle (PID 0xFA08).

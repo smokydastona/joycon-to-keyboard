@@ -14,7 +14,8 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QCheckBox, QComboBox, QFileDialog, QGroupBox, QHBoxLayout, QInputDialog,
     QLabel, QLineEdit, QListWidget, QListWidgetItem, QMessageBox,
-    QPushButton, QScrollArea, QTextEdit, QVBoxLayout, QWidget,
+    QPushButton, QScrollArea, QTableWidget, QTableWidgetItem, QTextEdit,
+    QVBoxLayout, QWidget,
 )
 
 from ..theme import ThemeEngine
@@ -145,6 +146,7 @@ class ProfilesView(QWidget):
         preset_lay.addWidget(preset_info)
 
         self._preset_combo = QComboBox()
+        self._preset_combo.setToolTip("Pick a game genre to load a recommended starting key layout")
         self._preset_combo.addItems([
             "FPS / Shooter",
             "Racing / Driving",
@@ -166,11 +168,13 @@ class ProfilesView(QWidget):
 
         self._undo_btn = QPushButton("↩ Undo (Ctrl+Z)")
         self._undo_btn.setEnabled(False)
+        self._undo_btn.setToolTip("Revert the last profile change")
         self._undo_btn.clicked.connect(self._main.undo)
         undo_lay.addWidget(self._undo_btn)
 
         self._redo_btn = QPushButton("↪ Redo (Ctrl+Y)")
         self._redo_btn.setEnabled(False)
+        self._redo_btn.setToolTip("Re-apply the last undone change")
         self._redo_btn.clicked.connect(self._main.redo)
         undo_lay.addWidget(self._redo_btn)
 
@@ -181,26 +185,43 @@ class ProfilesView(QWidget):
         switch_lay = QVBoxLayout(switch_group)
 
         self._switch_enable = QCheckBox("Auto-switch profiles by foreground app")
+        self._switch_enable.setToolTip(
+            "When enabled, the active profile slot changes automatically\n"
+            "based on which application is in the foreground."
+        )
         self._switch_enable.toggled.connect(self._toggle_app_switcher)
         switch_lay.addWidget(self._switch_enable)
 
-        self._switch_list = QListWidget()
-        self._switch_list.setMaximumHeight(120)
-        switch_lay.addWidget(self._switch_list)
+        # Table: App Name | Slot | Remove
+        self._switch_table = QTableWidget(0, 3)
+        self._switch_table.setHorizontalHeaderLabels(["Application", "Slot", ""])
+        self._switch_table.horizontalHeader().setStretchLastSection(False)
+        self._switch_table.setColumnWidth(0, 180)
+        self._switch_table.setColumnWidth(1, 60)
+        self._switch_table.setColumnWidth(2, 60)
+        self._switch_table.setMaximumHeight(160)
+        self._switch_table.setToolTip("Rules mapping foreground applications to profile slots")
+        self._switch_table.verticalHeader().setVisible(False)
+        switch_lay.addWidget(self._switch_table)
 
         switch_btn_row = QHBoxLayout()
-        detect_btn = QPushButton("Detect App")
-        detect_btn.setToolTip("Add a rule for the currently active window")
+        detect_btn = QPushButton("🔍 Detect App")
+        detect_btn.setToolTip(
+            "Automatically detect the currently active window\n"
+            "and add a rule for its executable."
+        )
         detect_btn.clicked.connect(self._app_switch_detect)
         switch_btn_row.addWidget(detect_btn)
 
+        browse_btn = QPushButton("📂 Browse...")
+        browse_btn.setToolTip("Browse for an executable file to add a rule for")
+        browse_btn.clicked.connect(self._app_switch_browse)
+        switch_btn_row.addWidget(browse_btn)
+
         add_btn = QPushButton("Add Rule")
+        add_btn.setToolTip("Manually type an executable name to add a rule")
         add_btn.clicked.connect(self._app_switch_add)
         switch_btn_row.addWidget(add_btn)
-
-        remove_btn = QPushButton("Remove")
-        remove_btn.clicked.connect(self._app_switch_remove)
-        switch_btn_row.addWidget(remove_btn)
         switch_lay.addLayout(switch_btn_row)
 
         # Default slot
@@ -208,6 +229,7 @@ class ProfilesView(QWidget):
         default_row.addWidget(QLabel("Default slot:"))
         self._default_slot_combo = QComboBox()
         self._default_slot_combo.addItems(["0", "1", "2", "3"])
+        self._default_slot_combo.setToolTip("Profile slot used when no rule matches the foreground app")
         self._default_slot_combo.currentIndexChanged.connect(self._app_switch_default_changed)
         default_row.addWidget(self._default_slot_combo)
         default_row.addStretch()
@@ -216,7 +238,7 @@ class ProfilesView(QWidget):
         left.addWidget(switch_group)
 
         # Populate rules from disk
-        self._refresh_switch_list()
+        self._refresh_switch_table()
 
         left.addStretch()
 
@@ -492,12 +514,38 @@ class ProfilesView(QWidget):
     def _toggle_app_switcher(self, checked: bool) -> None:
         self._main._app_switcher.enabled = checked
 
-    def _refresh_switch_list(self) -> None:
-        self._switch_list.clear()
-        for rule in self._main._app_switcher.rules:
+    def _refresh_switch_table(self) -> None:
+        rules = self._main._app_switcher.rules
+        self._switch_table.setRowCount(len(rules))
+        for i, rule in enumerate(rules):
             exe = rule.get("exe", "?")
             slot = rule.get("slot", 0)
-            self._switch_list.addItem(f"{exe}  →  Slot {slot}")
+
+            exe_item = QTableWidgetItem(exe)
+            exe_item.setFlags(exe_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+            self._switch_table.setItem(i, 0, exe_item)
+
+            slot_combo = QComboBox()
+            slot_combo.addItems(["0", "1", "2", "3"])
+            slot_combo.setCurrentIndex(slot)
+            slot_combo.currentIndexChanged.connect(
+                lambda new_slot, row=i: self._app_switch_slot_changed(row, new_slot)
+            )
+            self._switch_table.setCellWidget(i, 1, slot_combo)
+
+            rm_btn = QPushButton("×")
+            rm_btn.setFixedWidth(40)
+            rm_btn.setProperty("danger", True)
+            rm_btn.setToolTip("Remove this rule")
+            rm_btn.clicked.connect(lambda _, row=i: self._app_switch_remove(row))
+            self._switch_table.setCellWidget(i, 2, rm_btn)
+
+    def _app_switch_slot_changed(self, row: int, new_slot: int) -> None:
+        rules = self._main._app_switcher.rules
+        if 0 <= row < len(rules):
+            rules[row]["slot"] = new_slot
+            self._main._app_switcher.set_rules(rules)
+            save_rules(rules)
 
     def _app_switch_detect(self) -> None:
         exe = _get_foreground_exe()
@@ -514,7 +562,27 @@ class ProfilesView(QWidget):
         rules.append({"exe": exe, "slot": slot})
         self._main._app_switcher.set_rules(rules)
         save_rules(rules)
-        self._refresh_switch_list()
+        self._refresh_switch_table()
+
+    def _app_switch_browse(self) -> None:
+        from PyQt6.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Select Application", "", "Executables (*.exe);;All Files (*)"
+        )
+        if not path:
+            return
+        import os
+        exe = os.path.basename(path).lower()
+        slot = self._main._slot
+        rules = self._main._app_switcher.rules
+        for r in rules:
+            if r.get("exe", "").lower() == exe:
+                QMessageBox.information(self, "Browse", f"'{exe}' is already mapped.")
+                return
+        rules.append({"exe": exe, "slot": slot})
+        self._main._app_switcher.set_rules(rules)
+        save_rules(rules)
+        self._refresh_switch_table()
 
     def _app_switch_add(self) -> None:
         from PyQt6.QtWidgets import QInputDialog
@@ -531,18 +599,15 @@ class ProfilesView(QWidget):
         rules.append({"exe": exe, "slot": slot})
         self._main._app_switcher.set_rules(rules)
         save_rules(rules)
-        self._refresh_switch_list()
+        self._refresh_switch_table()
 
-    def _app_switch_remove(self) -> None:
-        row = self._switch_list.currentRow()
-        if row < 0:
-            return
+    def _app_switch_remove(self, row: int) -> None:
         rules = self._main._app_switcher.rules
         if 0 <= row < len(rules):
             rules.pop(row)
             self._main._app_switcher.set_rules(rules)
             save_rules(rules)
-            self._refresh_switch_list()
+            self._refresh_switch_table()
 
     def _app_switch_default_changed(self, index: int) -> None:
         self._main._app_switcher.set_default_slot(index)

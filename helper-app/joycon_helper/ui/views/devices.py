@@ -133,6 +133,7 @@ class DevicesView(QWidget):
         conn_lay.addWidget(QLabel("Device:"))
         self._m913_dev_combo = QComboBox()
         self._m913_dev_combo.setMinimumWidth(200)
+        self._m913_dev_combo.setToolTip("Select a detected M913 keypad from the list")
         self._m913_dev_combo.currentIndexChanged.connect(self._m913_on_device_selected)
         conn_lay.addWidget(self._m913_dev_combo, 1)
         scan_btn = QPushButton("Scan")
@@ -154,17 +155,20 @@ class DevicesView(QWidget):
         profile_row.addSpacing(16)
         profile_row.addWidget(QLabel("Sister slot:"))
         self._m913_sister_combo = QComboBox()
+        self._m913_sister_combo.setToolTip("Link this M913 to a Joy-Con profile slot so they switch together")
         self._m913_sister_combo.addItems(
             ["None", "Slot 0", "Slot 1", "Slot 2", "Slot 3"])
         profile_row.addWidget(self._m913_sister_combo)
         profile_row.addSpacing(16)
         profile_row.addWidget(QLabel("Layout:"))
         self._m913_layout_combo = QComboBox()
+        self._m913_layout_combo.setToolTip("Button layout — Stock is factory, IncediusMod has custom key positions")
         self._m913_layout_combo.addItems(["Stock M913", "IncediusMod"])
         self._m913_layout_combo.currentTextChanged.connect(
             self._m913_on_layout_changed)
         profile_row.addWidget(self._m913_layout_combo)
         self._m913_edit_layout_btn = QPushButton("Edit Map…")
+        self._m913_edit_layout_btn.setToolTip("Open the IncediusMod button layout editor")
         self._m913_edit_layout_btn.setEnabled(False)
         self._m913_edit_layout_btn.clicked.connect(self._m913_edit_incedius)
         profile_row.addWidget(self._m913_edit_layout_btn)
@@ -230,6 +234,7 @@ class DevicesView(QWidget):
         led_row1 = QHBoxLayout()
         led_row1.addWidget(QLabel("Mode:"))
         self._m913_led_mode = QComboBox()
+        self._m913_led_mode.setToolTip("LED lighting effect pattern")
         self._m913_led_mode.addItems([
             "off", "steady", "respiration", "rainbow",
             "wave", "reactive", "ripple", "starlight", "breath_single",
@@ -241,6 +246,7 @@ class DevicesView(QWidget):
         self._m913_led_speed = QSpinBox()
         self._m913_led_speed.setRange(1, 5)
         self._m913_led_speed.setValue(3)
+        self._m913_led_speed.setToolTip("Animation speed for the selected LED effect")
         led_row1.addWidget(self._m913_led_speed)
         led_row1.addStretch()
         led_lay.addLayout(led_row1)
@@ -263,6 +269,7 @@ class DevicesView(QWidget):
         self._m913_led_brightness = QSpinBox()
         self._m913_led_brightness.setRange(0, 255)
         self._m913_led_brightness.setValue(255)
+        self._m913_led_brightness.setToolTip("LED brightness level (0=off, 255=max)")
         led_row2.addWidget(self._m913_led_brightness)
         led_row2.addStretch()
         led_lay.addLayout(led_row2)
@@ -349,6 +356,7 @@ class DevicesView(QWidget):
         conn_lay.addWidget(QLabel("Device:"))
         self._razer_dev_combo = QComboBox()
         self._razer_dev_combo.setMinimumWidth(200)
+        self._razer_dev_combo.setToolTip("Select a detected Razer mouse from the list")
         self._razer_dev_combo.currentIndexChanged.connect(
             self._razer_on_device_selected)
         conn_lay.addWidget(self._razer_dev_combo, 1)
@@ -391,6 +399,7 @@ class DevicesView(QWidget):
         profile_row.addSpacing(16)
         profile_row.addWidget(QLabel("Sister slot:"))
         self._razer_sister_combo = QComboBox()
+        self._razer_sister_combo.setToolTip("Link this Razer mouse to a Joy-Con profile slot so they switch together")
         self._razer_sister_combo.addItems(
             ["None", "Slot 0", "Slot 1", "Slot 2", "Slot 3"])
         profile_row.addWidget(self._razer_sister_combo)
@@ -472,6 +481,7 @@ class DevicesView(QWidget):
         self._razer_idle_spin.setRange(60, 900)
         self._razer_idle_spin.setSingleStep(30)
         self._razer_idle_spin.setValue(300)
+        self._razer_idle_spin.setToolTip("Seconds of inactivity before the mouse enters sleep mode")
         idle_lay.addWidget(self._razer_idle_spin)
         idle_lay.addStretch()
         lay.addWidget(idle_group)
@@ -480,6 +490,7 @@ class DevicesView(QWidget):
         hyper_group = QGroupBox("Hypershift")
         hyper_lay = QVBoxLayout(hyper_group)
         self._razer_hypershift = QCheckBox("Enable Hypershift layer")
+        self._razer_hypershift.setToolTip("Activate an alternate button layer while holding the designated key")
         hyper_lay.addWidget(self._razer_hypershift)
         hyper_lay.addWidget(QLabel(
             "When enabled, holding the designated button activates "

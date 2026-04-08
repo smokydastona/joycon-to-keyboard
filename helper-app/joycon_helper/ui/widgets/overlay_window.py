@@ -1,15 +1,15 @@
 """Always-on-top overlay window.
 
 Shows a minimal, semi-transparent display of current key state, macro activity,
-and slot information over other applications.
+slot information, active layer, and turbo state over other applications.
 """
 from __future__ import annotations
 
 from typing import Dict, Optional, Set
 
-from PyQt6.QtCore import QPoint, QTimer, Qt
-from PyQt6.QtGui import QColor, QFont, QPainter
-from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
+from PyQt6.QtCore import QPoint, QSettings, QTimer, Qt
+from PyQt6.QtGui import QAction, QColor, QFont, QPainter
+from PyQt6.QtWidgets import QLabel, QMenu, QVBoxLayout, QWidget
 
 from ..theme import ThemeEngine
 
@@ -17,13 +17,20 @@ from ..theme import ThemeEngine
 class OverlayWindow(QWidget):
     """Semi-transparent always-on-top key-state overlay."""
 
+    # Opacity presets available from the context menu
+    _OPACITY_PRESETS = [0.3, 0.5, 0.7, 1.0]
+
     def __init__(self, theme: ThemeEngine, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._theme = theme
         self._active_keys: Set[str] = set()
         self._slot_text = "Slot: —"
+        self._profile_name = ""
+        self._layer_text = ""
+        self._turbo_active = False
         self._macro_text = ""
         self._last_key_text = ""
+        self._compact = False
         self.is_closed = False
 
         self.setWindowFlags(
@@ -34,8 +41,13 @@ class OverlayWindow(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
 
-        self.setFixedSize(260, 140)
-        self._opacity = 0.85
+        self._full_size = (280, 170)
+        self._compact_size = (180, 60)
+        self.setFixedSize(*self._full_size)
+
+        # Load saved opacity or default
+        settings = QSettings()
+        self._opacity = settings.value("overlay_opacity", 0.85, type=float)
 
         # Drag support
         self._drag_pos: Optional[QPoint] = None
@@ -46,8 +58,26 @@ class OverlayWindow(QWidget):
         self._fade_timer.setInterval(1500)
         self._fade_timer.timeout.connect(self._clear_last_key)
 
+        # Auto-hide timer (0 = disabled)
+        self._auto_hide_secs = settings.value("overlay_auto_hide", 0, type=int)
+        self._auto_hide_timer = QTimer(self)
+        self._auto_hide_timer.setSingleShot(True)
+        self._auto_hide_timer.timeout.connect(self._auto_hide)
+
     def set_slot(self, slot: int) -> None:
         self._slot_text = f"Slot: {slot}"
+        self.update()
+
+    def set_profile_name(self, name: str) -> None:
+        self._profile_name = name
+        self.update()
+
+    def set_layer(self, layer_name: str) -> None:
+        self._layer_text = f"Layer: {layer_name}" if layer_name else ""
+        self.update()
+
+    def set_turbo(self, active: bool) -> None:
+        self._turbo_active = active
         self.update()
 
     def set_last_key(self, pressed: bool, key_name: str) -> None:
@@ -58,6 +88,7 @@ class OverlayWindow(QWidget):
         else:
             self._active_keys.discard(key_name)
         self._fade_timer.start()
+        self._restart_auto_hide()
         self.update()
 
     def set_macro(self, macro_id: str, state: str) -> None:
@@ -67,6 +98,14 @@ class OverlayWindow(QWidget):
     def _clear_last_key(self) -> None:
         self._last_key_text = ""
         self.update()
+
+    def _restart_auto_hide(self) -> None:
+        if self._auto_hide_secs > 0:
+            self.show()
+            self._auto_hide_timer.start(self._auto_hide_secs * 1000)
+
+    def _auto_hide(self) -> None:
+        self.hide()
 
     def paintEvent(self, event: object) -> None:
         c = self._theme.theme["colors"]
@@ -96,8 +135,39 @@ class OverlayWindow(QWidget):
         painter.setFont(font)
 
         y = 16
-        painter.drawText(12, y + 12, self._slot_text)
-        y += 24
+
+        # Slot + profile name
+        slot_line = self._slot_text
+        if self._profile_name:
+            slot_line += f"  —  {self._profile_name}"
+        painter.drawText(12, y + 12, slot_line)
+        y += 22
+
+        if self._compact:
+            # Compact mode: just show last key
+            if self._last_key_text:
+                font_key = QFont(self._theme.typo("font_family"), 12, QFont.Weight.Bold)
+                painter.setFont(font_key)
+                key_color = QColor(c["accent"])
+                key_color.setAlphaF(0.95)
+                painter.setPen(key_color)
+                painter.drawText(12, y + 12, self._last_key_text)
+            painter.end()
+            return
+
+        # Layer + turbo indicators
+        indicators: list[str] = []
+        if self._layer_text:
+            indicators.append(self._layer_text)
+        if self._turbo_active:
+            indicators.append("⚡ Turbo")
+        if indicators:
+            muted = QColor(c.get("warning", "#c09840"))
+            muted.setAlphaF(0.85)
+            painter.setPen(muted)
+            painter.drawText(12, y + 12, "  |  ".join(indicators))
+            y += 20
+            painter.setPen(text_color)
 
         if self._last_key_text:
             font_key = QFont(self._theme.typo("font_family"), 14, QFont.Weight.Bold)
@@ -123,6 +193,58 @@ class OverlayWindow(QWidget):
             painter.drawText(12, y + 12, self._macro_text)
 
         painter.end()
+
+    # -----------------------------------------------------------------
+    # Context menu (right-click)
+    # -----------------------------------------------------------------
+
+    def contextMenuEvent(self, event: object) -> None:
+        menu = QMenu(self)
+
+        # Opacity presets
+        opacity_menu = menu.addMenu("Opacity")
+        for level in self._OPACITY_PRESETS:
+            pct = int(level * 100)
+            act = QAction(f"{pct}%", self)
+            act.setCheckable(True)
+            act.setChecked(abs(self._opacity - level) < 0.05)
+            act.triggered.connect(lambda checked, o=level: self._set_opacity(o))
+            opacity_menu.addAction(act)
+
+        # Compact mode toggle
+        compact_act = QAction("Compact Mode", self)
+        compact_act.setCheckable(True)
+        compact_act.setChecked(self._compact)
+        compact_act.triggered.connect(self._toggle_compact)
+        menu.addAction(compact_act)
+
+        menu.addSeparator()
+        close_act = menu.addAction("Close Overlay")
+        close_act.triggered.connect(self.close)
+
+        if hasattr(event, 'globalPos'):
+            menu.exec(event.globalPos())
+
+    def _set_opacity(self, opacity: float) -> None:
+        self._opacity = opacity
+        settings = QSettings()
+        settings.setValue("overlay_opacity", opacity)
+        self.update()
+
+    def _toggle_compact(self, checked: bool) -> None:
+        self._compact = checked
+        if checked:
+            self.setFixedSize(*self._compact_size)
+        else:
+            self.setFixedSize(*self._full_size)
+        self.update()
+
+    # -----------------------------------------------------------------
+    # Double-click toggles compact
+    # -----------------------------------------------------------------
+
+    def mouseDoubleClickEvent(self, event: object) -> None:
+        self._toggle_compact(not self._compact)
 
     def mousePressEvent(self, event: object) -> None:
         if hasattr(event, 'position') and hasattr(event, 'globalPosition'):

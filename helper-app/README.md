@@ -72,8 +72,18 @@ Bind Bandit places a **system tray icon** (Windows notification area) on launch.
 - **Minimize to tray**: when enabled in Settings, closing the window hides it to the tray instead of quitting. The app keeps running in the background.
 - **Start minimized**: launch the app hidden to the tray (no main window). Also available via `--minimized` CLI flag.
 - **Start with Windows**: registers the app to run automatically on login (HKCU Run registry key).
-- **Tray context menu**: right-click the tray icon for Show/Hide, Settings, and Quit.
+- **Tray context menu**: right-click the tray icon for Show/Hide, **Profiles ►** (switch active slot), **Toggle Overlay**, **Auto-Switch** toggle, Settings, and Quit.
 - **Double-click** the tray icon to toggle window visibility.
+
+### Polished UX features
+
+- **Visual Macro Builder**: drag-to-reorder step list with inline key/delay editing, plus a raw JSON toggle for advanced users.
+- **App Auto-Switch Table**: browse for `.exe` files or detect the active app, assign each to a profile slot — all in a clean table layout.
+- **First-Run Onboarding Wizard**: 5-page guided setup on first launch (USB connection, controller pairing, input test). Re-run from Settings → Developer.
+- **Enhanced Overlay**: shows profile name, layer, and turbo state. Right-click for opacity presets and compact mode; double-click toggles compact.
+- **Centralized Settings Dialog**: 4-tab dialog (General, Overlay, Theme, Developer) replaces the old simple checkbox list.
+- **Toast Notifications**: non-blocking slide-in alerts for connect/disconnect and quick warnings — click to dismiss.
+- **Comprehensive Tooltips**: every toolbar button, dropdown, and control has a descriptive tooltip.
 
 ## UI pack
 

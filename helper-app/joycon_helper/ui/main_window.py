@@ -19,8 +19,8 @@ from PyQt6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
     QDockWidget, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
     QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QPushButton,
-    QSizePolicy, QSplitter, QStackedWidget, QSystemTrayIcon,
-    QToolBar, QVBoxLayout, QWidget,
+    QSizePolicy, QSlider, QSpinBox, QSplitter, QStackedWidget,
+    QSystemTrayIcon, QTabWidget, QToolBar, QVBoxLayout, QWidget,
 )
 
 from .._version import __version__
@@ -31,8 +31,10 @@ from .constants import KEYMAP_HOTSPOTS, KBD_HOTSPOTS
 from .serial_bridge import SerialBridge
 from .theme import ThemeEngine
 from .widgets.overlay_window import OverlayWindow
+from .widgets.onboarding import OnboardingWizard, should_show_onboarding
 from .widgets.sidebar import SidebarWidget
 from .widgets.status_bar import AppStatusBar
+from .widgets.toast import Toast
 
 log = logging.getLogger("joycon_helper.ui.main_window")
 
@@ -108,6 +110,10 @@ class MainWindow(QMainWindow):
         # Refresh ports on startup
         QTimer.singleShot(200, self._refresh_ports)
 
+        # First-run onboarding wizard
+        if should_show_onboarding():
+            QTimer.singleShot(500, self._show_onboarding)
+
         # Auto-update check
         try:
             from ..updater import check_for_update_async
@@ -148,10 +154,12 @@ class MainWindow(QMainWindow):
         self._port_combo = QComboBox()
         self._port_combo.setMinimumWidth(200)
         self._port_combo.setEditable(False)
+        self._port_combo.setToolTip("Select the COM port for your ESP32-S3 USB bridge")
         tb.addWidget(self._port_combo)
 
         # Refresh
         self._refresh_btn = QPushButton("Refresh")
+        self._refresh_btn.setToolTip("Rescan available serial ports")
         self._refresh_btn.clicked.connect(self._refresh_ports)
         tb.addWidget(self._refresh_btn)
 
@@ -169,6 +177,7 @@ class MainWindow(QMainWindow):
         # Connect/Disconnect
         self._connect_btn = QPushButton("Connect")
         self._connect_btn.setProperty("accent", True)
+        self._connect_btn.setToolTip("Connect or disconnect the serial link to the ESP32-S3")
         self._connect_btn.clicked.connect(self._toggle_connect)
         tb.addWidget(self._connect_btn)
 
@@ -180,20 +189,24 @@ class MainWindow(QMainWindow):
         self._slot_combo = QComboBox()
         self._slot_combo.addItems(["0", "1", "2", "3"])
         self._slot_combo.setFixedWidth(60)
+        self._slot_combo.setToolTip("Active profile slot (0–3) — each slot stores an independent key mapping")
         self._slot_combo.currentIndexChanged.connect(self._on_slot_changed)
         tb.addWidget(self._slot_combo)
 
         # Quick actions
         tb.addSeparator()
         self._ping_btn = QPushButton("Ping")
+        self._ping_btn.setToolTip("Send a ping to the device and measure round-trip latency")
         self._ping_btn.clicked.connect(self._cmd_ping)
         tb.addWidget(self._ping_btn)
 
         self._upload_btn = QPushButton("Upload")
+        self._upload_btn.setToolTip("Write the current profile to the selected slot on the device")
         self._upload_btn.clicked.connect(self._cmd_write_profile)
         tb.addWidget(self._upload_btn)
 
         self._read_btn = QPushButton("Read")
+        self._read_btn.setToolTip("Read the profile stored in the selected slot from the device")
         self._read_btn.clicked.connect(self._cmd_read_profile)
         tb.addWidget(self._read_btn)
 
@@ -219,6 +232,7 @@ class MainWindow(QMainWindow):
         # Update button (hidden until update available)
         self._update_btn = QPushButton(" ↑ Update ")
         self._update_btn.setProperty("accent", True)
+        self._update_btn.setToolTip("A new version of Bind Bandit is available — click for details")
         self._update_btn.setVisible(False)
         self._update_btn.clicked.connect(self._open_update_dialog)
         tb.addWidget(self._update_btn)
@@ -349,7 +363,7 @@ class MainWindow(QMainWindow):
         else:
             port = self._port_combo.currentData()
             if not port:
-                QMessageBox.warning(self, "No Port", "Select a serial port first.")
+                Toast.warning(self, "Select a serial port first.")
                 return
             try:
                 baud = int(self._baud_edit.text())
@@ -365,6 +379,7 @@ class MainWindow(QMainWindow):
         self._connect_btn.style().polish(self._connect_btn)
         self._status_bar.set_connected(self._port_combo.currentData() or "")
         self._log_line("[connected]")
+        Toast.success(self, f"Connected to {self._port_combo.currentData() or 'device'}")
         self._notify_views("connection_changed", connected=True)
 
     def _on_serial_disconnected(self) -> None:
@@ -375,6 +390,7 @@ class MainWindow(QMainWindow):
         self._connect_btn.style().polish(self._connect_btn)
         self._status_bar.set_disconnected()
         self._log_line("[disconnected]")
+        Toast.info(self, "Serial disconnected")
         # Clear stale key state so overlay/views don't show phantom presses.
         self._active_key_ids.clear()
         self._notify_views("connection_changed", connected=False)
@@ -499,7 +515,7 @@ class MainWindow(QMainWindow):
 
     def _cmd_write_profile(self) -> None:
         if not self._profile:
-            QMessageBox.warning(self, "No Profile", "Load or create a profile first.")
+            Toast.warning(self, "Load or create a profile first.")
             return
         slot = int(self._slot_combo.currentText())
         self.send_cmd({"cmd": "write_profile", "slot": slot, "profile": self._profile})
@@ -512,6 +528,7 @@ class MainWindow(QMainWindow):
         self._slot = index
         self._status_bar.set_slot(index)
         self._notify_views("slot_changed", slot=index)
+        self._update_tray_slot_checks()
 
     def _on_app_switch_slot(self, slot: int) -> None:
         """Called from AppSwitcher background thread — marshal to main thread."""
@@ -717,6 +734,7 @@ class MainWindow(QMainWindow):
         else:
             self._overlay = OverlayWindow(self.theme)
             self._overlay.set_slot(self._slot)
+            self._overlay.set_profile_name(self._profile.get("name", ""))
             self._overlay.show()
 
     # -----------------------------------------------------------------
@@ -807,19 +825,69 @@ class MainWindow(QMainWindow):
             self._tray_icon.setIcon(self.windowIcon())
         self._tray_icon.setToolTip(f"Bind Bandit v{__version__}")
 
-        tray_menu = QMenu()
-        show_action = tray_menu.addAction("Show / Hide")
+        self._tray_menu = QMenu()
+        show_action = self._tray_menu.addAction("Show / Hide")
         show_action.triggered.connect(self._toggle_visibility)
-        tray_menu.addSeparator()
-        settings_action = tray_menu.addAction("⚙ Settings")
+        self._tray_menu.addSeparator()
+
+        # Profiles submenu
+        self._tray_profiles_menu = QMenu("Profiles")
+        self._tray_slot_actions: list[QAction] = []
+        for i in range(4):
+            act = QAction(f"Slot {i}", self)
+            act.setCheckable(True)
+            act.triggered.connect(lambda checked, s=i: self._tray_switch_slot(s))
+            self._tray_profiles_menu.addAction(act)
+            self._tray_slot_actions.append(act)
+        self._tray_slot_actions[0].setChecked(True)
+        self._tray_menu.addMenu(self._tray_profiles_menu)
+
+        # Overlay toggle
+        self._tray_overlay_action = self._tray_menu.addAction("Toggle Overlay")
+        self._tray_overlay_action.triggered.connect(self.toggle_overlay)
+
+        # Auto-switch toggle
+        self._tray_autoswitch_action = QAction("Auto-Switch", self)
+        self._tray_autoswitch_action.setCheckable(True)
+        self._tray_autoswitch_action.setChecked(self._app_switcher.enabled)
+        self._tray_autoswitch_action.triggered.connect(self._tray_toggle_autoswitch)
+        self._tray_menu.addAction(self._tray_autoswitch_action)
+
+        self._tray_menu.addSeparator()
+        settings_action = self._tray_menu.addAction("⚙ Settings")
         settings_action.triggered.connect(self._open_settings)
-        tray_menu.addSeparator()
-        quit_action = tray_menu.addAction("Quit")
+        self._tray_menu.addSeparator()
+        quit_action = self._tray_menu.addAction("Quit")
         quit_action.triggered.connect(self._real_quit)
-        self._tray_icon.setContextMenu(tray_menu)
+        self._tray_icon.setContextMenu(self._tray_menu)
 
         self._tray_icon.activated.connect(self._on_tray_activated)
         self._tray_icon.show()
+
+    def _tray_switch_slot(self, slot: int) -> None:
+        """Switch profile slot from the tray menu."""
+        self._slot_combo.setCurrentIndex(slot)
+        self._cmd_read_profile()
+        self._update_tray_slot_checks()
+
+    def _tray_toggle_autoswitch(self, checked: bool) -> None:
+        self._app_switcher.enabled = checked
+
+    def _update_tray_slot_checks(self) -> None:
+        """Keep tray profile radio marks in sync with the active slot."""
+        for i, act in enumerate(self._tray_slot_actions):
+            act.setChecked(i == self._slot)
+
+    def _update_tray_profile_names(self) -> None:
+        """Update tray slot labels with profile names."""
+        for i, act in enumerate(self._tray_slot_actions):
+            name = ""
+            if i == self._slot:
+                name = self._profile.get("name", "")
+            label = f"Slot {i}"
+            if name:
+                label += f": {name}"
+            act.setText(label)
 
     def _on_tray_activated(self, reason: QSystemTrayIcon.ActivationReason) -> None:
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
@@ -833,30 +901,122 @@ class MainWindow(QMainWindow):
             self.activateWindow()
 
     # -----------------------------------------------------------------
+    # Onboarding wizard
+    # -----------------------------------------------------------------
+
+    def _show_onboarding(self) -> None:
+        wizard = OnboardingWizard(self)
+        wizard.exec()
+
+    # -----------------------------------------------------------------
     # Settings dialog
     # -----------------------------------------------------------------
 
     def _open_settings(self) -> None:
         dlg = QDialog(self)
         dlg.setWindowTitle("Settings")
-        dlg.setMinimumWidth(380)
+        dlg.setMinimumWidth(460)
         layout = QVBoxLayout(dlg)
 
-        form = QFormLayout()
-        layout.addLayout(form)
+        tabs = QTabWidget()
+        layout.addWidget(tabs)
+
+        # --- General tab ---
+        general = QWidget()
+        g_layout = QFormLayout(general)
 
         cb_tray = QCheckBox("Minimize to system tray on close")
         cb_tray.setChecked(self._settings.value("minimize_to_tray", False, type=bool))
-        form.addRow(cb_tray)
+        cb_tray.setToolTip("Keep the app running in the system tray when you close the window")
+        g_layout.addRow(cb_tray)
 
         cb_start_minimized = QCheckBox("Start minimized to tray")
         cb_start_minimized.setChecked(self._settings.value("start_minimized", False, type=bool))
-        form.addRow(cb_start_minimized)
+        cb_start_minimized.setToolTip("Launch the app hidden in the system tray")
+        g_layout.addRow(cb_start_minimized)
 
         cb_autostart = QCheckBox("Start with Windows")
         cb_autostart.setChecked(self._is_autostart_enabled())
-        form.addRow(cb_autostart)
+        cb_autostart.setToolTip("Automatically launch the app when you log in")
+        g_layout.addRow(cb_autostart)
 
+        cb_auto_connect = QCheckBox("Auto-connect to last serial port")
+        cb_auto_connect.setChecked(self._settings.value("auto_connect", True, type=bool))
+        cb_auto_connect.setToolTip("Automatically reconnect to the last used COM port on startup")
+        g_layout.addRow(cb_auto_connect)
+
+        tabs.addTab(general, "General")
+
+        # --- Overlay tab ---
+        overlay = QWidget()
+        o_layout = QFormLayout(overlay)
+
+        opacity_slider = QSlider(Qt.Orientation.Horizontal)
+        opacity_slider.setRange(20, 100)
+        opacity_slider.setValue(int(self._settings.value("overlay_opacity", 0.85, type=float) * 100))
+        opacity_slider.setToolTip("Set the overlay window transparency (20–100%)")
+        opacity_label = QLabel(f"{opacity_slider.value()}%")
+        opacity_slider.valueChanged.connect(lambda v: opacity_label.setText(f"{v}%"))
+        o_row = QHBoxLayout()
+        o_row.addWidget(opacity_slider)
+        o_row.addWidget(opacity_label)
+        o_layout.addRow("Default opacity:", o_row)
+
+        auto_hide_spin = QSpinBox()
+        auto_hide_spin.setRange(0, 300)
+        auto_hide_spin.setSuffix(" sec")
+        auto_hide_spin.setSpecialValueText("Disabled")
+        auto_hide_spin.setValue(self._settings.value("overlay_auto_hide", 0, type=int))
+        auto_hide_spin.setToolTip("Hide the overlay after this many seconds of no input (0 = never)")
+        o_layout.addRow("Auto-hide after:", auto_hide_spin)
+
+        tabs.addTab(overlay, "Overlay")
+
+        # --- Theme tab ---
+        theme_tab = QWidget()
+        t_layout = QFormLayout(theme_tab)
+
+        theme_combo = QComboBox()
+        theme_combo.addItems(["Dark", "Light"])
+        theme_combo.setCurrentIndex(0 if self.theme.is_dark else 1)
+        theme_combo.setToolTip("Choose the application color scheme")
+        t_layout.addRow("Theme:", theme_combo)
+
+        tabs.addTab(theme_tab, "Theme")
+
+        # --- Developer tab ---
+        dev_tab = QWidget()
+        d_layout = QFormLayout(dev_tab)
+
+        baud_combo = QComboBox()
+        baud_combo.addItems(["115200", "230400", "460800", "921600"])
+        current_baud = str(self._settings.value("baud_rate", "115200"))
+        idx = baud_combo.findText(current_baud)
+        if idx >= 0:
+            baud_combo.setCurrentIndex(idx)
+        baud_combo.setToolTip("Serial baud rate — must match the ESP32-S3 firmware setting")
+        d_layout.addRow("Baud rate:", baud_combo)
+
+        log_combo = QComboBox()
+        log_combo.addItems(["DEBUG", "INFO", "WARNING", "ERROR"])
+        current_level = str(self._settings.value("log_level", "INFO"))
+        idx2 = log_combo.findText(current_level)
+        if idx2 >= 0:
+            log_combo.setCurrentIndex(idx2)
+        log_combo.setToolTip("Console and file log verbosity")
+        d_layout.addRow("Log level:", log_combo)
+
+        btn_onboarding = QPushButton("Show Onboarding Wizard")
+        btn_onboarding.setToolTip("Re-run the first-time setup wizard")
+        btn_onboarding.clicked.connect(lambda: (
+            self._settings.setValue("onboarding_done", False),
+            QMessageBox.information(dlg, "Onboarding", "The onboarding wizard will show on next launch."),
+        ))
+        d_layout.addRow(btn_onboarding)
+
+        tabs.addTab(dev_tab, "Developer")
+
+        # --- Buttons ---
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         buttons.accepted.connect(dlg.accept)
         buttons.rejected.connect(dlg.reject)
@@ -866,6 +1026,26 @@ class MainWindow(QMainWindow):
             self._settings.setValue("minimize_to_tray", cb_tray.isChecked())
             self._settings.setValue("start_minimized", cb_start_minimized.isChecked())
             self._set_autostart(cb_autostart.isChecked())
+            self._settings.setValue("auto_connect", cb_auto_connect.isChecked())
+
+            new_opacity = opacity_slider.value() / 100.0
+            self._settings.setValue("overlay_opacity", new_opacity)
+            self._settings.setValue("overlay_auto_hide", auto_hide_spin.value())
+            if self._overlay and not self._overlay.is_closed:
+                self._overlay._set_opacity(new_opacity)
+
+            self._settings.setValue("baud_rate", baud_combo.currentText())
+            self._settings.setValue("log_level", log_combo.currentText())
+            logging.getLogger().setLevel(getattr(logging, log_combo.currentText(), logging.INFO))
+
+            want_dark = theme_combo.currentIndex() == 0
+            if want_dark != self.theme.is_dark:
+                self.theme.toggle()
+                qss = self.theme.generate_qss()
+                QApplication.instance().setStyleSheet(qss)
+                self.assets = AssetManager("dark" if self.theme.is_dark else "default")
+                if self._overlay and not self._overlay.is_closed:
+                    self._overlay.apply_theme(self.theme)
 
     # -----------------------------------------------------------------
     # Windows auto-start helpers
