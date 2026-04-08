@@ -19,9 +19,10 @@ from PyQt6.QtWidgets import (
 )
 
 from ..constants import (
-    INCEDIUS_HOTSPOTS, KBD_HOTSPOTS, KBD_LABEL_TO_KEYCODE,
-    KEYMAP_HOTSPOTS, M913_HOTSPOTS, MOUSE_HOTSPOTS,
-    RAINBOW_COLORS, RAINBOW_NAMES, _KEYCODE_TO_KBD_LABEL,
+    INCEDIUS_HOTSPOTS, JOYCON_BUTTON_SHAPES, KBD_HOTSPOTS,
+    KBD_LABEL_TO_KEYCODE, KEYMAP_HOTSPOTS, M913_HOTSPOTS,
+    MOUSE_HOTSPOTS, RAINBOW_COLORS, RAINBOW_NAMES,
+    _KEYCODE_TO_KBD_LABEL,
 )
 from ..theme import ThemeEngine
 from ..widgets.card import Card
@@ -311,6 +312,7 @@ class MappingView(QWidget):
     def _load_hotspots(self) -> None:
         tk = self._theme_key
         self._jc_canvas.set_hotspots(KEYMAP_HOTSPOTS[tk])
+        self._jc_canvas.set_hotspot_shapes(JOYCON_BUTTON_SHAPES)
         self._m913_canvas.set_hotspots(M913_HOTSPOTS[tk])
         self._mouse_canvas.set_hotspots(MOUSE_HOTSPOTS[tk])
         self._kbd_canvas.set_hotspots(KBD_HOTSPOTS[tk])

@@ -5,7 +5,7 @@ extracted from the original Tkinter ``app.py``.
 """
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 
 # ---------------------------------------------------------------------------
 # Image dimensions (native resolution of the source PNGs)
@@ -71,16 +71,16 @@ KEYMAP_HOTSPOTS: Dict[str, List[Tuple[str, float, float]]] = {
         ("RSDown",  0.768946, 0.626617),
         ("RSLeft",  0.744301, 0.587800),
         ("RSRight", 0.792360, 0.587800),
-        ("Shake",  0.423177, 0.849609),
-        ("TiltUp", 0.500000, 0.810547),
-        ("TiltDn", 0.500000, 0.888672),
-        ("TiltL",  0.455729, 0.849609),
-        ("TiltR",  0.544271, 0.849609),
-        ("Flick",  0.579427, 0.849609),
-        ("SL(L)",  0.328776, 0.346680),
-        ("SR(L)",  0.328776, 0.444336),
-        ("SL(R)",  0.670573, 0.346680),
-        ("SR(R)",  0.670573, 0.444336),
+        ("Shake",   0.423177, 0.849609),
+        ("TiltUp",  0.500000, 0.810547),
+        ("TiltDn",  0.500000, 0.888672),
+        ("TiltL",   0.455729, 0.849609),
+        ("TiltR",   0.544271, 0.849609),
+        ("Flick",   0.579427, 0.849609),
+        ("SL(L)",   0.406654, 0.458410),
+        ("SR(L)",   0.406654, 0.661738),
+        ("SL(R)",   0.591497, 0.478743),
+        ("SR(R)",   0.591497, 0.670980),
     ],
     "default": [
         ("ZL",      0.232902, 0.158965),
@@ -109,17 +109,74 @@ KEYMAP_HOTSPOTS: Dict[str, List[Tuple[str, float, float]]] = {
         ("RSDown",  0.768946, 0.626617),
         ("RSLeft",  0.744301, 0.587800),
         ("RSRight", 0.792360, 0.587800),
-        ("Shake",  0.423177, 0.849609),
-        ("TiltUp", 0.500000, 0.810547),
-        ("TiltDn", 0.500000, 0.888672),
-        ("TiltL",  0.455729, 0.849609),
-        ("TiltR",  0.544271, 0.849609),
-        ("Flick",  0.579427, 0.849609),
-        ("SL(L)",  0.328776, 0.346680),
-        ("SR(L)",  0.328776, 0.444336),
-        ("SL(R)",  0.670573, 0.346680),
-        ("SR(R)",  0.670573, 0.444336),
+        ("Shake",   0.423177, 0.849609),
+        ("TiltUp",  0.500000, 0.810547),
+        ("TiltDn",  0.500000, 0.888672),
+        ("TiltL",   0.455729, 0.849609),
+        ("TiltR",   0.544271, 0.849609),
+        ("Flick",   0.579427, 0.849609),
+        ("SL(L)",   0.406654, 0.458410),
+        ("SR(L)",   0.406654, 0.661738),
+        ("SL(R)",   0.591497, 0.478743),
+        ("SR(R)",   0.591497, 0.670980),
     ],
+}
+
+# ---------------------------------------------------------------------------
+# Joy-Con button shapes — pixel dimensions at native 1536×1024 resolution
+#
+# Format:  ("circle", radius)  |  ("rrect", width, height, corner_radius)
+# If a button name is absent the default circle of _DOT_RADIUS is used.
+# ---------------------------------------------------------------------------
+ShapeSpec = Union[Tuple[str, int], Tuple[str, int, int, int]]
+
+JOYCON_BUTTON_SHAPES: Dict[str, ShapeSpec] = {
+    # Triggers — wide rounded bumper shapes
+    "ZL":      ("rrect", 72, 22, 8),
+    "ZR":      ("rrect", 72, 22, 8),
+    # Bumpers — slightly narrower
+    "L":       ("rrect", 64, 18, 6),
+    "R":       ("rrect", 64, 18, 6),
+    # Face buttons — circles
+    "A":       ("circle", 14),
+    "B":       ("circle", 14),
+    "X":       ("circle", 14),
+    "Y":       ("circle", 14),
+    # Thumbsticks — larger circles
+    "LStick":  ("circle", 22),
+    "RStick":  ("circle", 22),
+    # Stick directions — small circles
+    "LSUp":    ("circle", 10),
+    "LSDown":  ("circle", 10),
+    "LSLeft":  ("circle", 10),
+    "LSRight": ("circle", 10),
+    "RSUp":    ("circle", 10),
+    "RSDown":  ("circle", 10),
+    "RSLeft":  ("circle", 10),
+    "RSRight": ("circle", 10),
+    # D-pad — small rounded squares
+    "DUp":     ("rrect", 18, 18, 4),
+    "DDown":   ("rrect", 18, 18, 4),
+    "DLeft":   ("rrect", 18, 18, 4),
+    "DRight":  ("rrect", 18, 18, 4),
+    # Plus / Minus
+    "Plus":    ("rrect", 14, 14, 3),
+    "Minus":   ("rrect", 22, 10, 4),
+    # Capture — small square, Home — small circle
+    "Capture": ("rrect", 14, 14, 3),
+    "Home":    ("circle", 10),
+    # Side-rail buttons — tall narrow pills
+    "SL(L)":   ("rrect", 12, 44, 5),
+    "SR(L)":   ("rrect", 12, 44, 5),
+    "SL(R)":   ("rrect", 12, 44, 5),
+    "SR(R)":   ("rrect", 12, 44, 5),
+    # Motion / IMU — small circles
+    "Shake":   ("circle", 14),
+    "TiltUp":  ("circle", 12),
+    "TiltDn":  ("circle", 12),
+    "TiltL":   ("circle", 12),
+    "TiltR":   ("circle", 12),
+    "Flick":   ("circle", 14),
 }
 
 # ---------------------------------------------------------------------------

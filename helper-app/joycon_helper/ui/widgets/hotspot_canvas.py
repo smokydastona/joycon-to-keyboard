@@ -14,10 +14,10 @@ from PyQt6.QtCore import (
     QRectF, QTimer, Qt, pyqtSignal,
 )
 from PyQt6.QtGui import (
-    QBrush, QColor, QFont, QPainter, QPen, QPixmap,
+    QBrush, QColor, QFont, QPainter, QPainterPath, QPen, QPixmap,
 )
 from PyQt6.QtWidgets import (
-    QGraphicsEllipseItem, QGraphicsPixmapItem, QGraphicsScene,
+    QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsScene,
     QGraphicsSimpleTextItem, QGraphicsView, QWidget,
 )
 
@@ -45,7 +45,7 @@ class HotspotItem:
         self.search_match = False
         self.disabled = False
         self.locked = False
-        self.dot: Optional[QGraphicsEllipseItem] = None
+        self.dot: Optional[QGraphicsPathItem] = None
         self.label: Optional[QGraphicsSimpleTextItem] = None
 
 
@@ -80,6 +80,7 @@ class HotspotCanvas(QGraphicsView):
         self._hovered: Optional[str] = None
         self._overlay_color = "#a03cc8"  # violet default
         self._mapping_labels: Dict[str, str] = {}
+        self._shapes: Dict[str, Any] = {}
 
         # Drag-edit mode (temporary position tweaking)
         self._edit_mode = False
@@ -112,6 +113,11 @@ class HotspotCanvas(QGraphicsView):
 
     def set_hotspots(self, hotspots: List[Tuple[str, float, float]]) -> None:
         self._hotspots = [HotspotItem(name, nx, ny) for name, nx, ny in hotspots]
+        self._rebuild_hotspot_items()
+
+    def set_hotspot_shapes(self, shapes: Dict[str, Any]) -> None:
+        """Set per-button shape specs (only affects Joy-Con canvas)."""
+        self._shapes = shapes
         self._rebuild_hotspot_items()
 
     def set_selected(self, name: Optional[str]) -> None:
@@ -211,9 +217,8 @@ class HotspotCanvas(QGraphicsView):
                 self._dragging.norm_y = ny
                 cx = nx * rect.width()
                 cy = ny * rect.height()
-                self._dragging.dot.setRect(
-                    cx - _DOT_RADIUS, cy - _DOT_RADIUS,
-                    _DOT_RADIUS * 2, _DOT_RADIUS * 2,
+                self._dragging.dot.setPath(
+                    self._make_shape_path(cx, cy, self._dragging.name)
                 )
                 if self._dragging.label:
                     lw = self._dragging.label.boundingRect().width()
@@ -247,12 +252,38 @@ class HotspotCanvas(QGraphicsView):
             hy = hs.norm_y * rect.height()
             dx = scene_pos.x() - hx
             dy = scene_pos.y() - hy
-            dist = math.sqrt(dx * dx + dy * dy)
-            threshold = _DOT_RADIUS * 2.5
-            if dist < threshold and dist < best_dist:
-                best_dist = dist
-                best_name = hs.name
+            spec = self._shapes.get(hs.name)
+            if spec and spec[0] == "rrect":
+                hw, hh = spec[1] / 2, spec[2] / 2
+                margin = 6
+                if abs(dx) <= hw + margin and abs(dy) <= hh + margin:
+                    dist = math.sqrt(dx * dx + dy * dy)
+                    if dist < best_dist:
+                        best_dist = dist
+                        best_name = hs.name
+            else:
+                r = spec[1] if spec and spec[0] == "circle" else _DOT_RADIUS
+                dist = math.sqrt(dx * dx + dy * dy)
+                if dist < r * 2.5 and dist < best_dist:
+                    best_dist = dist
+                    best_name = hs.name
         return best_name
+
+    def _make_shape_path(self, cx: float, cy: float, name: str,
+                         grow: float = 0.0) -> QPainterPath:
+        """Build a QPainterPath for the hotspot shape centred at (cx, cy)."""
+        path = QPainterPath()
+        spec = self._shapes.get(name)
+        if spec and spec[0] == "rrect":
+            w, h, cr = spec[1], spec[2], spec[3]
+            path.addRoundedRect(
+                cx - w / 2 - grow, cy - h / 2 - grow,
+                w + grow * 2, h + grow * 2, cr, cr,
+            )
+        else:
+            r = (spec[1] if spec and spec[0] == "circle" else _DOT_RADIUS) + grow
+            path.addEllipse(cx - r, cy - r, r * 2, r * 2)
+        return path
 
     def _rebuild_hotspot_items(self) -> None:
         # Remove old hotspot items (keep bg)
@@ -272,10 +303,7 @@ class HotspotCanvas(QGraphicsView):
             cx = hs.norm_x * rect.width()
             cy = hs.norm_y * rect.height()
 
-            dot = QGraphicsEllipseItem(
-                cx - _DOT_RADIUS, cy - _DOT_RADIUS,
-                _DOT_RADIUS * 2, _DOT_RADIUS * 2,
-            )
+            dot = QGraphicsPathItem(self._make_shape_path(cx, cy, hs.name))
             dot.setZValue(10)
             self._scene.addItem(dot)
             hs.dot = dot
@@ -343,11 +371,11 @@ class HotspotCanvas(QGraphicsView):
 
             # Pulse for selected
             if hs.name == self._selected:
-                pulse_r = _DOT_RADIUS + _PULSE_RANGE * math.sin(self._pulse_phase)
+                grow = _PULSE_RANGE * math.sin(self._pulse_phase)
                 rect = self._scene.sceneRect()
                 cx = hs.norm_x * rect.width()
                 cy = hs.norm_y * rect.height()
-                hs.dot.setRect(cx - pulse_r, cy - pulse_r, pulse_r * 2, pulse_r * 2)
+                hs.dot.setPath(self._make_shape_path(cx, cy, hs.name, grow))
 
             # Lock indicator
             if hs.locked and hs.label:
