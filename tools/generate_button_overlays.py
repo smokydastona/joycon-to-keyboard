@@ -128,6 +128,11 @@ JOYCON_HOTSPOTS: list[tuple[str, int, int]] = [
     ("Capture", 395, 720),
     ("Home",  1140,  720),
     ("LStick", 250,  435),
+    # Left stick virtual directions
+    ("LSUp",   250,  375),
+    ("LSDown", 250,  495),
+    ("LSLeft", 185,  435),
+    ("LSRight",320,  435),
     ("DUp",    300,  545),
     ("DDown",  300,  665),
     ("DLeft",  225,  605),
