@@ -1408,6 +1408,27 @@ static void load_profile_json(const char *json) {
         return;
     }
 
+    if (!cJSON_IsObject(root)) {
+        ESP_LOGW(TAG, "Profile root is not a JSON object; ignoring");
+        cJSON_Delete(root);
+        return;
+    }
+
+    // Minimal schema check: warn (but continue) if no recognised top-level keys
+    // are present.  This helps catch completely garbage profiles early.
+    static const char *known_keys[] = {
+        "ver", "mappings", "macros", "layers", "chords",
+        "leader_sequences", "right_stick_mode", "mouse_sensitivity",
+        "sprint_zone", "humanize", "stick", NULL
+    };
+    bool has_any = false;
+    for (const char **k = known_keys; *k; k++) {
+        if (cJSON_HasObjectItem(root, *k)) { has_any = true; break; }
+    }
+    if (!has_any) {
+        ESP_LOGW(TAG, "Profile has no recognised keys — applying as empty");
+    }
+
     // Optional version field; unknown versions are tolerated.
     cJSON *ver = cJSON_GetObjectItemCaseSensitive(root, "ver");
     if (cJSON_IsNumber(ver)) {

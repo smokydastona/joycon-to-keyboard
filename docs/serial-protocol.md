@@ -6,6 +6,21 @@ It is also used in the reverse direction (ESP32-S3 → ESP32) for optional helpe
 
 **Default baud rate: 921600 8N1** (both boards must match).
 
+## Quick-reference: frame markers
+
+| Marker | Direction | Description |
+|--------|-----------|-------------|
+| (none) | ESP32→S3 | Key event (1-byte payload, bit 7=pressed) |
+| `0xFC` | ESP32→S3 | Extended key event (multi-device) |
+| `0xFD` | ESP32→S3 | BT status (discovery/connect/disconnect) |
+| `0xFE` | S3→ESP32 | Control command (target, stick, OTA, etc.) |
+| `0xFF` | ESP32→S3 | Debug HID report capture |
+| `0xFB` | ESP32→S3 | OTA response (begin/end/version ACK) |
+| `0xFA` | ESP32→S3 | Battery level |
+| `0xF9` | ESP32→S3 | Controller info (type/serial/colors/IMU) |
+| `0xF8` | ESP32→S3 | RSSI (signal strength) |
+| `0xF7` | ESP32→S3 | Analog stick data |
+
 ## Frame format
 
 All bytes are unsigned.

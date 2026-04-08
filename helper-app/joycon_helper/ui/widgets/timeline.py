@@ -117,4 +117,13 @@ class TimelineWidget(QWidget):
 
     def apply_theme(self, theme: ThemeEngine) -> None:
         self._theme = theme
+
+    def showEvent(self, event: object) -> None:  # type: ignore[override]
+        super().showEvent(event)  # type: ignore[arg-type]
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def hideEvent(self, event: object) -> None:  # type: ignore[override]
+        super().hideEvent(event)  # type: ignore[arg-type]
+        self._timer.stop()
         self.update()

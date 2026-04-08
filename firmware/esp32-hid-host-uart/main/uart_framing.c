@@ -201,6 +201,10 @@ void bridge_send_controller_info(uint8_t device_id, uint8_t controller_type,
         payload[pos++] = 0;
     }
 
+    if (pos > sizeof(payload)) {
+        ESP_LOGE("uart-framing", "controller_info overflow pos=%u", (unsigned)pos);
+        return;
+    }
     bridge_send_frame(payload, pos);
 }
 

@@ -68,6 +68,9 @@ uint8_t const desc_configuration[] = {
     TUD_HID_DESCRIPTOR(ITF_NUM_HID_MOUSE, 5, HID_ITF_PROTOCOL_MOUSE, sizeof(desc_hid_report_mouse), EPNUM_HID_MOUSE, 16, 1),
 };
 
+_Static_assert(sizeof(desc_configuration) == CONFIG_TOTAL_LEN,
+               "CONFIG_TOTAL_LEN must match the actual configuration descriptor size");
+
 // String descriptors (non-static so usb_kbd.c can pass them to tinyusb_driver_install)
 char const* string_desc_arr[] = {
     (const char[]){0x09, 0x04},

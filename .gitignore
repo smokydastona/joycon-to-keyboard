@@ -11,7 +11,6 @@ firmware/**/build/
 firmware/**/managed_components/
 helper-app/build/
 helper-app/dist/
-helper-app/*.spec
 logs/
 crash-logs/
 pending_fw/

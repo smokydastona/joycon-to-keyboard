@@ -63,7 +63,8 @@ class SerialClient:
         if not self.is_connected:
             raise RuntimeError("Not connected")
         line = json.dumps(obj, separators=(",", ":"), ensure_ascii=False) + "\n"
-        assert self._ser is not None
+        if self._ser is None:
+            raise RuntimeError("Serial port not open")
         self._ser.write(line.encode("utf-8"))
 
     def send_text_line(self, text: str) -> None:
@@ -71,12 +72,15 @@ class SerialClient:
             raise RuntimeError("Not connected")
         if not text.endswith("\n"):
             text += "\n"
-        assert self._ser is not None
+        if self._ser is None:
+            raise RuntimeError("Serial port not open")
         self._ser.write(text.encode("utf-8"))
 
     def _rx_loop(self) -> None:
-        assert self._ser is not None
+        if self._ser is None:
+            return
         buffer = bytearray()
+        _MAX_BUFFER = 65536  # 64 KB cap to prevent unbounded growth
 
         while not self._stop.is_set():
             try:
@@ -89,6 +93,12 @@ class SerialClient:
 
             if chunk:
                 buffer.extend(chunk)
+
+                # A3: Cap buffer size to prevent memory exhaustion
+                if len(buffer) > _MAX_BUFFER:
+                    log.warning("Serial RX buffer exceeded %d bytes — resetting", _MAX_BUFFER)
+                    buffer.clear()
+                    continue
 
                 while True:
                     nl = buffer.find(b"\n")

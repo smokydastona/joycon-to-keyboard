@@ -54,6 +54,10 @@ static void handle_ctrl_cmd(uint8_t cmd_id, const uint8_t *payload, uint8_t payl
     switch (cmd_id) {
         case CTRL_CMD_SET_TARGET_SUBSTR: {
             // payload bytes are ASCII substring (not null-terminated)
+            if (payload_len > 48) {
+                ESP_LOGW(TAG, "Target substr too long (%u > 48), truncating", (unsigned)payload_len);
+                payload_len = 48;
+            }
             bt_hid_host_set_target_substr((const char *)payload, payload_len);
             ESP_LOGI(TAG, "Target name substring override set (len=%u)", (unsigned)payload_len);
             break;
@@ -67,7 +71,11 @@ static void handle_ctrl_cmd(uint8_t cmd_id, const uint8_t *payload, uint8_t payl
         case CTRL_CMD_SET_STICK_CURVE: {
             // payload[0] = curve type (0=linear, 1=exponential, 2=quadratic)
             // payload[1] = exponent * 100 (only for exponential)
-            uint8_t curve = (payload_len >= 1) ? payload[0] : 0;
+            if (payload_len < 1) {
+                ESP_LOGW(TAG, "SET_STICK_CURVE: need ≥1 byte, got %u", (unsigned)payload_len);
+                break;
+            }
+            uint8_t curve = payload[0];
             uint8_t exp_x100 = (payload_len >= 2) ? payload[1] : 100;
             joycon_mapper_set_stick_curve(curve, exp_x100);
             break;

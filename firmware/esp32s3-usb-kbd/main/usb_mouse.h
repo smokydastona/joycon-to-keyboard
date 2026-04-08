@@ -3,6 +3,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+// Initialize the USB mouse subsystem (creates mutex). Call once at startup.
+void usb_mouse_init(void);
+
 // Move the USB HID mouse cursor by (dx, dy) pixels.
 // Values are clamped to int8_t range (-127..127).
 void usb_mouse_move(int16_t dx, int16_t dy);

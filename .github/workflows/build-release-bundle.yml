@@ -41,6 +41,18 @@ jobs:
         shell: bash
         run: |
           python tools/versioning.py github-output --repo-version "$REPO_VERSION_FILE" --run-number "${{ github.run_number }}" --output "$GITHUB_OUTPUT"
+
+  lint:
+    name: Lint Python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - run: pip install ruff
+      - run: ruff check helper-app/ tools/
+
   build-firmware:
     name: Build ${{ matrix.artifact_name }}
     runs-on: ubuntu-latest

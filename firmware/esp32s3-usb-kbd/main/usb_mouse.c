@@ -73,11 +73,20 @@ static void send_report(void) {
     s_last_report_us = now;
 }
 
-void usb_mouse_move(int16_t dx, int16_t dy) {
+void usb_mouse_init(void) {
     if (!s_mutex) {
         s_mutex = xSemaphoreCreateMutex();
-        if (!s_mutex) return;
     }
+    s_buttons = 0;
+    s_pending_dx = 0;
+    s_pending_dy = 0;
+    s_pending_vscroll = 0;
+    s_pending_hscroll = 0;
+    ESP_LOGI(TAG, "USB mouse subsystem initialized");
+}
+
+void usb_mouse_move(int16_t dx, int16_t dy) {
+    if (!s_mutex) return;
 
     xSemaphoreTake(s_mutex, portMAX_DELAY);
 
@@ -96,10 +105,7 @@ void usb_mouse_move(int16_t dx, int16_t dy) {
 }
 
 void usb_mouse_scroll(int8_t vertical, int8_t horizontal) {
-    if (!s_mutex) {
-        s_mutex = xSemaphoreCreateMutex();
-        if (!s_mutex) return;
-    }
+    if (!s_mutex) return;
 
     xSemaphoreTake(s_mutex, portMAX_DELAY);
 
@@ -118,10 +124,7 @@ void usb_mouse_scroll(int8_t vertical, int8_t horizontal) {
 }
 
 void usb_mouse_button(uint8_t button, bool pressed) {
-    if (!s_mutex) {
-        s_mutex = xSemaphoreCreateMutex();
-        if (!s_mutex) return;
-    }
+    if (!s_mutex) return;
 
     xSemaphoreTake(s_mutex, portMAX_DELAY);
 

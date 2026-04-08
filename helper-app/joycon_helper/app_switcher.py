@@ -117,6 +117,7 @@ class AppSwitcher:
         """
         self._on_switch = on_switch
         self._poll_interval = poll_interval
+        self._lock = threading.Lock()
         self._rules: List[Dict[str, Any]] = []
         self._running = False
         self._thread: Optional[threading.Thread] = None
@@ -139,10 +140,12 @@ class AppSwitcher:
 
     @property
     def rules(self) -> List[Dict[str, Any]]:
-        return list(self._rules)
+        with self._lock:
+            return list(self._rules)
 
     def set_rules(self, rules: List[Dict[str, Any]]) -> None:
-        self._rules = list(rules)
+        with self._lock:
+            self._rules = list(rules)
 
     def set_default_slot(self, slot: int) -> None:
         self._default_slot = slot
@@ -173,29 +176,31 @@ class AppSwitcher:
         except Exception:
             return
 
-        if exe == self._last_exe:
-            return
-        self._last_exe = exe
+        with self._lock:
+            if exe == self._last_exe:
+                return
+            self._last_exe = exe
 
-        if not exe:
-            return
+            if not exe:
+                return
 
-        # Find matching rule
-        matched_slot: Optional[int] = None
-        for rule in self._rules:
-            rule_exe = rule.get("exe", "")
-            if isinstance(rule_exe, str) and rule_exe.lower() == exe:
-                slot = rule.get("slot")
-                if isinstance(slot, int) and 0 <= slot <= 3:
-                    matched_slot = slot
-                    break
+            # Find matching rule
+            matched_slot: Optional[int] = None
+            for rule in self._rules:
+                rule_exe = rule.get("exe", "")
+                if isinstance(rule_exe, str) and rule_exe.lower() == exe:
+                    slot = rule.get("slot")
+                    if isinstance(slot, int) and 0 <= slot <= 3:
+                        matched_slot = slot
+                        break
 
-        target_slot = matched_slot if matched_slot is not None else self._default_slot
+            target_slot = matched_slot if matched_slot is not None else self._default_slot
 
-        if target_slot != self._last_slot:
-            self._last_slot = target_slot
-            log.info("App switch: %s -> slot %d", exe, target_slot)
-            try:
-                self._on_switch(target_slot)
-            except Exception:
-                log.warning("App switch callback failed", exc_info=True)
+            if target_slot != self._last_slot:
+                self._last_slot = target_slot
+
+        log.info("App switch: %s -> slot %d", exe, target_slot)
+        try:
+            self._on_switch(target_slot)
+        except Exception:
+            log.warning("App switch callback failed", exc_info=True)

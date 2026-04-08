@@ -3,8 +3,8 @@
 This file describes how buttons/toggles/dials/icons should match the `sketchbook-ink` theme tokens.
 
 - Theme tokens: generate a bundle with `python tools/generate_ui_bundle.py --out ./.ui-bundle` then use `./.ui-bundle/theme.json`
-- Icon set (SVG): `docs/ui/misc/icons.svg`
-- Component sheet (SVG): `docs/ui/misc/components.svg`
+- Icon assets: see `docs/ui/misc/` for any reference PNGs
+- Component reference: see `docs/ui/reference/` for reference screenshots
 
 ## Icons
 

@@ -45,6 +45,7 @@ static const char* bda_to_str(const uint8_t* bda, char* out, size_t out_len) {
 void app_main(void) {
     fw_ota_mark_valid();
     usb_kbd_init();
+    usb_mouse_init();
     bridge_serial_init();
     profile_runtime_init();
     uart_proto_init();
