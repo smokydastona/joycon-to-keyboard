@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from PyQt6.QtCore import (
-    QEasingCurve, QPropertyAnimation, QSequentialAnimationGroup,
+    QEasingCurve, QPropertyAnimation,
     Qt, pyqtSignal,
 )
 from PyQt6.QtGui import QFont

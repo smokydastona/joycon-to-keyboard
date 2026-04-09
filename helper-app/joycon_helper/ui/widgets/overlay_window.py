@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Optional, Set
 
 from PyQt6.QtCore import QPoint, QRect, QSettings, QTimer, Qt, QPropertyAnimation, QEasingCurve
-from PyQt6.QtGui import QAction, QColor, QFont, QLinearGradient, QPainter, QPainterPath
+from PyQt6.QtGui import QAction, QColor, QFont, QPainter
 from PyQt6.QtWidgets import QApplication, QGraphicsDropShadowEffect, QMenu, QWidget
 
 from ..theme import ThemeEngine

@@ -7,14 +7,13 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QSettings, Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QCheckBox, QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QLabel,
-    QLineEdit, QMessageBox, QPushButton, QScrollArea, QSlider, QSpinBox,
+    QCheckBox, QComboBox, QFormLayout, QHBoxLayout, QLabel,
+    QMessageBox, QPushButton, QScrollArea, QSlider, QSpinBox,
     QVBoxLayout, QWidget,
 )
 

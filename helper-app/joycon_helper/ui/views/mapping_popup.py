@@ -12,11 +12,11 @@ import logging
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
 from PyQt6.QtCore import Qt, QSize
-from PyQt6.QtGui import QFont, QColor, QIcon
+from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QDoubleSpinBox, QFormLayout, QFrame,
-    QGraphicsDropShadowEffect, QGridLayout, QGroupBox, QHBoxLayout,
-    QLabel, QLineEdit, QMessageBox, QPushButton, QScrollArea, QSlider,
+    QCheckBox, QComboBox, QDialog, QFormLayout, QFrame,
+    QGridLayout, QGroupBox, QHBoxLayout,
+    QLabel, QLineEdit, QMessageBox, QPushButton, QScrollArea,
     QSpinBox, QStackedWidget, QTabWidget, QVBoxLayout, QWidget,
 )
 
@@ -24,7 +24,6 @@ if TYPE_CHECKING:
     from ..main_window import MainWindow
 
 from ..theme import ThemeEngine
-from ..widgets.card import Card
 from ...hid_keycodes import (
     MOD_LCTRL, MOD_LSHIFT, MOD_LALT, MOD_LGUI,
     MOD_RCTRL, MOD_RSHIFT, MOD_RALT, MOD_RGUI,
