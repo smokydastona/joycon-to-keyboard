@@ -918,7 +918,6 @@ class MappingView(QWidget):
             QMessageBox.warning(self, "Import Error", "Expected a JSON object.")
             return
 
-        tk = self._theme_key
         loaded: list[str] = []
         if "joycon" in data:
             hs = [(n, x, y) for n, x, y in data["joycon"]]
