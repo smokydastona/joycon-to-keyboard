@@ -100,18 +100,18 @@ INCEDIUS_DISPLAY_NAMES: Dict[str, str] = {
     "right": "Right Click",
     "middle": "Middle Click",
     "fire": "Fire",
-    "side1": "Thumb 1",
-    "side2": "Thumb 2",
-    "side3": "Thumb 3",
-    "side4": "Thumb 4",
-    "side5": "Thumb 5",
-    "side6": "Thumb 6",
-    "side7": "Finger 1",
-    "side8": "Finger 2",
-    "side9": "Finger 3",
-    "side10": "Finger 4",
-    "side11": "Finger 5",
-    "side12": "Finger 6",
+    "side1": "Side 1",
+    "side2": "Side 2",
+    "side3": "Side 3",
+    "side4": "Side 4",
+    "side5": "Side 5",
+    "side6": "Side 6",
+    "side7": "Side 7",
+    "side8": "Side 8",
+    "side9": "Side 9",
+    "side10": "Side 10",
+    "side11": "Side 11",
+    "side12": "Side 12",
 }
 
 LAYOUT_DISPLAY_NAMES: Dict[str, Dict[str, str]] = {
@@ -125,10 +125,10 @@ INCEDIUS_SIDE_KEYS = [
     "side7", "side8", "side9", "side10", "side11", "side12",
 ]
 
-# All IncediusMod label choices for the side buttons (Thumb 1-6, Finger 1-6).
+# All IncediusMod label choices for the side buttons (Side 1–12).
 INCEDIUS_LABEL_CHOICES = [
-    "Thumb 1", "Thumb 2", "Thumb 3", "Thumb 4", "Thumb 5", "Thumb 6",
-    "Finger 1", "Finger 2", "Finger 3", "Finger 4", "Finger 5", "Finger 6",
+    "Side 1", "Side 2", "Side 3", "Side 4", "Side 5", "Side 6",
+    "Side 7", "Side 8", "Side 9", "Side 10", "Side 11", "Side 12",
 ]
 
 # Default mapping: side button key → IncediusMod label.

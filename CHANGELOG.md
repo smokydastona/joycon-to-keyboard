@@ -201,7 +201,7 @@ Until then, entries are grouped by date.
 
 ### Added
 
-- **IncediusMod layout mode** (Mouse tab): optional alternative button label set for the [Red Dragon M913 mod by Incedius](https://www.printables.com/model/1191307-red-dragon-m913-mod). A "Layout" dropdown in the Device section switches between "Stock M913" (Side 1–12) and "IncediusMod" (Thumb 1–6, Finger 1–6). The layout choice is saved per-profile and labels update instantly.
+- **IncediusMod layout mode** (Mouse tab): optional alternative button label set for the [Red Dragon M913 mod by Incedius](https://www.printables.com/model/1191307-red-dragon-m913-mod). A "Layout" dropdown in the Device section switches between "Stock M913" and "IncediusMod". Both modes now use the same Side 1–12 button identifiers to match the original M913 naming. The layout choice is saved per-profile and labels update instantly.
 
 - **App icon**: converted `icon.png` (1024×1024 sketchbook-ink artwork) to a multi-size `icon.ico` (16–256 px) at `helper-app/icon.ico`. Used as the window icon at runtime and embedded in the PyInstaller `.exe`.
 

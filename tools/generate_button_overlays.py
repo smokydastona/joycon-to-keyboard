@@ -383,8 +383,8 @@ M913_HOTSPOTS: list[tuple[str, int, int]] = [
 
 M913_WIDE = {"left", "right"}
 
-# ── Incedius M913 (16 buttons, same physical mouse, different labels) ────
-# Uses the same pixel positions as M913 stock but with IncediusMod naming.
+# ── Incedius M913 (16 buttons, same physical mouse, same button IDs) ─────
+# Uses the same pixel positions and side1-12 naming as M913 stock.
 INCEDIUS_HOTSPOTS: list[tuple[str, int, int]] = [
     # Main buttons
     ("left",       898,  648),
@@ -394,20 +394,19 @@ INCEDIUS_HOTSPOTS: list[tuple[str, int, int]] = [
     # Scroll wheel
     ("scroll_up",  834,  514),
     ("scroll_down",814,  623),
-    # Thumb buttons (side1-6 → Thumb 1-6)
-    ("Thumb1",     545,  298),
-    ("Thumb2",     634,  260),
-    ("Thumb3",     711,  239),
-    ("Thumb4",     620,  333),
-    ("Thumb5",     701,  312),
-    ("Thumb6",     682,  381),
-    # Finger buttons (side7-12 → Finger 1-6)
-    ("Finger1",    602,  412),
-    ("Finger2",    517,  367),
-    ("Finger3",    701,  443),
-    ("Finger4",    603,  483),
-    ("Finger5",    503,  455),
-    ("Finger6",    600,  576),
+    # Side buttons (same side1-12 IDs as stock M913)
+    ("side1",      545,  298),
+    ("side2",      634,  260),
+    ("side3",      711,  239),
+    ("side4",      620,  333),
+    ("side5",      701,  312),
+    ("side6",      682,  381),
+    ("side7",      602,  412),
+    ("side8",      517,  367),
+    ("side9",      701,  443),
+    ("side10",     603,  483),
+    ("side11",     503,  455),
+    ("side12",     600,  576),
 ]
 
 INCEDIUS_WIDE = {"left", "right"}
