@@ -525,6 +525,17 @@ MOUSE_HOTSPOTS: Dict[str, List[Tuple[str, float, float]]] = {
 }
 
 # ---------------------------------------------------------------------------
+# Wide button sets — buttons with larger hit area / overlay radius
+# ---------------------------------------------------------------------------
+M913_WIDE = {"left", "right"}
+INCEDIUS_WIDE = {"left", "right"}
+MOUSE_WIDE = {"left", "right"}
+KBD_WIDE = {
+    "Backspace", "Tab", "CapsLk", "Enter", "LShift", "RShift",
+    "Space", "LCtrl", "RCtrl", "KP0", "KPPlus", "KPEnter",
+}
+
+# ---------------------------------------------------------------------------
 # Keyboard label → HID keycode (positive = keycode, negative = modifier bit)
 # ---------------------------------------------------------------------------
 KBD_LABEL_TO_KEYCODE: Dict[str, int] = {

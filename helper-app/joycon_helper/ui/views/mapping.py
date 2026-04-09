@@ -19,9 +19,11 @@ from PyQt6.QtWidgets import (
 )
 
 from ..constants import (
-    INCEDIUS_HOTSPOTS, JOYCON_BUTTON_SHAPES, KBD_HOTSPOTS,
-    KBD_LABEL_TO_KEYCODE, KEYMAP_HOTSPOTS, M913_HOTSPOTS,
-    MOUSE_HOTSPOTS, RAINBOW_COLORS, RAINBOW_NAMES,
+    INCEDIUS_HOTSPOTS, INCEDIUS_WIDE, JOYCON_BUTTON_SHAPES,
+    KBD_HOTSPOTS, KBD_LABEL_TO_KEYCODE, KBD_WIDE,
+    KEYMAP_HOTSPOTS, M913_HOTSPOTS, M913_WIDE,
+    MOUSE_HOTSPOTS, MOUSE_WIDE,
+    RAINBOW_COLORS, RAINBOW_NAMES,
     _KEYCODE_TO_KBD_LABEL,
 )
 from ..theme import ThemeEngine
@@ -314,8 +316,11 @@ class MappingView(QWidget):
         self._jc_canvas.set_hotspots(KEYMAP_HOTSPOTS[tk])
         self._jc_canvas.set_hotspot_shapes(JOYCON_BUTTON_SHAPES)
         self._m913_canvas.set_hotspots(M913_HOTSPOTS[tk])
+        self._m913_canvas.set_wide_set(M913_WIDE)
         self._mouse_canvas.set_hotspots(MOUSE_HOTSPOTS[tk])
+        self._mouse_canvas.set_wide_set(MOUSE_WIDE)
         self._kbd_canvas.set_hotspots(KBD_HOTSPOTS[tk])
+        self._kbd_canvas.set_wide_set(KBD_WIDE)
 
         # Joy-Con background
         pm = self._main.assets.load_pixmap("joycons_none.png")
@@ -339,6 +344,9 @@ class MappingView(QWidget):
 
         # Load pale composite overlays for each device canvas
         self._load_pale_overlays()
+
+        # Load per-button overlay textures for sketch-style brush fills
+        self._load_overlay_textures()
 
     # -----------------------------------------------------------------
     # Overlay helpers (pale composite + bright individual)
@@ -393,6 +401,27 @@ class MappingView(QWidget):
         else:
             canvas.set_bright_overlay(None)
 
+    def _load_overlay_textures(self) -> None:
+        """Load individual button overlay paths for texture brush fills."""
+        color = getattr(self, "_overlay_color", "violet")
+        for attr, (device, prefix) in self._CANVAS_DEVICE_INFO.items():
+            canvas: HotspotCanvas = getattr(self, attr, None)
+            if canvas is None:
+                continue
+            actual_device = device
+            actual_prefix = prefix
+            if attr == "_m913_canvas" and getattr(self, "_m913_skin", "Stock") == "Incedius":
+                actual_device = "incedius"
+                actual_prefix = "inc"
+            paths: Dict[str, str] = {}
+            for name in canvas.get_hotspot_names():
+                safe_name = name.replace("/", "_").replace("\\", "_").replace(".", "_dot_")
+                overlay_name = f"{actual_prefix}_{safe_name}"
+                path = self._main.assets.find_overlay_image(actual_device, overlay_name, color)
+                if path:
+                    paths[name] = str(path)
+            canvas.set_overlay_paths(paths)
+
     # -----------------------------------------------------------------
     # Active device helpers
     # -----------------------------------------------------------------
@@ -433,12 +462,16 @@ class MappingView(QWidget):
         tk = self._theme_key
         if skin == "Incedius":
             self._m913_canvas.set_hotspots(INCEDIUS_HOTSPOTS[tk])
+            self._m913_canvas.set_wide_set(INCEDIUS_WIDE)
             pm = self._main.assets.load_pixmap("incedius_none.png")
         else:
             self._m913_canvas.set_hotspots(M913_HOTSPOTS[tk])
+            self._m913_canvas.set_wide_set(M913_WIDE)
             pm = self._main.assets.load_pixmap("m913_none.png")
         if pm:
             self._m913_canvas.set_background(pm)
+        self._load_pale_overlays()
+        self._load_overlay_textures()
         self._refresh_mapping_visuals()
 
     def _refresh_mapping_visuals(self) -> None:
@@ -724,8 +757,9 @@ class MappingView(QWidget):
         hex_color = RAINBOW_COLORS.get(color_name, "#a03cc8")
         for canvas, _ in self._device_list():
             canvas.set_overlay_color(hex_color)
-        # Reload pale + bright overlays for new colour
+        # Reload pale + bright overlays and textures for new colour
         self._load_pale_overlays()
+        self._load_overlay_textures()
         if self._selected_hotspot:
             canvas = self._active_canvas()
             self._load_bright_overlay(canvas, self._selected_hotspot)

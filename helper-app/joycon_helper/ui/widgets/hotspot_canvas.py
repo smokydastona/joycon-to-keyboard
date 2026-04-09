@@ -15,6 +15,7 @@ from PyQt6.QtCore import (
 )
 from PyQt6.QtGui import (
     QBrush, QColor, QFont, QPainter, QPainterPath, QPen, QPixmap,
+    QTransform,
 )
 from PyQt6.QtWidgets import (
     QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsScene,
@@ -81,12 +82,18 @@ class HotspotCanvas(QGraphicsView):
         self._overlay_color = "#a03cc8"  # violet default
         self._mapping_labels: Dict[str, str] = {}
         self._shapes: Dict[str, Any] = {}
+        self._wide_set: set = set()
 
         # Pale composite (all buttons dimmed) and bright individual overlay
         self._pale_pixmap: Optional[QPixmap] = None
         self._pale_item: Optional[QGraphicsPixmapItem] = None
         self._bright_pixmap: Optional[QPixmap] = None
         self._bright_item: Optional[QGraphicsPixmapItem] = None
+
+        # Per-button overlay textures (sketch-style brush fills)
+        self._overlay_paths: Dict[str, str] = {}
+        self._overlay_full_pixmaps: Dict[str, QPixmap] = {}
+        self._overlay_brushes: Dict[str, QBrush] = {}
 
         # Drag-edit mode (temporary position tweaking)
         self._edit_mode = False
@@ -134,6 +141,22 @@ class HotspotCanvas(QGraphicsView):
         """Set per-button shape specs (only affects Joy-Con canvas)."""
         self._shapes = shapes
         self._rebuild_hotspot_items()
+
+    def set_wide_set(self, wide: set) -> None:
+        """Set the names of buttons that should use a larger hit area."""
+        self._wide_set = wide
+        self._rebuild_hotspot_items()
+
+    def set_overlay_paths(self, paths: Dict[str, str]) -> None:
+        """Set file paths for per-button overlay PNGs used as texture fills."""
+        self._overlay_paths = paths
+        self._overlay_full_pixmaps.clear()
+        for name, path in paths.items():
+            pm = QPixmap(path)
+            if not pm.isNull():
+                self._overlay_full_pixmaps[name] = pm
+        self._build_overlay_brushes()
+        self._update_hotspot_visuals()
 
     def set_selected(self, name: Optional[str]) -> None:
         self._selected = name
@@ -313,10 +336,12 @@ class HotspotCanvas(QGraphicsView):
     def _make_shape_path(self, cx: float, cy: float, name: str,
                          grow: float = 0.0) -> QPainterPath:
         """Build a QPainterPath for the hotspot shape centred at (cx, cy)."""
+        _WIDE_RADIUS = 36
         path = QPainterPath()
         spec = self._shapes.get(name)
         if not spec:
-            r = _DOT_RADIUS + grow
+            base_r = _WIDE_RADIUS if name in self._wide_set else _DOT_RADIUS
+            r = base_r + grow
             path.addEllipse(cx - r, cy - r, r * 2, r * 2)
         elif spec[0] == "circle":
             r = spec[1] + grow
@@ -457,7 +482,34 @@ class HotspotCanvas(QGraphicsView):
             self._scene.addItem(label)
             hs.label = label
 
+        self._build_overlay_brushes()
         self._update_hotspot_visuals()
+
+    def _build_overlay_brushes(self) -> None:
+        """Crop cached overlay pixmaps to shape bounds and build QBrush instances."""
+        self._overlay_brushes.clear()
+        rect = self._scene.sceneRect()
+        if rect.width() <= 0 or not self._overlay_full_pixmaps:
+            return
+
+        for hs in self._hotspots:
+            pm = self._overlay_full_pixmaps.get(hs.name)
+            if pm is None:
+                continue
+            cx = hs.norm_x * rect.width()
+            cy = hs.norm_y * rect.height()
+            # Use generous grow so texture covers the pulse animation range
+            shape_path = self._make_shape_path(cx, cy, hs.name, grow=_PULSE_RANGE + 8)
+            bounds = shape_path.boundingRect().toAlignedRect()
+            bounds = bounds.intersected(pm.rect())
+            if bounds.isEmpty():
+                continue
+            cropped = pm.copy(bounds)
+            brush = QBrush(cropped)
+            t = QTransform()
+            t.translate(bounds.x(), bounds.y())
+            brush.setTransform(t)
+            self._overlay_brushes[hs.name] = brush
 
     def _update_hotspot_visuals(self) -> None:
         c = self._theme.theme["colors"]
@@ -485,11 +537,17 @@ class HotspotCanvas(QGraphicsView):
                 fill_color = c["muted"]
                 border_color = c["border"]
 
-            # Hover effect — reduce dot opacity when pale overlay supplies the texture
+            # Hover effect — determine opacity based on state
             is_hovered = hs.name == self._hovered
             has_pale = self._pale_item is not None
+            overlay_brush = self._overlay_brushes.get(hs.name)
+
             if hs.name == self._selected or is_hovered:
                 opacity = 0.85
+            elif overlay_brush and hs.mapped:
+                opacity = 0.65
+            elif overlay_brush:
+                opacity = 0.35
             elif has_pale and hs.mapped:
                 opacity = 0.25
             elif has_pale:
@@ -497,9 +555,15 @@ class HotspotCanvas(QGraphicsView):
             else:
                 opacity = 0.75 if not is_hovered else 0.95
 
-            fc = QColor(fill_color)
-            fc.setAlphaF(opacity)
-            hs.dot.setBrush(QBrush(fc))
+            # Use overlay texture brush when available, solid color fallback
+            if overlay_brush:
+                hs.dot.setBrush(overlay_brush)
+                hs.dot.setOpacity(opacity)
+            else:
+                fc = QColor(fill_color)
+                fc.setAlphaF(opacity)
+                hs.dot.setBrush(QBrush(fc))
+                hs.dot.setOpacity(1.0)
 
             pen_width = 3 if is_hovered or hs.name == self._selected else 2
             pen = QPen(QColor(border_color), pen_width)
