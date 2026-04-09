@@ -139,51 +139,51 @@ ShapeSpec = tuple
 
 JOYCON_BUTTON_SHAPES: Dict[str, ShapeSpec] = {
     # Triggers — wide rounded bumper shapes
-    "ZL":      ("rrect", 72, 22, 8),
-    "ZR":      ("rrect", 72, 22, 8),
+    "ZL":      ("rrect", 80, 30, 10),
+    "ZR":      ("rrect", 80, 30, 10),
     # Bumpers — slightly narrower
-    "L":       ("rrect", 64, 18, 6),
-    "R":       ("rrect", 64, 18, 6),
+    "L":       ("rrect", 72, 26, 8),
+    "R":       ("rrect", 72, 26, 8),
     # Face buttons — circles
-    "A":       ("circle", 14),
-    "B":       ("circle", 14),
-    "X":       ("circle", 14),
-    "Y":       ("circle", 14),
+    "A":       ("circle", 22),
+    "B":       ("circle", 22),
+    "X":       ("circle", 22),
+    "Y":       ("circle", 22),
     # Thumbsticks — larger circles
-    "LStick":  ("circle", 22),
-    "RStick":  ("circle", 22),
+    "LStick":  ("circle", 28),
+    "RStick":  ("circle", 28),
     # Stick directions — quarter-ring arcs around thumbstick
-    "LSUp":    ("arc_top", 26, 38),
-    "LSDown":  ("arc_bottom", 26, 38),
-    "LSLeft":  ("arc_left", 26, 38),
-    "LSRight": ("arc_right", 26, 38),
-    "RSUp":    ("arc_top", 26, 38),
-    "RSDown":  ("arc_bottom", 26, 38),
-    "RSLeft":  ("arc_left", 26, 38),
-    "RSRight": ("arc_right", 26, 38),
+    "LSUp":    ("arc_top", 30, 48),
+    "LSDown":  ("arc_bottom", 30, 48),
+    "LSLeft":  ("arc_left", 30, 48),
+    "LSRight": ("arc_right", 30, 48),
+    "RSUp":    ("arc_top", 30, 48),
+    "RSDown":  ("arc_bottom", 30, 48),
+    "RSLeft":  ("arc_left", 30, 48),
+    "RSRight": ("arc_right", 30, 48),
     # D-pad — directional arrows
-    "DUp":     ("arrow_up", 12),
-    "DDown":   ("arrow_down", 12),
-    "DLeft":   ("arrow_left", 12),
-    "DRight":  ("arrow_right", 12),
+    "DUp":     ("arrow_up", 20),
+    "DDown":   ("arrow_down", 20),
+    "DLeft":   ("arrow_left", 20),
+    "DRight":  ("arrow_right", 20),
     # Plus — cross/plus shape, Minus — wide pill
-    "Plus":    ("plus", 10, 4),
-    "Minus":   ("rrect", 22, 10, 4),
+    "Plus":    ("plus", 16, 7),
+    "Minus":   ("rrect", 32, 16, 6),
     # Capture — camera shape, Home — house shape
-    "Capture": ("camera", 10),
-    "Home":    ("home", 10),
+    "Capture": ("camera", 18),
+    "Home":    ("home", 18),
     # Side-rail buttons — tall narrow pills
-    "SL(L)":   ("rrect", 12, 44, 5),
-    "SR(L)":   ("rrect", 12, 44, 5),
-    "SL(R)":   ("rrect", 12, 44, 5),
-    "SR(R)":   ("rrect", 12, 44, 5),
-    # Motion / IMU — small circles
-    "Shake":   ("circle", 14),
-    "TiltUp":  ("circle", 12),
-    "TiltDn":  ("circle", 12),
-    "TiltL":   ("circle", 12),
-    "TiltR":   ("circle", 12),
-    "Flick":   ("circle", 14),
+    "SL(L)":   ("rrect", 20, 50, 8),
+    "SR(L)":   ("rrect", 20, 50, 8),
+    "SL(R)":   ("rrect", 20, 50, 8),
+    "SR(R)":   ("rrect", 20, 50, 8),
+    # Motion / IMU — circles
+    "Shake":   ("circle", 22),
+    "TiltUp":  ("circle", 20),
+    "TiltDn":  ("circle", 20),
+    "TiltL":   ("circle", 20),
+    "TiltR":   ("circle", 20),
+    "Flick":   ("circle", 22),
 }
 
 # ---------------------------------------------------------------------------

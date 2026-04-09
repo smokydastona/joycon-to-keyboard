@@ -26,9 +26,9 @@ from ..theme import ThemeEngine
 log = logging.getLogger("joycon_helper.ui.widgets.hotspot_canvas")
 
 # Size of hotspot dots at native image resolution
-_DOT_RADIUS = 18
-_TEXT_OFFSET_Y = -32
-_HOVER_GROW = 6
+_DOT_RADIUS = 24
+_TEXT_OFFSET_Y = -36
+_HOVER_GROW = 8
 _PULSE_RANGE = 4
 
 
@@ -301,7 +301,7 @@ class HotspotCanvas(QGraphicsView):
         for hs in self._hotspots:
             hx = hs.norm_x * rect.width()
             hy = hs.norm_y * rect.height()
-            if self._make_shape_path(hx, hy, hs.name, grow=6).contains(scene_pos):
+            if self._make_shape_path(hx, hy, hs.name, grow=12).contains(scene_pos):
                 dx = scene_pos.x() - hx
                 dy = scene_pos.y() - hy
                 dist = math.sqrt(dx * dx + dy * dy)
