@@ -55,6 +55,11 @@ class MappingView(QWidget):
         self._clipboard_binding: Optional[Dict[str, Any]] = None
         self._locked_hotspots: Set[str] = set()
 
+        # Per-skin editable position caches (survive skin switching)
+        tk = "dark" if main.theme.is_dark else "default"
+        self._m913_stock_pos = list(M913_HOTSPOTS[tk])
+        self._m913_incedius_pos = list(INCEDIUS_HOTSPOTS[tk])
+
         self._init_complete = False
 
         layout = QVBoxLayout(self)
@@ -200,6 +205,11 @@ class MappingView(QWidget):
         self._export_pos_btn.setToolTip("Save current hotspot positions to a JSON file")
         self._export_pos_btn.clicked.connect(self._export_positions)
         color_row.addWidget(self._export_pos_btn)
+
+        self._import_pos_btn = QPushButton("📂 Import Positions")
+        self._import_pos_btn.setToolTip("Load hotspot positions from a JSON file")
+        self._import_pos_btn.clicked.connect(self._import_positions)
+        color_row.addWidget(self._import_pos_btn)
 
         lay.addLayout(color_row)
         self._splitter.addWidget(panel)
@@ -368,9 +378,14 @@ class MappingView(QWidget):
 
     def _load_hotspots(self) -> None:
         tk = self._theme_key
+
+        # Try loading saved positions from hotspot_positions.json
+        self._try_load_saved_positions()
+
         self._jc_canvas.set_hotspots(KEYMAP_HOTSPOTS[tk])
         self._jc_canvas.set_hotspot_shapes(JOYCON_BUTTON_SHAPES)
-        self._m913_canvas.set_hotspots(M913_HOTSPOTS[tk])
+        # M913 uses the cached per-skin positions
+        self._m913_canvas.set_hotspots(self._m913_stock_pos)
         self._m913_canvas.set_wide_set(M913_WIDE)
         self._mouse_canvas.set_hotspots(MOUSE_HOTSPOTS[tk])
         self._mouse_canvas.set_wide_set(MOUSE_WIDE)
@@ -402,6 +417,35 @@ class MappingView(QWidget):
 
         # Load per-button overlay textures for sketch-style brush fills
         self._load_overlay_textures()
+
+    def _try_load_saved_positions(self) -> None:
+        """Load per-device positions from hotspot_positions.json if it
+        exists next to the executable / working directory.  Updates the
+        internal position caches so M913 and Incedius each keep their
+        own coordinates."""
+        import os
+        import sys
+
+        candidates = [
+            os.path.join(os.path.dirname(sys.argv[0]), "hotspot_positions.json"),
+            os.path.join(os.getcwd(), "hotspot_positions.json"),
+        ]
+        for p in candidates:
+            if not os.path.isfile(p):
+                continue
+            try:
+                with open(p, "r", encoding="utf-8") as fh:
+                    data = json.load(fh)
+            except (json.JSONDecodeError, OSError):
+                continue
+            if not isinstance(data, dict):
+                continue
+            if "m913" in data:
+                self._m913_stock_pos = [(n, x, y) for n, x, y in data["m913"]]
+            if "incedius" in data:
+                self._m913_incedius_pos = [(n, x, y) for n, x, y in data["incedius"]]
+            log.info("Loaded hotspot positions from %s", p)
+            break
 
     # -----------------------------------------------------------------
     # Overlay helpers (pale composite + bright individual)
@@ -486,7 +530,7 @@ class MappingView(QWidget):
     def _device_list(self):
         """Return list of (canvas, hotspot_list) in tab order."""
         tk = self._theme_key
-        m913_hs = INCEDIUS_HOTSPOTS[tk] if self._m913_skin == "Incedius" else M913_HOTSPOTS[tk]
+        m913_hs = self._m913_incedius_pos if self._m913_skin == "Incedius" else self._m913_stock_pos
         return [
             (self._jc_canvas, KEYMAP_HOTSPOTS[tk]),
             (self._m913_canvas, m913_hs),
@@ -514,14 +558,19 @@ class MappingView(QWidget):
         self._sel_mapping.setText("Click a button on the canvas to select it")
 
     def _on_m913_skin_changed(self, skin: str) -> None:
+        # Capture current canvas positions before switching
+        if self._m913_skin == "Stock":
+            self._m913_stock_pos = self._m913_canvas.export_positions()
+        else:
+            self._m913_incedius_pos = self._m913_canvas.export_positions()
+
         self._m913_skin = skin
-        tk = self._theme_key
         if skin == "Incedius":
-            self._m913_canvas.set_hotspots(INCEDIUS_HOTSPOTS[tk])
+            self._m913_canvas.set_hotspots(self._m913_incedius_pos)
             self._m913_canvas.set_wide_set(INCEDIUS_WIDE)
             pm = self._main.assets.load_pixmap("incedius_none.png")
         else:
-            self._m913_canvas.set_hotspots(M913_HOTSPOTS[tk])
+            self._m913_canvas.set_hotspots(self._m913_stock_pos)
             self._m913_canvas.set_wide_set(M913_WIDE)
             pm = self._main.assets.load_pixmap("m913_none.png")
         if pm:
@@ -828,18 +877,19 @@ class MappingView(QWidget):
         )
 
     def _export_positions(self) -> None:
-        device_map = {
-            "joycon":   self._jc_canvas,
-            "m913":     self._m913_canvas,
-            "mouse":    self._mouse_canvas,
-            "keyboard": self._kbd_canvas,
+        # Capture current M913 canvas positions into the active skin cache
+        if self._m913_skin == "Stock":
+            self._m913_stock_pos = self._m913_canvas.export_positions()
+        else:
+            self._m913_incedius_pos = self._m913_canvas.export_positions()
+
+        data: Dict[str, list] = {
+            "joycon":   [[n, x, y] for n, x, y in self._jc_canvas.export_positions()],
+            "m913":     [[n, x, y] for n, x, y in self._m913_stock_pos],
+            "incedius": [[n, x, y] for n, x, y in self._m913_incedius_pos],
+            "mouse":    [[n, x, y] for n, x, y in self._mouse_canvas.export_positions()],
+            "keyboard": [[n, x, y] for n, x, y in self._kbd_canvas.export_positions()],
         }
-        data: Dict[str, list] = {}
-        for device, canvas in device_map.items():
-            data[device] = [
-                [name, nx, ny]
-                for name, nx, ny in canvas.export_positions()
-            ]
 
         path, _ = QFileDialog.getSaveFileName(
             self, "Export Hotspot Positions", "hotspot_positions.json",
@@ -850,6 +900,54 @@ class MappingView(QWidget):
         with open(path, "w", encoding="utf-8") as fh:
             json.dump(data, fh, indent=2)
         QMessageBox.information(self, "Exported", f"Positions saved to:\n{path}")
+
+    def _import_positions(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Import Hotspot Positions", "",
+            "JSON Files (*.json)",
+        )
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (json.JSONDecodeError, OSError) as exc:
+            QMessageBox.warning(self, "Import Error", str(exc))
+            return
+        if not isinstance(data, dict):
+            QMessageBox.warning(self, "Import Error", "Expected a JSON object.")
+            return
+
+        tk = self._theme_key
+        loaded: list[str] = []
+        if "joycon" in data:
+            hs = [(n, x, y) for n, x, y in data["joycon"]]
+            self._jc_canvas.set_hotspots(hs)
+            loaded.append("Joy-Con")
+        if "m913" in data:
+            self._m913_stock_pos = [(n, x, y) for n, x, y in data["m913"]]
+            if self._m913_skin == "Stock":
+                self._m913_canvas.set_hotspots(self._m913_stock_pos)
+            loaded.append("M913 Stock")
+        if "incedius" in data:
+            self._m913_incedius_pos = [(n, x, y) for n, x, y in data["incedius"]]
+            if self._m913_skin == "Incedius":
+                self._m913_canvas.set_hotspots(self._m913_incedius_pos)
+            loaded.append("M913 Incedius")
+        if "mouse" in data:
+            hs = [(n, x, y) for n, x, y in data["mouse"]]
+            self._mouse_canvas.set_hotspots(hs)
+            loaded.append("Mouse")
+        if "keyboard" in data:
+            hs = [(n, x, y) for n, x, y in data["keyboard"]]
+            self._kbd_canvas.set_hotspots(hs)
+            loaded.append("Keyboard")
+
+        self._refresh_mapping_visuals()
+        QMessageBox.information(
+            self, "Imported",
+            f"Loaded positions for: {', '.join(loaded)}",
+        )
 
     def _on_search(self, text: str) -> None:
         self._search_text = text.strip().lower()
