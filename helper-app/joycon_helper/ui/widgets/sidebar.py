@@ -12,7 +12,7 @@ from PyQt6.QtCore import (
     QEasingCurve, QPropertyAnimation,
     Qt, pyqtSignal,
 )
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtWidgets import (
     QFrame, QGraphicsDropShadowEffect, QHBoxLayout, QLabel,
     QPushButton, QVBoxLayout, QWidget,
@@ -43,7 +43,7 @@ class SidebarItem(QPushButton):
         self._glow = QGraphicsDropShadowEffect(self)
         self._glow.setBlurRadius(0)
         self._glow.setOffset(0, 0)
-        self._glow.setColor(theme.theme["colors"].get("sidebar_active", "#4a7aba"))
+        self._glow.setColor(QColor(theme.theme["colors"].get("sidebar_active", "#4a7aba")))
         self.setGraphicsEffect(self._glow)
 
         self._update_style()
