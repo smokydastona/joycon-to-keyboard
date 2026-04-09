@@ -10,10 +10,10 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtWidgets import (
-    QCheckBox, QComboBox, QHBoxLayout, QHeaderView,
-    QLabel, QPushButton, QScrollArea, QSlider, QSpinBox,
+    QCheckBox, QComboBox, QGroupBox, QHBoxLayout, QHeaderView,
+    QLabel, QProgressBar, QPushButton, QScrollArea, QSlider, QSpinBox,
     QTabWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
@@ -27,6 +27,7 @@ log = logging.getLogger("joycon_helper.ui.views.gyro_zones")
 ZONE_SHAPES = ["circle", "ring", "wedge", "rect"]
 ACTIVATOR_TRIGGERS = ["press", "release", "double_press", "long_press", "chord"]
 ACCEL_TYPES = ["none", "power", "smooth"]
+LED_PATTERNS = ["off", "solid", "blink", "pulse", "rainbow"]
 
 
 class GyroZonesView(QWidget):
@@ -45,6 +46,12 @@ class GyroZonesView(QWidget):
         self._tabs.addTab(self._build_gyro_tab(), "Gyro Settings")
         self._tabs.addTab(self._build_zones_tab(), "Zones")
         self._tabs.addTab(self._build_activators_tab(), "Activators")
+        self._tabs.addTab(self._build_cal_led_tab(), "Calibration & LED")
+
+        # Calibration poll timer
+        self._cal_timer = QTimer(self)
+        self._cal_timer.setInterval(250)
+        self._cal_timer.timeout.connect(self._poll_cal_status)
 
     # ------------------------------------------------------------------
     # Gyro Settings Tab
@@ -194,6 +201,198 @@ class GyroZonesView(QWidget):
         vbox.addStretch()
         return scroll
 
+    # ------------------------------------------------------------------
+    # Calibration & LED Tab
+    # ------------------------------------------------------------------
+    def _build_cal_led_tab(self) -> QWidget:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        container = QWidget()
+        scroll.setWidget(container)
+        vbox = QVBoxLayout(container)
+
+        # --- Gyro Calibration ---
+        cal_card = Card(self._mw.theme)
+        cal_lay = QVBoxLayout(cal_card)
+        cal_lay.addWidget(QLabel("🧭  Gyro Calibration"))
+        cal_lay.addWidget(QLabel(
+            "Place the controller flat and still, then click Calibrate.\n"
+            "128 gyro samples will be averaged to compute bias offsets."
+        ))
+
+        self._cal_btn = QPushButton("Calibrate Gyro")
+        self._cal_btn.clicked.connect(self._start_calibration)
+        cal_lay.addWidget(self._cal_btn)
+
+        self._cal_progress = QProgressBar()
+        self._cal_progress.setRange(0, 0)  # indeterminate
+        self._cal_progress.setVisible(False)
+        cal_lay.addWidget(self._cal_progress)
+
+        self._cal_status_label = QLabel("Status: idle")
+        cal_lay.addWidget(self._cal_status_label)
+
+        # Current bias display
+        bias_group = QGroupBox("Current Gyro Bias")
+        bias_lay = QHBoxLayout(bias_group)
+        bias_lay.addWidget(QLabel("X:"))
+        self._bias_x = QSpinBox()
+        self._bias_x.setRange(-32768, 32767)
+        bias_lay.addWidget(self._bias_x)
+        bias_lay.addWidget(QLabel("Y:"))
+        self._bias_y = QSpinBox()
+        self._bias_y.setRange(-32768, 32767)
+        bias_lay.addWidget(self._bias_y)
+        bias_lay.addWidget(QLabel("Z:"))
+        self._bias_z = QSpinBox()
+        self._bias_z.setRange(-32768, 32767)
+        bias_lay.addWidget(self._bias_z)
+        cal_lay.addWidget(bias_group)
+
+        bias_btn_row = QHBoxLayout()
+        read_bias_btn = QPushButton("Read Bias from Device")
+        read_bias_btn.clicked.connect(self._read_bias)
+        set_bias_btn = QPushButton("Set Bias Manually")
+        set_bias_btn.clicked.connect(self._set_bias)
+        bias_btn_row.addWidget(read_bias_btn)
+        bias_btn_row.addWidget(set_bias_btn)
+        bias_btn_row.addStretch()
+        cal_lay.addLayout(bias_btn_row)
+
+        vbox.addWidget(cal_card)
+
+        # --- LED Control ---
+        led_card = Card(self._mw.theme)
+        led_lay = QVBoxLayout(led_card)
+        led_lay.addWidget(QLabel("💡  LED Control"))
+
+        pat_row = QHBoxLayout()
+        pat_row.addWidget(QLabel("Pattern:"))
+        self._led_pattern = QComboBox()
+        self._led_pattern.addItems(LED_PATTERNS)
+        pat_row.addWidget(self._led_pattern)
+        led_lay.addLayout(pat_row)
+
+        rgb_row = QHBoxLayout()
+        rgb_row.addWidget(QLabel("R:"))
+        self._led_r = QSpinBox()
+        self._led_r.setRange(0, 255)
+        self._led_r.setValue(0)
+        rgb_row.addWidget(self._led_r)
+        rgb_row.addWidget(QLabel("G:"))
+        self._led_g = QSpinBox()
+        self._led_g.setRange(0, 255)
+        self._led_g.setValue(0)
+        rgb_row.addWidget(self._led_g)
+        rgb_row.addWidget(QLabel("B:"))
+        self._led_b = QSpinBox()
+        self._led_b.setRange(0, 255)
+        self._led_b.setValue(255)
+        rgb_row.addWidget(self._led_b)
+        led_lay.addLayout(rgb_row)
+
+        speed_row = QHBoxLayout()
+        speed_row.addWidget(QLabel("Speed (ms):"))
+        self._led_speed = QSpinBox()
+        self._led_speed.setRange(50, 10000)
+        self._led_speed.setValue(500)
+        speed_row.addWidget(self._led_speed)
+        led_lay.addLayout(speed_row)
+
+        led_btn = QPushButton("Apply LED")
+        led_btn.clicked.connect(self._apply_led)
+        led_lay.addWidget(led_btn)
+
+        vbox.addWidget(led_card)
+
+        vbox.addStretch()
+        return scroll
+
+    # --- Calibration actions ---
+    def _start_calibration(self) -> None:
+        if not self._mw.bridge.is_connected:
+            self._cal_status_label.setText("Status: not connected")
+            return
+        self._mw.bridge.send_cmd({"cmd": "gyro_cal_start"})
+        self._cal_btn.setEnabled(False)
+        self._cal_progress.setVisible(True)
+        self._cal_status_label.setText("Status: calibrating…")
+        self._cal_timer.start()
+
+    def _poll_cal_status(self) -> None:
+        if not self._mw.bridge.is_connected:
+            self._cal_timer.stop()
+            self._cal_btn.setEnabled(True)
+            self._cal_progress.setVisible(False)
+            self._cal_status_label.setText("Status: disconnected during cal")
+            return
+        self._mw.bridge.send_cmd({"cmd": "gyro_cal_status"})
+        # Response will arrive asynchronously; we check via a callback
+        # registered in serial_client or via the general message handler.
+        # For simplicity, poll the bridge's last_reply if available.
+        reply = getattr(self._mw.bridge, "last_reply", None)
+        if reply and reply.get("cmd") == "gyro_cal_status":
+            active = reply.get("active", False)
+            if not active:
+                self._cal_timer.stop()
+                self._cal_btn.setEnabled(True)
+                self._cal_progress.setVisible(False)
+                bx = reply.get("bias_x", 0)
+                by = reply.get("bias_y", 0)
+                bz = reply.get("bias_z", 0)
+                self._bias_x.setValue(bx)
+                self._bias_y.setValue(by)
+                self._bias_z.setValue(bz)
+                self._cal_status_label.setText(
+                    f"Status: done — bias=({bx}, {by}, {bz})"
+                )
+                log.info("Gyro calibration done: bias=(%d, %d, %d)", bx, by, bz)
+
+    def _read_bias(self) -> None:
+        if not self._mw.bridge.is_connected:
+            return
+        self._mw.bridge.send_cmd({"cmd": "gyro_cal_status"})
+        reply = getattr(self._mw.bridge, "last_reply", None)
+        if reply and reply.get("cmd") == "gyro_cal_status":
+            self._bias_x.setValue(reply.get("bias_x", 0))
+            self._bias_y.setValue(reply.get("bias_y", 0))
+            self._bias_z.setValue(reply.get("bias_z", 0))
+
+    def _set_bias(self) -> None:
+        if not self._mw.bridge.is_connected:
+            return
+        self._mw.bridge.send_cmd({
+            "cmd": "gyro_cal_set",
+            "bias_x": self._bias_x.value(),
+            "bias_y": self._bias_y.value(),
+            "bias_z": self._bias_z.value(),
+        })
+        self._cal_status_label.setText(
+            f"Status: bias set to ({self._bias_x.value()}, "
+            f"{self._bias_y.value()}, {self._bias_z.value()})"
+        )
+        log.info("Manually set gyro bias: (%d, %d, %d)",
+                 self._bias_x.value(), self._bias_y.value(), self._bias_z.value())
+
+    # --- LED actions ---
+    def _apply_led(self) -> None:
+        if not self._mw.bridge.is_connected:
+            return
+        self._mw.bridge.send_cmd({
+            "cmd": "set_led",
+            "pattern": self._led_pattern.currentIndex(),
+            "r": self._led_r.value(),
+            "g": self._led_g.value(),
+            "b": self._led_b.value(),
+            "speed": self._led_speed.value(),
+        })
+        log.info("Sent LED config: pattern=%s r=%d g=%d b=%d speed=%d",
+                 self._led_pattern.currentText(), self._led_r.value(),
+                 self._led_g.value(), self._led_b.value(), self._led_speed.value())
+
+    # ------------------------------------------------------------------
+    # Gyro apply
+    # ------------------------------------------------------------------
     def _apply_gyro(self) -> None:
         """Send gyro + flick stick + stick accel config."""
         gyro = {
@@ -450,6 +649,16 @@ class GyroZonesView(QWidget):
             })
         return acts
 
+    def get_led_data(self) -> dict:
+        """Return current LED settings for profile serialization."""
+        return {
+            "pattern": self._led_pattern.currentIndex(),
+            "r": self._led_r.value(),
+            "g": self._led_g.value(),
+            "b": self._led_b.value(),
+            "speed": self._led_speed.value(),
+        }
+
     def load_from_profile(self, profile: dict) -> None:
         """Populate UI from a loaded profile dict."""
         gyro = profile.get("gyro", {})
@@ -504,3 +713,13 @@ class GyroZonesView(QWidget):
                 w = self._act_table.cellWidget(row, col)
                 if w:
                     w.setValue(a.get(key, 0))
+
+        # Load LED settings
+        led = profile.get("led", {})
+        pat = led.get("pattern", 0)
+        if 0 <= pat < len(LED_PATTERNS):
+            self._led_pattern.setCurrentIndex(pat)
+        self._led_r.setValue(led.get("r", 0))
+        self._led_g.setValue(led.get("g", 0))
+        self._led_b.setValue(led.get("b", 255))
+        self._led_speed.setValue(led.get("speed", 500))

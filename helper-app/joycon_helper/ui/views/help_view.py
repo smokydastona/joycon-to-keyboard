@@ -299,6 +299,25 @@ def _sections() -> List[Tuple[str, str, bool]]:
             False,
         ),
         (
+            "🧭 Gyro Calibration & LED",
+            (
+                "## Gyro Calibration\n"
+                "Open Gyro & Zones → Calibration & LED tab.\n"
+                "Place the controller flat and still, then click Calibrate Gyro.\n"
+                "128 gyro samples will be averaged to compute bias offsets (X, Y, Z).\n"
+                "The bias is saved to NVS on the ESP32-S3 and restored automatically "
+                "on boot.\n\n"
+                "You can also read the current bias from the device, or manually set "
+                "bias values and push them.\n\n"
+                "## LED Control\n"
+                "Select a pattern (off / solid / blink / pulse / rainbow), choose an "
+                "RGB color, set the animation speed in milliseconds, and click Apply LED.\n"
+                "The command is sent over serial to the ESP32-S3, which forwards it "
+                "as a UART control frame to the ESP32 host."
+            ),
+            False,
+        ),
+        (
             "🔄 OTA Firmware Updates",
             (
                 "1. Connect ESP32-S3 to PC via USB.\n"
