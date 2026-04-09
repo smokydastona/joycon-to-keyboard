@@ -12,10 +12,9 @@ from typing import Any, Dict, Optional, Set, TYPE_CHECKING
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QComboBox, QDialog, QFileDialog,
-    QGridLayout,
-    QGroupBox, QHBoxLayout, QLabel, QLineEdit, QListWidget,
-    QListWidgetItem, QMenu, QMessageBox, QPushButton, QScrollArea, QSplitter, QTabWidget, QVBoxLayout, QWidget,
+    QComboBox, QFileDialog,
+    QGroupBox, QHBoxLayout, QInputDialog, QLabel, QLineEdit,
+    QMenu, QMessageBox, QPushButton, QScrollArea, QSplitter, QTabWidget, QVBoxLayout, QWidget,
 )
 
 from ..constants import (
@@ -62,7 +61,7 @@ class MappingView(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
 
-        # Splitter: canvas (left) + binding panel (right)
+        # Splitter: canvas (left) + profile quick-edit panel (right)
         self._splitter = QSplitter(Qt.Orientation.Horizontal)
         layout.addWidget(self._splitter)
 
@@ -206,7 +205,7 @@ class MappingView(QWidget):
         self._splitter.addWidget(panel)
 
     # -----------------------------------------------------------------
-    # Binding panel (right)
+    # Profile Quick-Edit panel (right)
     # -----------------------------------------------------------------
 
     def _build_binding_panel(self) -> None:
@@ -238,79 +237,126 @@ class MappingView(QWidget):
 
         lay.addWidget(info_card)
 
-        # Binding controls
-        bind_group = QGroupBox("Bind Key")
-        bind_lay = QVBoxLayout(bind_group)
+        # ----- Profile Quick-Edit -----
 
-        # Quick-bind buttons grid
-        quick_label = QLabel("Quick bind:")
-        quick_label.setStyleSheet(f"color: {self._main.theme.color('text_secondary')};")
-        bind_lay.addWidget(quick_label)
-
-        quick_grid = QGridLayout()
-        quick_keys = [
-            "W", "A", "S", "D", "Space", "LShift",
-            "E", "Q", "R", "F", "Tab", "Esc",
-            "1", "2", "3", "4", "5", "LCtrl",
-        ]
-        for i, key in enumerate(quick_keys):
-            btn = QPushButton(key)
-            btn.setFixedHeight(32)
+        # Slot selector
+        slot_group = QGroupBox("Profile Slot")
+        slot_lay = QVBoxLayout(slot_group)
+        slot_btn_row = QHBoxLayout()
+        self._pq_slot_btns: list[QPushButton] = []
+        for i in range(4):
+            btn = QPushButton(f"{i}")
+            btn.setFixedHeight(36)
+            btn.setCheckable(True)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.clicked.connect(lambda checked, k=key: self._bind_key(k))
-            quick_grid.addWidget(btn, i // 6, i % 6)
-        bind_lay.addLayout(quick_grid)
+            btn.setToolTip(f"Switch to profile slot {i}")
+            btn.clicked.connect(lambda checked, s=i: self._pq_select_slot(s))
+            slot_btn_row.addWidget(btn)
+            self._pq_slot_btns.append(btn)
+        slot_lay.addLayout(slot_btn_row)
+        lay.addWidget(slot_group)
 
-        # Visual keyboard picker
-        kbd_picker_btn = QPushButton("⌨ Keyboard Picker")
-        kbd_picker_btn.setToolTip("Open a full keyboard layout to visually pick a key")
-        kbd_picker_btn.clicked.connect(self._open_kbd_picker)
-        bind_lay.addWidget(kbd_picker_btn)
+        # Profile name
+        name_group = QGroupBox("Profile")
+        name_lay = QVBoxLayout(name_group)
+        name_row = QHBoxLayout()
+        self._pq_name_edit = QLineEdit()
+        self._pq_name_edit.setPlaceholderText("Profile name")
+        self._pq_name_edit.editingFinished.connect(self._pq_on_name_edited)
+        name_row.addWidget(self._pq_name_edit)
+        rename_btn = QPushButton("✏")
+        rename_btn.setFixedWidth(32)
+        rename_btn.setToolTip("Rename profile")
+        rename_btn.clicked.connect(self._pq_rename)
+        name_row.addWidget(rename_btn)
+        name_lay.addLayout(name_row)
+        lay.addWidget(name_group)
 
-        # Custom keycode entry
-        custom_row = QHBoxLayout()
-        custom_row.addWidget(QLabel("Keycode:"))
-        self._keycode_input = QLineEdit()
-        self._keycode_input.setPlaceholderText("e.g. 0x04 (A)")
-        custom_row.addWidget(self._keycode_input)
-        bind_btn = QPushButton("Bind")
-        bind_btn.setProperty("accent", True)
-        bind_btn.clicked.connect(self._bind_custom_keycode)
-        custom_row.addWidget(bind_btn)
-        bind_lay.addLayout(custom_row)
+        # Quick actions
+        actions_group = QGroupBox("Quick Actions")
+        actions_lay = QVBoxLayout(actions_group)
 
-        # Modifier checkboxes row
-        mod_row = QHBoxLayout()
-        mod_row.addWidget(QLabel("Modifier:"))
-        self._mod_input = QLineEdit()
-        self._mod_input.setPlaceholderText("modifier bits (hex)")
-        self._mod_input.setFixedWidth(120)
-        mod_row.addWidget(self._mod_input)
-        mod_row.addStretch()
-        bind_lay.addLayout(mod_row)
+        row1 = QHBoxLayout()
+        new_btn = QPushButton("New")
+        new_btn.setProperty("accent", True)
+        new_btn.setToolTip("Create a blank profile")
+        new_btn.clicked.connect(self._pq_new)
+        row1.addWidget(new_btn)
+        dup_btn = QPushButton("Duplicate")
+        dup_btn.setToolTip("Copy the current profile")
+        dup_btn.clicked.connect(self._pq_duplicate)
+        row1.addWidget(dup_btn)
+        actions_lay.addLayout(row1)
 
-        # Unbind
-        unbind_btn = QPushButton("Unbind Selected")
-        unbind_btn.setProperty("danger", True)
-        unbind_btn.clicked.connect(self._unbind_selected)
-        bind_lay.addWidget(unbind_btn)
+        row2 = QHBoxLayout()
+        upload_btn = QPushButton("Upload ↑")
+        upload_btn.setProperty("accent", True)
+        upload_btn.setToolTip("Send the current profile to the device")
+        upload_btn.clicked.connect(self._pq_upload)
+        row2.addWidget(upload_btn)
+        read_btn = QPushButton("Read ↓")
+        read_btn.setToolTip("Read the profile from the device")
+        read_btn.clicked.connect(self._pq_read)
+        row2.addWidget(read_btn)
+        actions_lay.addLayout(row2)
 
-        lay.addWidget(bind_group)
+        row3 = QHBoxLayout()
+        save_btn = QPushButton("Save File")
+        save_btn.setToolTip("Save profile to a JSON file")
+        save_btn.clicked.connect(self._pq_save_file)
+        row3.addWidget(save_btn)
+        load_btn = QPushButton("Load File")
+        load_btn.setToolTip("Load profile from a JSON file")
+        load_btn.clicked.connect(self._pq_load_file)
+        row3.addWidget(load_btn)
+        actions_lay.addLayout(row3)
 
-        # Mappings list
-        list_group = QGroupBox("All Mappings")
-        list_lay = QVBoxLayout(list_group)
-        self._mapping_list = QListWidget()
-        self._mapping_list.setMinimumHeight(150)
-        self._mapping_list.itemClicked.connect(self._on_mapping_list_clicked)
-        list_lay.addWidget(self._mapping_list)
+        reset_btn = QPushButton("Reset to Default")
+        reset_btn.setProperty("danger", True)
+        reset_btn.setToolTip("Reset this profile to factory defaults")
+        reset_btn.clicked.connect(self._pq_reset)
+        actions_lay.addWidget(reset_btn)
 
+        lay.addWidget(actions_group)
+
+        # Mapping summary
+        summary_card = Card(self._main.theme)
+        summary_lay = QVBoxLayout(summary_card)
+        summary_title = QLabel("Mapping Summary")
+        summary_title.setFont(QFont(
+            self._main.theme.typo("font_family"), 11, QFont.Weight.Bold
+        ))
+        summary_lay.addWidget(summary_title)
+        self._pq_summary_label = QLabel("0 keys bound")
+        self._pq_summary_label.setWordWrap(True)
+        self._pq_summary_label.setStyleSheet(
+            f"color: {self._main.theme.color('text_secondary')};"
+        )
+        summary_lay.addWidget(self._pq_summary_label)
+        lay.addWidget(summary_card)
+
+        # Undo / Redo
+        undo_group = QGroupBox("History")
+        undo_lay = QHBoxLayout(undo_group)
+        self._pq_undo_btn = QPushButton("↩ Undo")
+        self._pq_undo_btn.setEnabled(False)
+        self._pq_undo_btn.setToolTip("Undo last change (Ctrl+Z)")
+        self._pq_undo_btn.clicked.connect(self._main.undo)
+        undo_lay.addWidget(self._pq_undo_btn)
+        self._pq_redo_btn = QPushButton("↪ Redo")
+        self._pq_redo_btn.setEnabled(False)
+        self._pq_redo_btn.setToolTip("Redo last change (Ctrl+Y)")
+        self._pq_redo_btn.clicked.connect(self._main.redo)
+        undo_lay.addWidget(self._pq_redo_btn)
+        lay.addWidget(undo_group)
+
+        # Clear all mappings (compact danger button at bottom)
         clear_btn = QPushButton("Clear All Mappings")
         clear_btn.setProperty("danger", True)
-        clear_btn.clicked.connect(self._clear_all_mappings)
-        list_lay.addWidget(clear_btn)
+        clear_btn.setToolTip("Remove every binding from this profile")
+        clear_btn.clicked.connect(self._pq_clear_all)
+        lay.addWidget(clear_btn)
 
-        lay.addWidget(list_group)
         lay.addStretch()
 
         panel.setWidget(container)
@@ -498,26 +544,7 @@ class MappingView(QWidget):
                     label = _KEYCODE_TO_KBD_LABEL.get(key_id, f"0x{key_id:02X}")
                     labels[hs_name] = label
             canvas.set_mapping_labels(labels)
-        self._refresh_mapping_list()
-
-    def _refresh_mapping_list(self) -> None:
-        self._mapping_list.clear()
-        profile = self._main.get_profile()
-        mappings = profile.get("mappings", {})
-
-        for hs_name in sorted(mappings.keys()):
-            entry = mappings[hs_name]
-            if not isinstance(entry, dict):
-                continue
-            keycode = entry.get("keycode")
-            if keycode is None:
-                continue
-            label = _KEYCODE_TO_KBD_LABEL.get(keycode, f"0x{keycode:02X}")
-            mod = entry.get("modifier", 0)
-            mod_str = f" +mod(0x{mod:02X})" if mod else ""
-            item = QListWidgetItem(f"{hs_name} → {label}{mod_str}")
-            item.setData(Qt.ItemDataRole.UserRole, hs_name)
-            self._mapping_list.addItem(item)
+        self._refresh_profile_panel()
 
     # -----------------------------------------------------------------
     # Event handlers
@@ -773,28 +800,6 @@ class MappingView(QWidget):
         if dlg is not None:
             dlg.accept()
 
-    def _open_kbd_picker(self) -> None:
-        """Open a popup dialog with the full keyboard canvas for key selection."""
-        if not self._selected_hotspot:
-            QMessageBox.information(
-                self, "No Selection",
-                "Select a controller / device button first, then open the keyboard picker.",
-            )
-            return
-        dlg = QDialog(self)
-        dlg.setWindowTitle(f"Keyboard Picker — binding {self._selected_hotspot}")
-        dlg.setMinimumSize(900, 500)
-        lay = QVBoxLayout(dlg)
-        lay.setContentsMargins(8, 8, 8, 8)
-        info = QLabel(f"Click a key to bind it to {self._selected_hotspot}")
-        info.setStyleSheet(f"color: {self._main.theme.color('text_secondary')};")
-        lay.addWidget(info)
-        lay.addWidget(self._kbd_canvas, 1)
-        self._kbd_picker_dlg = dlg
-        dlg.exec()
-        # Re-parent the canvas back (QDialog takes ownership during exec)
-        self._kbd_picker_dlg = None
-
     def _on_color_changed(self, color_name: str) -> None:
         self._overlay_color = color_name
         hex_color = RAINBOW_COLORS.get(color_name, "#a03cc8")
@@ -855,13 +860,8 @@ class MappingView(QWidget):
                 match = self._search_text in name.lower()
                 canvas.update_hotspot_state(name, search_match=match)
 
-    def _on_mapping_list_clicked(self, item: QListWidgetItem) -> None:
-        name = item.data(Qt.ItemDataRole.UserRole)
-        if name:
-            self._on_hotspot_clicked(name)
-
     # -----------------------------------------------------------------
-    # Binding
+    # Binding (used by Learn Mode)
     # -----------------------------------------------------------------
 
     def _bind_key(self, key_label: str) -> None:
@@ -886,14 +886,6 @@ class MappingView(QWidget):
             modifier = -keycode
             keycode = 0
 
-        # Parse modifier from input
-        mod_text = self._mod_input.text().strip()
-        if mod_text:
-            try:
-                modifier = int(mod_text, 16) if mod_text.startswith("0x") else int(mod_text)
-            except ValueError:
-                pass
-
         profile["mappings"][self._selected_hotspot] = {
             "keycode": keycode,
             "modifier": modifier,
@@ -903,51 +895,88 @@ class MappingView(QWidget):
         self._refresh_mapping_visuals()
         self._sel_mapping.setText(f"Bound to: {key_label}")
 
-    def _bind_custom_keycode(self) -> None:
-        if not self._selected_hotspot:
-            QMessageBox.information(self, "No Selection", "Select a controller button first.")
-            return
+    # -----------------------------------------------------------------
+    # Profile Quick-Edit panel actions
+    # -----------------------------------------------------------------
 
-        text = self._keycode_input.text().strip()
-        if not text:
-            return
+    def _pq_select_slot(self, slot: int) -> None:
+        self._main._slot_combo.setCurrentIndex(slot)
+        self._main._cmd_read_profile()
 
+    def _pq_on_name_edited(self) -> None:
+        name = self._pq_name_edit.text().strip()
+        if not name:
+            return
+        profile = self._main.get_profile()
+        if profile.get("name") != name:
+            profile["name"] = name
+            self._main.set_profile(profile)
+
+    def _pq_rename(self) -> None:
+        profile = self._main.get_profile()
+        old = profile.get("name", "")
+        new_name, ok = QInputDialog.getText(
+            self, "Rename Profile", "New name:", text=old,
+        )
+        if ok and new_name.strip():
+            profile["name"] = new_name.strip()
+            self._main.set_profile(profile)
+            self._pq_name_edit.setText(new_name.strip())
+
+    def _pq_new(self) -> None:
+        from .profiles import _default_profile
+        self._main.set_profile(_default_profile())
+
+    def _pq_duplicate(self) -> None:
+        import copy as _copy
+        profile = _copy.deepcopy(self._main.get_profile())
+        profile["name"] = profile.get("name", "Profile") + " (copy)"
+        self._main.set_profile(profile)
+
+    def _pq_upload(self) -> None:
+        self._main._cmd_write_profile()
+
+    def _pq_read(self) -> None:
+        self._main._cmd_read_profile()
+
+    def _pq_save_file(self) -> None:
+        profile = self._main.get_profile()
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Save Profile", "profile.json", "JSON Files (*.json)",
+        )
+        if not path:
+            return
         try:
-            keycode = int(text, 16) if text.startswith("0x") else int(text)
-        except ValueError:
-            QMessageBox.warning(self, "Invalid", "Enter a valid keycode (decimal or 0x hex).")
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(profile, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            QMessageBox.critical(self, "Save Failed", str(e))
+
+    def _pq_load_file(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Load Profile", "", "JSON Files (*.json);;All Files (*)",
+        )
+        if not path:
             return
-
-        profile = self._main.get_profile()
-        profile = _ensure_mappings(profile)
-
-        modifier = 0
-        mod_text = self._mod_input.text().strip()
-        if mod_text:
-            try:
-                modifier = int(mod_text, 16) if mod_text.startswith("0x") else int(mod_text)
-            except ValueError:
-                pass
-
-        profile["mappings"][self._selected_hotspot] = {
-            "keycode": keycode,
-            "modifier": modifier,
-        }
-
-        self._main.set_profile(profile)
-        self._refresh_mapping_visuals()
-
-    def _unbind_selected(self) -> None:
-        if not self._selected_hotspot:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            QMessageBox.critical(self, "Load Failed", str(e))
             return
-        profile = self._main.get_profile()
-        mappings = profile.get("mappings", {})
-        mappings.pop(self._selected_hotspot, None)
-        self._main.set_profile(profile)
-        self._refresh_mapping_visuals()
-        self._sel_mapping.setText("Unbound")
+        self._main.set_profile(data)
 
-    def _clear_all_mappings(self) -> None:
+    def _pq_reset(self) -> None:
+        reply = QMessageBox.question(
+            self, "Reset to Default",
+            "Reset the current profile to factory defaults?\nThis cannot be undone.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            from .profiles import _default_profile
+            self._main.set_profile(_default_profile())
+
+    def _pq_clear_all(self) -> None:
         reply = QMessageBox.question(
             self, "Clear All",
             "Remove all key mappings from the current profile?",
@@ -958,6 +987,56 @@ class MappingView(QWidget):
             profile["mappings"] = {}
             self._main.set_profile(profile)
             self._refresh_mapping_visuals()
+
+    def _refresh_profile_panel(self) -> None:
+        """Sync the profile quick-edit panel with the current state."""
+        profile = self._main.get_profile()
+
+        # Update name field (avoid re-triggering editingFinished)
+        self._pq_name_edit.blockSignals(True)
+        self._pq_name_edit.setText(profile.get("name", ""))
+        self._pq_name_edit.blockSignals(False)
+
+        # Highlight active slot button
+        active_slot = self._main._slot
+        accent = self._main.theme.color("accent")
+        surface = self._main.theme.theme["colors"]["surface"]
+        border = self._main.theme.theme["colors"]["border_light"]
+        for i, btn in enumerate(self._pq_slot_btns):
+            if i == active_slot:
+                btn.setChecked(True)
+                btn.setStyleSheet(
+                    f"background: {accent}; color: #fff; "
+                    f"border: 1px solid {accent}; border-radius: 6px; font-weight: bold;"
+                )
+            else:
+                btn.setChecked(False)
+                btn.setStyleSheet(
+                    f"background: {surface}; "
+                    f"border: 1px solid {border}; border-radius: 6px;"
+                )
+
+        # Mapping summary
+        mappings = profile.get("mappings", {})
+        bound = sum(
+            1 for v in mappings.values()
+            if isinstance(v, dict) and v.get("keycode") is not None
+        )
+        macros = len(profile.get("macros", []))
+        layers = len(profile.get("layers", []))
+        chords = len(profile.get("chords", []))
+        parts = [f"{bound} key{'s' if bound != 1 else ''} bound"]
+        if macros:
+            parts.append(f"{macros} macro{'s' if macros != 1 else ''}")
+        if layers:
+            parts.append(f"{layers} layer{'s' if layers != 1 else ''}")
+        if chords:
+            parts.append(f"{chords} chord{'s' if chords != 1 else ''}")
+        self._pq_summary_label.setText(" \u2022 ".join(parts))
+
+        # Undo/redo button state
+        self._pq_undo_btn.setEnabled(bool(self._main._undo_stack))
+        self._pq_redo_btn.setEnabled(bool(self._main._redo_stack))
 
     # -----------------------------------------------------------------
     # Device events
@@ -975,9 +1054,11 @@ class MappingView(QWidget):
 
     def profile_loaded(self, slot: int, profile: dict) -> None:
         self._refresh_mapping_visuals()
+        self._refresh_profile_panel()
 
     def profile_updated(self, profile: dict) -> None:
         self._refresh_mapping_visuals()
+        self._refresh_profile_panel()
 
     def apply_theme(self, theme: ThemeEngine) -> None:
         # Reload hotspot positions and backgrounds for the new theme
