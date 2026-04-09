@@ -21,6 +21,7 @@ from PyQt6.QtWidgets import (
 
 from ..theme import ThemeEngine
 from ...app_switcher import save_rules, _get_foreground_exe
+from ...default_profiles import get_default_profile, BUILT_IN_PROFILES
 
 if TYPE_CHECKING:
     from ..main_window import MainWindow
@@ -101,7 +102,10 @@ class ProfilesView(QWidget):
 
         self._slot_cards: List[QPushButton] = []
         for i in range(4):
-            btn = QPushButton(f"Slot {i}: (empty)")
+            builtin = BUILT_IN_PROFILES[i]
+            label = builtin.get("name", f"(slot {i})")
+            icon = builtin.get("icon", "🎮")
+            btn = QPushButton(f"{icon} Slot {i}: {label}")
             btn.setFixedHeight(48)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.clicked.connect(lambda checked, s=i: self._select_slot(s))
@@ -464,57 +468,24 @@ class ProfilesView(QWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
-            self._main.set_profile(_default_profile())
+            slot = int(self._main._slot_combo.currentText())
+            self._main.set_profile(get_default_profile(slot))
             self._refresh_editor()
 
     def _load_preset(self) -> None:
         genre = self._preset_combo.currentText()
-        preset = _default_profile()
-        preset["name"] = genre
 
-        # Genre-specific defaults
-        if "FPS" in genre:
-            preset["mappings"] = {
-                "L_Stick_Press": {"keycode": 0x1A, "modifier": 0},  # W
-                "R_Stick_Press": {"keycode": 0x16, "modifier": 0},  # S
-                "ZL": {"keycode": 0x00, "modifier": 0x02},          # LShift (sprint)
-                "ZR": {"keycode": 0x00, "modifier": 0x01},          # LCtrl (crouch)
-                "A": {"keycode": 0x2C, "modifier": 0},              # Space (jump)
-                "B": {"keycode": 0x15, "modifier": 0},              # R (reload)
-                "X": {"keycode": 0x08, "modifier": 0},              # E (interact)
-                "Y": {"keycode": 0x0A, "modifier": 0},              # G (grenade)
-            }
-        elif "Racing" in genre:
-            preset["mappings"] = {
-                "ZR": {"keycode": 0x1A, "modifier": 0},   # W (accel)
-                "ZL": {"keycode": 0x16, "modifier": 0},   # S (brake)
-                "L_Stick_Press": {"keycode": 0x04, "modifier": 0},  # A (left)
-                "R_Stick_Press": {"keycode": 0x07, "modifier": 0},  # D (right)
-                "A": {"keycode": 0x11, "modifier": 0},    # N (nitro)
-                "X": {"keycode": 0x2C, "modifier": 0},    # Space (handbrake)
-            }
-        elif "Platformer" in genre:
-            preset["mappings"] = {
-                "A": {"keycode": 0x2C, "modifier": 0},    # Space (jump)
-                "B": {"keycode": 0x1B, "modifier": 0},    # X (attack)
-                "X": {"keycode": 0x1D, "modifier": 0},    # Z (special)
-                "Y": {"keycode": 0x06, "modifier": 0},    # C (interact)
-            }
-        elif "RPG" in genre:
-            preset["mappings"] = {
-                "A": {"keycode": 0x2C, "modifier": 0},    # Space (confirm)
-                "B": {"keycode": 0x29, "modifier": 0},    # Esc (cancel)
-                "X": {"keycode": 0x0C, "modifier": 0},    # I (inventory)
-                "Y": {"keycode": 0x10, "modifier": 0},    # M (map)
-                "L": {"keycode": 0x14, "modifier": 0},    # Q (prev)
-                "R": {"keycode": 0x08, "modifier": 0},    # E (next)
-            }
-        elif "Strategy" in genre:
-            preset["mappings"] = {
-                "A": {"keycode": 0x2C, "modifier": 0},    # Space (pause)
-                "L": {"keycode": 0x2B, "modifier": 0},    # Tab (cycle)
-                "ZL": {"keycode": 0x00, "modifier": 0x01},  # LCtrl (group)
-            }
+        # Map combo text → built-in profile slot
+        _GENRE_SLOT = {
+            "FPS / Shooter": 1,
+            "Racing / Driving": 3,
+            "Platformer / Action": 2,
+            "RPG / MMO": 0,       # General all-purpose preset
+            "Strategy / RTS": 0,  # General all-purpose preset
+        }
+        slot = _GENRE_SLOT.get(genre, 0)
+        preset = get_default_profile(slot)
+        preset["name"] = genre
 
         self._main.set_profile(preset)
         self._refresh_editor()

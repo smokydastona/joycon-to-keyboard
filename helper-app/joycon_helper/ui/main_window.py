@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
 
 from .._version import __version__
 from ..app_switcher import AppSwitcher, load_rules
+from ..default_profiles import get_default_profile
 from .assets import AssetManager
 from .constants import KEYMAP_HOTSPOTS
 from .serial_bridge import SerialBridge
@@ -73,7 +74,7 @@ class MainWindow(QMainWindow):
         self.bridge = SerialBridge(self)
 
         # Application state
-        self._profile: Dict[str, Any] = {}
+        self._profile: Dict[str, Any] = get_default_profile(0)
         self._slot = 0
         self._bt_status = ""
         self._battery_level: Optional[int] = None
@@ -539,6 +540,9 @@ class MainWindow(QMainWindow):
     def _on_slot_changed(self, index: int) -> None:
         self._slot = index
         self._status_bar.set_slot(index)
+        # When no device is connected, load the built-in default for this slot
+        if not self.bridge.is_connected:
+            self.set_profile(get_default_profile(index))
         self._notify_views("slot_changed", slot=index)
         self._update_tray_slot_checks()
 

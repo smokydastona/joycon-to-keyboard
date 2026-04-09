@@ -1070,8 +1070,9 @@ class MappingView(QWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply == QMessageBox.StandardButton.Yes:
-            from .profiles import _default_profile
-            self._main.set_profile(_default_profile())
+            from ...default_profiles import get_default_profile
+            slot = int(self._main._slot_combo.currentText())
+            self._main.set_profile(get_default_profile(slot))
 
     def _pq_clear_all(self) -> None:
         reply = QMessageBox.question(
