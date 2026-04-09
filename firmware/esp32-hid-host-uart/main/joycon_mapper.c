@@ -599,6 +599,9 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
                 s_motion.flick_pressed = false;
                 emit_if_changed_ex(device_id, KEY_ID_MOTION_FLICK, false, &s_motion.flick_pressed);
             }
+
+            // Forward averaged raw gyro data to the USB side for gyro-to-mouse.
+            bridge_send_gyro(device_id, (int16_t)gx, (int16_t)gy, (int16_t)gz);
         }
 
         return;

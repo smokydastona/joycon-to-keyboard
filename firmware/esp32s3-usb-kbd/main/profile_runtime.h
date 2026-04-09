@@ -23,3 +23,8 @@ bool profile_runtime_get_humanize(void);
 // device_id: 0=left stick, 0x80=right stick (bit7 marks right).
 // x, y: normalized stick values (-4096..+4096).
 void profile_runtime_handle_analog(uint8_t device_id, int16_t x, int16_t y);
+
+// Handle raw gyroscope data from UART.
+// device_id: 0=left Joy-Con, 1=right Joy-Con.
+// gx, gy, gz: averaged raw gyro values (yaw, pitch, roll).
+void profile_runtime_handle_gyro(uint8_t device_id, int16_t gx, int16_t gy, int16_t gz);

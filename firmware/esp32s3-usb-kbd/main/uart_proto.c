@@ -22,6 +22,7 @@ static const char* TAG = "uart-proto";
 #define CONTROLLER_INFO_MARKER 0xF9
 #define RSSI_MARKER 0xF8
 #define ANALOG_MARKER 0xF7
+#define GYRO_MARKER 0xF6
 
 // Keep this comfortably under 255 (len is uint8_t) and large enough for
 // status frames that include an optional device name.
@@ -159,6 +160,8 @@ bool uart_proto_poll_frame(uart_frame_t* out) {
                     out->type = UART_FRAME_RSSI;
                 } else if (payload[0] == ANALOG_MARKER) {
                     out->type = UART_FRAME_ANALOG;
+                } else if (payload[0] == GYRO_MARKER) {
+                    out->type = UART_FRAME_GYRO;
                 } else if (payload[0] == DEBUG_MARKER) {
                     out->type = UART_FRAME_DEBUG;
                 } else if (payload[0] == STATUS_MARKER) {

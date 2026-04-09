@@ -56,6 +56,8 @@ class MappingView(QWidget):
         self._clipboard_binding: Optional[Dict[str, Any]] = None
         self._locked_hotspots: Set[str] = set()
 
+        self._init_complete = False
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
@@ -66,6 +68,12 @@ class MappingView(QWidget):
 
         self._build_canvas_panel()
         self._build_binding_panel()
+
+        # Connect the tab-changed signal AFTER both panels are fully built
+        # so that `_on_device_tab_changed` never fires before `_sel_label`,
+        # `_m913_canvas`, etc. exist.
+        self._device_tabs.currentChanged.connect(self._on_device_tab_changed)
+        self._init_complete = True
 
         self._splitter.setStretchFactor(0, 3)
         self._splitter.setStretchFactor(1, 1)
@@ -114,7 +122,8 @@ class MappingView(QWidget):
         # Device selector tabs
         self._device_tabs = QTabWidget()
         self._device_tabs.setTabPosition(QTabWidget.TabPosition.North)
-        self._device_tabs.currentChanged.connect(self._on_device_tab_changed)
+        # NOTE: currentChanged signal is connected AFTER _build_binding_panel()
+        # in __init__ to avoid firing before all widgets exist.
 
         # Joy-Con canvas
         self._jc_canvas = HotspotCanvas(self._main.theme)
@@ -447,15 +456,16 @@ class MappingView(QWidget):
         return self._device_list()[idx][1]
 
     def _on_device_tab_changed(self, index: int) -> None:
+        # Guard: signal may fire before init completes
+        if not getattr(self, "_init_complete", False):
+            return
         # Clear bright overlay + selection on all canvases
         for canvas, _ in self._device_list():
             canvas.set_bright_overlay(None)
             canvas.set_selected(None)
         self._selected_hotspot = None
-        # Guard: signal fires during _build_canvas_panel before _build_binding_panel
-        if hasattr(self, "_sel_label"):
-            self._sel_label.setText("No button selected")
-            self._sel_mapping.setText("Click a button on the canvas to select it")
+        self._sel_label.setText("No button selected")
+        self._sel_mapping.setText("Click a button on the canvas to select it")
 
     def _on_m913_skin_changed(self, skin: str) -> None:
         self._m913_skin = skin

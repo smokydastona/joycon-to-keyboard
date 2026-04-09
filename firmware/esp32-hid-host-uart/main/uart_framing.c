@@ -227,3 +227,16 @@ void bridge_send_analog(uint8_t device_id, int16_t x, int16_t y) {
     payload[5] = (uint8_t)((y >> 8) & 0xFF);
     bridge_send_frame(payload, (uint8_t)sizeof(payload));
 }
+
+void bridge_send_gyro(uint8_t device_id, int16_t gx, int16_t gy, int16_t gz) {
+    uint8_t payload[8];
+    payload[0] = 0xF6;  // Gyro marker
+    payload[1] = device_id;
+    payload[2] = (uint8_t)(gx & 0xFF);
+    payload[3] = (uint8_t)((gx >> 8) & 0xFF);
+    payload[4] = (uint8_t)(gy & 0xFF);
+    payload[5] = (uint8_t)((gy >> 8) & 0xFF);
+    payload[6] = (uint8_t)(gz & 0xFF);
+    payload[7] = (uint8_t)((gz >> 8) & 0xFF);
+    bridge_send_frame(payload, (uint8_t)sizeof(payload));
+}

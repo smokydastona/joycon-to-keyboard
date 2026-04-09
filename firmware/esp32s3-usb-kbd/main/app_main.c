@@ -22,6 +22,7 @@ static const char* TAG = "s3-kbd";
 #define KEY_EX_MARKER 0xFC
 #define BATTERY_MARKER 0xFA
 #define ANALOG_MARKER 0xF7
+#define GYRO_MARKER 0xF6
 
 static const char* status_id_to_state(uint8_t id) {
     switch (id) {
@@ -139,6 +140,15 @@ void app_main(void) {
                 int16_t x = (int16_t)((uint16_t)f.payload[2] | ((uint16_t)f.payload[3] << 8));
                 int16_t y = (int16_t)((uint16_t)f.payload[4] | ((uint16_t)f.payload[5] << 8));
                 profile_runtime_handle_analog(device_id, x, y);
+                continue;
+            }
+
+            if (f.type == UART_FRAME_GYRO && f.length >= 8 && f.payload[0] == GYRO_MARKER) {
+                uint8_t device_id = f.payload[1];
+                int16_t gx = (int16_t)((uint16_t)f.payload[2] | ((uint16_t)f.payload[3] << 8));
+                int16_t gy = (int16_t)((uint16_t)f.payload[4] | ((uint16_t)f.payload[5] << 8));
+                int16_t gz = (int16_t)((uint16_t)f.payload[6] | ((uint16_t)f.payload[7] << 8));
+                profile_runtime_handle_gyro(device_id, gx, gy, gz);
                 continue;
             }
         }

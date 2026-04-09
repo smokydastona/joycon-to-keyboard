@@ -44,8 +44,8 @@ _PENDING_FW_DIR = "pending_fw"
 _TIMEOUT = 15
 
 # Whether Authenticode verification is enforced on downloaded updates.
-# Set False during development when builds are unsigned.
-REQUIRE_SIGNATURE = False
+# Enabled by default for security; set JOYCON_SKIP_SIGNATURE=1 for unsigned dev builds.
+REQUIRE_SIGNATURE = os.environ.get("JOYCON_SKIP_SIGNATURE", "") != "1"
 
 
 # ---------------------------------------------------------------------------

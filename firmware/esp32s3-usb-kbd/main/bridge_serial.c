@@ -20,6 +20,7 @@
 #include "profile_runtime.h"
 #include "uart_proto.h"
 #include "fw_ota.h"
+#include "config_block.h"
 
 static const char *TAG = "bridge-serial";
 
@@ -758,15 +759,34 @@ void bridge_serial_init(void) {
     }
     ESP_ERROR_CHECK(err);
 
-    ESP_LOGI(TAG, "Serial protocol ready (NDJSON over CDC)");
+    config_block_init();
+
+    ESP_LOGI(TAG, "Serial protocol ready (NDJSON + binary config over CDC)");
 }
 
 void bridge_serial_poll(void) {
     if (!tud_cdc_connected()) return;
 
     while (tud_cdc_available()) {
+        /* --- Binary config mode: feed all available bytes until idle --- */
+        if (config_block_receiving()) {
+            uint8_t buf[64];
+            uint32_t avail = tud_cdc_available();
+            if (avail > sizeof(buf)) avail = sizeof(buf);
+            uint32_t rd = tud_cdc_read(buf, avail);
+            if (rd) config_block_feed(buf, rd);
+            continue;
+        }
+
         uint8_t ch;
         if (tud_cdc_read(&ch, 1) != 1) break;
+
+        /* Detect the binary config marker at the start of a new "line". */
+        if (s_line_len == 0 && ch == CONFIG_BLOCK_MARKER) {
+            /* Feed the marker byte to kick the state machine out of IDLE. */
+            config_block_feed(&ch, 1);
+            continue;
+        }
 
         if (ch == '\r') continue;
 

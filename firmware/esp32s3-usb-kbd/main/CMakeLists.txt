@@ -2,6 +2,7 @@ idf_component_register(
     SRCS
         "app_main.c"
         "bridge_serial.c"
+        "config_block.c"
         "fw_ota.c"
         "profile_runtime.c"
         "uart_proto.c"

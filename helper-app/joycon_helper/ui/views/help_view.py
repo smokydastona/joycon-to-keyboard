@@ -201,6 +201,10 @@ def _sections() -> List[Tuple[str, str, bool]]:
                 "  SL(L) → 5    SR(L) → 6\n"
                 "  Minus → ` (Grave)    Capture → G\n"
                 "  LStick Press → Left Shift\n\n"
+                "## Dual Joy-Con Mode\n"
+                "When two Joy-Cons are connected, the right controller's "
+                "buttons mirror the left-side defaults by default. Per-profile "
+                "overrides can assign distinct bindings to each controller.\n\n"
                 "These defaults can be fully customized in the Mapping view."
             ),
             False,

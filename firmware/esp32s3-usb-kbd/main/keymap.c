@@ -133,6 +133,12 @@ bool keymap_lookup(uint8_t key_id, uint8_t* modifier, uint8_t* keycode) {
             return true;
 
         default:
+            // Right controller IDs (128 + base): mirror the left-side default.
+            // This allows the right Joy-Con to produce the same keycodes by
+            // default; per-profile overrides can assign distinct bindings.
+            if (key_id >= 128) {
+                return keymap_lookup((uint8_t)(key_id - 128), modifier, keycode);
+            }
             return false;
     }
 }

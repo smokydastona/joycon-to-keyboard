@@ -79,6 +79,23 @@ This repo supports a full Joy-Con button set: movement, face buttons, shoulders/
 | `34`   | SL(R)  | SL on right Joy-Con (inner rail)   |
 | `35`   | SR(R)  | SR on right Joy-Con (inner rail)   |
 
+## Dual Joy-Con extended key_id space
+
+When two Joy-Cons are connected simultaneously in dual-connect mode, each
+controller has its own device_id. The UART extended key event (0xFC frame)
+encodes `device_id` + `base_key_id`.
+
+The ESP32-S3 maps these into a single key_id byte:
+
+| device_id | key_id range | Formula             |
+|-----------|-------------|----------------------|
+| 0 (left)  | 0–127       | `key_id = base`      |
+| 1 (right) | 128–255     | `key_id = 128 + base`|
+
+**Default behavior:** key_ids 128–255 mirror the left-side defaults (e.g.
+key_id 129 maps to `W` just like key_id 1). Per-profile overrides can assign
+distinct bindings to right-side key_ids for asymmetric dual-controller setups.
+
 ## Default USB outputs
 
 | key_id | Action       | Default output |

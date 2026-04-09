@@ -93,7 +93,21 @@ def load_rules() -> List[Dict[str, Any]]:
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
         if isinstance(data, list):
-            return data
+            # Validate each rule: must have "exe" (str) and "slot" (int 0-3)
+            valid: List[Dict[str, Any]] = []
+            for rule in data:
+                if not isinstance(rule, dict):
+                    continue
+                exe = rule.get("exe")
+                slot = rule.get("slot")
+                if not isinstance(exe, str) or not exe:
+                    log.warning("Skipping app-switcher rule with missing/invalid 'exe': %r", rule)
+                    continue
+                if not isinstance(slot, int) or not (0 <= slot <= 3):
+                    log.warning("Skipping app-switcher rule with invalid 'slot': %r", rule)
+                    continue
+                valid.append(rule)
+            return valid
     except Exception:
         log.warning("Failed to load app_profiles.json", exc_info=True)
     return []

@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 #include "esp_err.h"
 #include "esp_log.h"
@@ -586,6 +587,75 @@ static uint8_t s_sprint_key_mod = 0;
 static uint8_t s_sprint_key_keycode = 0;
 static bool s_sprint_active = false;
 
+// --- Gyro-to-mouse configuration ---
+typedef enum {
+    GYRO_ACCEL_NONE   = 0,   // linear: raw × sensitivity
+    GYRO_ACCEL_POWER  = 1,   // pow(magnitude, param) scaling
+    GYRO_ACCEL_SMOOTH = 2,   // smooth ramp with threshold
+} gyro_accel_t;
+
+static bool     s_gyro_enabled     = false;
+static uint16_t s_gyro_sens_x      = 100;   // sensitivity × 100 (100 = 1.0×)
+static uint16_t s_gyro_sens_y      = 100;
+static uint16_t s_gyro_deadzone    = 50;     // raw gyro units below which input is ignored
+static gyro_accel_t s_gyro_accel   = GYRO_ACCEL_NONE;
+static uint16_t s_gyro_accel_param = 150;    // ×100 for POWER (150 = 1.5 exponent)
+static bool     s_gyro_invert_x    = false;
+static bool     s_gyro_invert_y    = false;
+
+// --- Zone system (stick regions → key outputs) ---
+#define MAX_ZONES 16
+
+typedef enum {
+    ZONE_SHAPE_CIRCLE = 0,
+    ZONE_SHAPE_RING   = 1,
+    ZONE_SHAPE_WEDGE  = 2,
+    ZONE_SHAPE_RECT   = 3,
+} zone_shape_t;
+
+typedef struct {
+    zone_shape_t shape;
+    int16_t  cx, cy;           // center (normalized -4096..+4096 or 0 for stick center)
+    uint16_t param1, param2;   // shape-specific: circle=radius; ring=inner,outer; rect=w,h
+    uint16_t param3, param4;   // reserved / wedge angles
+    int16_t  angle_start;      // for wedge: start angle in degrees
+    int16_t  angle_end;        // for wedge: end angle in degrees
+    uint8_t  output_key;       // HID keycode to press when active
+    bool     active;           // runtime: currently inside zone?
+} zone_t;
+
+static zone_t s_zones[MAX_ZONES];
+static size_t s_zone_count = 0;
+
+// --- Activator system (trigger → action) ---
+#define MAX_ACTIVATORS 16
+
+typedef enum {
+    ACT_PRESS        = 0,
+    ACT_RELEASE      = 1,
+    ACT_DOUBLE_PRESS = 2,
+    ACT_LONG_PRESS   = 3,
+    ACT_CHORD_TRIGGER = 4,
+} activator_trigger_t;
+
+typedef struct {
+    activator_trigger_t trigger;
+    uint8_t  source_key;       // input key_id that triggers this
+    uint8_t  output_key;       // HID keycode to emit
+    uint16_t threshold_ms;     // for long_press / double_press timing window
+    uint8_t  flags;            // reserved
+    // Runtime state
+    int64_t  last_press_ms;
+    int64_t  last_release_ms;
+    uint8_t  press_count;
+    bool     waiting_double;   // waiting to see if another press arrives
+    bool     long_fired;       // long_press already emitted
+    bool     output_active;    // output currently pressed?
+} activator_t;
+
+static activator_t s_activators[MAX_ACTIVATORS];
+static size_t s_activator_count = 0;
+
 // --- On-controller profile switching ---
 static int s_active_slot = 0;
 
@@ -708,6 +778,34 @@ static void free_profile(void) {
         usb_kbd_set_key(s_sprint_key_mod, s_sprint_key_keycode, false);
         s_sprint_active = false;
     }
+
+    // Reset gyro-to-mouse config.
+    s_gyro_enabled = false;
+    s_gyro_sens_x = 100;
+    s_gyro_sens_y = 100;
+    s_gyro_deadzone = 50;
+    s_gyro_accel = GYRO_ACCEL_NONE;
+    s_gyro_accel_param = 150;
+    s_gyro_invert_x = false;
+    s_gyro_invert_y = false;
+
+    // Reset zones — release any active zone keys first.
+    for (size_t i = 0; i < s_zone_count; i++) {
+        if (s_zones[i].active && s_zones[i].output_key != 0) {
+            usb_kbd_set_key(0, s_zones[i].output_key, false);
+        }
+    }
+    memset(s_zones, 0, sizeof(s_zones));
+    s_zone_count = 0;
+
+    // Reset activators — release any active outputs first.
+    for (size_t i = 0; i < s_activator_count; i++) {
+        if (s_activators[i].output_active && s_activators[i].output_key != 0) {
+            usb_kbd_set_key(0, s_activators[i].output_key, false);
+        }
+    }
+    memset(s_activators, 0, sizeof(s_activators));
+    s_activator_count = 0;
 
     for (size_t i = 0; i < s_macro_count; i++) {
         free(s_macros[i].steps);
@@ -1492,7 +1590,7 @@ static void load_profile_json(const char *json) {
     static const char *known_keys[] = {
         "ver", "mappings", "macros", "layers", "chords",
         "leader_sequences", "right_stick_mode", "mouse_sensitivity",
-        "sprint_zone", "humanize", "stick", NULL
+        "sprint_zone", "humanize", "stick", "gyro", "zones", "activators", NULL
     };
     bool has_any = false;
     for (const char **k = known_keys; *k; k++) {
@@ -1651,6 +1749,142 @@ static void load_profile_json(const char *json) {
         }
     }
 
+    // --- Gyro-to-mouse configuration ---
+    cJSON *gyro = cJSON_GetObjectItemCaseSensitive(root, "gyro");
+    if (cJSON_IsObject(gyro)) {
+        cJSON *en = cJSON_GetObjectItemCaseSensitive(gyro, "enabled");
+        if (cJSON_IsBool(en)) {
+            s_gyro_enabled = cJSON_IsTrue(en);
+        }
+        cJSON *sx_j = cJSON_GetObjectItemCaseSensitive(gyro, "sensitivity_x");
+        if (cJSON_IsNumber(sx_j)) {
+            s_gyro_sens_x = (uint16_t)sx_j->valueint;
+        }
+        cJSON *sy_j = cJSON_GetObjectItemCaseSensitive(gyro, "sensitivity_y");
+        if (cJSON_IsNumber(sy_j)) {
+            s_gyro_sens_y = (uint16_t)sy_j->valueint;
+        }
+        cJSON *dz_j = cJSON_GetObjectItemCaseSensitive(gyro, "deadzone");
+        if (cJSON_IsNumber(dz_j)) {
+            s_gyro_deadzone = (uint16_t)dz_j->valueint;
+        }
+        cJSON *at_j = cJSON_GetObjectItemCaseSensitive(gyro, "accel_type");
+        if (cJSON_IsNumber(at_j)) {
+            int v = at_j->valueint;
+            if (v >= 0 && v <= 2) s_gyro_accel = (gyro_accel_t)v;
+        }
+        cJSON *ap_j = cJSON_GetObjectItemCaseSensitive(gyro, "accel_param");
+        if (cJSON_IsNumber(ap_j)) {
+            s_gyro_accel_param = (uint16_t)ap_j->valueint;
+        }
+        cJSON *ix_j = cJSON_GetObjectItemCaseSensitive(gyro, "invert_x");
+        if (cJSON_IsBool(ix_j)) {
+            s_gyro_invert_x = cJSON_IsTrue(ix_j);
+        }
+        cJSON *iy_j = cJSON_GetObjectItemCaseSensitive(gyro, "invert_y");
+        if (cJSON_IsBool(iy_j)) {
+            s_gyro_invert_y = cJSON_IsTrue(iy_j);
+        }
+        ESP_LOGI(TAG, "Gyro: en=%d sens=%u/%u dz=%u accel=%d param=%u inv=%d/%d",
+                 s_gyro_enabled, s_gyro_sens_x, s_gyro_sens_y, s_gyro_deadzone,
+                 s_gyro_accel, s_gyro_accel_param, s_gyro_invert_x, s_gyro_invert_y);
+    }
+
+    // --- Parse zones ---
+    cJSON *zones_arr = cJSON_GetObjectItemCaseSensitive(root, "zones");
+    if (cJSON_IsArray(zones_arr)) {
+        int zcount = cJSON_GetArraySize(zones_arr);
+        if (zcount > MAX_ZONES) zcount = MAX_ZONES;
+        for (int i = 0; i < zcount; i++) {
+            cJSON *zj = cJSON_GetArrayItem(zones_arr, i);
+            if (!cJSON_IsObject(zj)) continue;
+
+            zone_t *z = &s_zones[s_zone_count];
+            memset(z, 0, sizeof(*z));
+
+            cJSON *shape_j = cJSON_GetObjectItemCaseSensitive(zj, "shape");
+            if (cJSON_IsString(shape_j) && shape_j->valuestring) {
+                if (strcmp(shape_j->valuestring, "ring") == 0) z->shape = ZONE_SHAPE_RING;
+                else if (strcmp(shape_j->valuestring, "wedge") == 0) z->shape = ZONE_SHAPE_WEDGE;
+                else if (strcmp(shape_j->valuestring, "rect") == 0) z->shape = ZONE_SHAPE_RECT;
+                else z->shape = ZONE_SHAPE_CIRCLE;
+            } else if (cJSON_IsNumber(shape_j)) {
+                z->shape = (zone_shape_t)shape_j->valueint;
+            }
+
+            cJSON *cx_j = cJSON_GetObjectItemCaseSensitive(zj, "cx");
+            if (cJSON_IsNumber(cx_j)) z->cx = (int16_t)cx_j->valueint;
+            cJSON *cy_j = cJSON_GetObjectItemCaseSensitive(zj, "cy");
+            if (cJSON_IsNumber(cy_j)) z->cy = (int16_t)cy_j->valueint;
+            cJSON *p1 = cJSON_GetObjectItemCaseSensitive(zj, "param1");
+            if (cJSON_IsNumber(p1)) z->param1 = (uint16_t)p1->valueint;
+            cJSON *p2 = cJSON_GetObjectItemCaseSensitive(zj, "param2");
+            if (cJSON_IsNumber(p2)) z->param2 = (uint16_t)p2->valueint;
+            cJSON *p3 = cJSON_GetObjectItemCaseSensitive(zj, "param3");
+            if (cJSON_IsNumber(p3)) z->param3 = (uint16_t)p3->valueint;
+            cJSON *p4 = cJSON_GetObjectItemCaseSensitive(zj, "param4");
+            if (cJSON_IsNumber(p4)) z->param4 = (uint16_t)p4->valueint;
+            cJSON *as_j = cJSON_GetObjectItemCaseSensitive(zj, "angle_start");
+            if (cJSON_IsNumber(as_j)) z->angle_start = (int16_t)as_j->valueint;
+            cJSON *ae_j = cJSON_GetObjectItemCaseSensitive(zj, "angle_end");
+            if (cJSON_IsNumber(ae_j)) z->angle_end = (int16_t)ae_j->valueint;
+            cJSON *ok_j = cJSON_GetObjectItemCaseSensitive(zj, "output_key");
+            if (cJSON_IsNumber(ok_j)) z->output_key = (uint8_t)ok_j->valueint;
+
+            // Also accept "radius" shorthand for circle zones
+            cJSON *r_j = cJSON_GetObjectItemCaseSensitive(zj, "radius");
+            if (cJSON_IsNumber(r_j) && z->shape == ZONE_SHAPE_CIRCLE) {
+                z->param1 = (uint16_t)r_j->valueint;
+            }
+
+            s_zone_count++;
+        }
+        ESP_LOGI(TAG, "Loaded %u zones", (unsigned)s_zone_count);
+    }
+
+    // --- Parse activators ---
+    cJSON *acts_arr = cJSON_GetObjectItemCaseSensitive(root, "activators");
+    if (cJSON_IsArray(acts_arr)) {
+        int acount = cJSON_GetArraySize(acts_arr);
+        if (acount > MAX_ACTIVATORS) acount = MAX_ACTIVATORS;
+        for (int i = 0; i < acount; i++) {
+            cJSON *aj = cJSON_GetArrayItem(acts_arr, i);
+            if (!cJSON_IsObject(aj)) continue;
+
+            activator_t *a = &s_activators[s_activator_count];
+            memset(a, 0, sizeof(*a));
+
+            cJSON *trig_j = cJSON_GetObjectItemCaseSensitive(aj, "trigger");
+            if (cJSON_IsString(trig_j) && trig_j->valuestring) {
+                if (strcmp(trig_j->valuestring, "release") == 0) a->trigger = ACT_RELEASE;
+                else if (strcmp(trig_j->valuestring, "double_press") == 0) a->trigger = ACT_DOUBLE_PRESS;
+                else if (strcmp(trig_j->valuestring, "long_press") == 0) a->trigger = ACT_LONG_PRESS;
+                else if (strcmp(trig_j->valuestring, "chord") == 0) a->trigger = ACT_CHORD_TRIGGER;
+                else a->trigger = ACT_PRESS;
+            } else if (cJSON_IsNumber(trig_j)) {
+                a->trigger = (activator_trigger_t)trig_j->valueint;
+            }
+
+            cJSON *sk_j = cJSON_GetObjectItemCaseSensitive(aj, "source_key");
+            if (cJSON_IsNumber(sk_j)) a->source_key = (uint8_t)sk_j->valueint;
+            cJSON *ok_j = cJSON_GetObjectItemCaseSensitive(aj, "output_key");
+            if (cJSON_IsNumber(ok_j)) a->output_key = (uint8_t)ok_j->valueint;
+            cJSON *tm_j = cJSON_GetObjectItemCaseSensitive(aj, "threshold_ms");
+            if (cJSON_IsNumber(tm_j)) a->threshold_ms = (uint16_t)tm_j->valueint;
+            cJSON *fl_j = cJSON_GetObjectItemCaseSensitive(aj, "flags");
+            if (cJSON_IsNumber(fl_j)) a->flags = (uint8_t)fl_j->valueint;
+
+            if (a->threshold_ms == 0) {
+                // Defaults
+                if (a->trigger == ACT_DOUBLE_PRESS) a->threshold_ms = 300;
+                else if (a->trigger == ACT_LONG_PRESS) a->threshold_ms = 500;
+            }
+
+            s_activator_count++;
+        }
+        ESP_LOGI(TAG, "Loaded %u activators", (unsigned)s_activator_count);
+    }
+
     cJSON_Delete(root);
 
     ESP_LOGI(TAG, "Loaded profile: %u mappings, %u macros, %u layers",
@@ -1805,8 +2039,6 @@ void profile_runtime_reload(void) {
 }
 
 static void send_key_id(bool pressed, uint8_t key_id) {
-    if (key_id >= 128) return;
-
     uint8_t mod = 0;
     uint8_t keycode = 0;
     if (!keymap_lookup(key_id, &mod, &keycode)) {
@@ -2250,6 +2482,98 @@ void profile_runtime_handle_input(bool pressed, uint8_t key_id) {
         if (s_chord_suppressed[key_id]) return;
     }
 
+    // --- Activator evaluation ---
+    if (s_activator_count > 0) {
+        int64_t now = (int64_t)(esp_timer_get_time() / 1000);  // ms
+        for (size_t i = 0; i < s_activator_count; i++) {
+            activator_t *a = &s_activators[i];
+            if (a->source_key != key_id) continue;
+
+            switch (a->trigger) {
+                case ACT_PRESS:
+                    if (pressed) {
+                        a->output_active = true;
+                        usb_kbd_set_key(0, a->output_key, true);
+                    } else {
+                        if (a->output_active) {
+                            a->output_active = false;
+                            usb_kbd_set_key(0, a->output_key, false);
+                        }
+                    }
+                    break;
+
+                case ACT_RELEASE:
+                    if (!pressed) {
+                        // Momentary tap on release
+                        usb_kbd_set_key(0, a->output_key, true);
+                        usb_kbd_set_key(0, a->output_key, false);
+                    }
+                    break;
+
+                case ACT_DOUBLE_PRESS:
+                    if (pressed) {
+                        if (a->waiting_double &&
+                            (now - a->last_press_ms) <= (int64_t)a->threshold_ms) {
+                            // Double press detected!
+                            a->waiting_double = false;
+                            a->output_active = true;
+                            usb_kbd_set_key(0, a->output_key, true);
+                        } else {
+                            a->waiting_double = true;
+                            a->last_press_ms = now;
+                        }
+                    } else {
+                        if (a->output_active) {
+                            a->output_active = false;
+                            usb_kbd_set_key(0, a->output_key, false);
+                        }
+                    }
+                    break;
+
+                case ACT_LONG_PRESS:
+                    if (pressed) {
+                        a->last_press_ms = now;
+                        a->long_fired = false;
+                    } else {
+                        if (a->long_fired && a->output_active) {
+                            a->output_active = false;
+                            usb_kbd_set_key(0, a->output_key, false);
+                        }
+                        a->long_fired = false;
+                    }
+                    break;
+
+                case ACT_CHORD_TRIGGER:
+                    // Chord activators: fire when source_key is pressed
+                    // AND another key (stored in flags as key_id) is also pressed.
+                    if (pressed && a->flags < INPUT_KEY_ID_MAX && s_key_pressed[a->flags]) {
+                        a->output_active = true;
+                        usb_kbd_set_key(0, a->output_key, true);
+                    } else if (!pressed && a->output_active) {
+                        a->output_active = false;
+                        usb_kbd_set_key(0, a->output_key, false);
+                    }
+                    break;
+            }
+        }
+
+        // Long-press check: evaluate held keys against activators.
+        // (Called on every input event — checks elapsed time since press.)
+        for (size_t i = 0; i < s_activator_count; i++) {
+            activator_t *a = &s_activators[i];
+            if (a->trigger != ACT_LONG_PRESS) continue;
+            if (a->long_fired) continue;
+            if (a->source_key >= INPUT_KEY_ID_MAX) continue;
+            if (!s_key_pressed[a->source_key]) continue;
+            if (a->last_press_ms > 0 &&
+                (now - a->last_press_ms) >= (int64_t)a->threshold_ms) {
+                a->long_fired = true;
+                a->output_active = true;
+                usb_kbd_set_key(0, a->output_key, true);
+            }
+        }
+    }
+
     // Look for a layer override, then fall back to the base mapping.
     map_entry_t *override = find_layer_override(key_id);
     map_entry_t *m = override ? override : &s_map[key_id];
@@ -2324,5 +2648,133 @@ void profile_runtime_handle_analog(uint8_t device_id, int16_t x, int16_t y) {
                 usb_kbd_set_key(s_sprint_key_mod, s_sprint_key_keycode, false);
             }
         }
+    }
+
+    // --- Evaluate zones (both sticks) ---
+    if (s_zone_count > 0) {
+        for (size_t i = 0; i < s_zone_count; i++) {
+            zone_t *z = &s_zones[i];
+            // Offset from zone center
+            int32_t dx = (int32_t)x - (int32_t)z->cx;
+            int32_t dy = (int32_t)y - (int32_t)z->cy;
+            bool inside = false;
+
+            switch (z->shape) {
+                case ZONE_SHAPE_CIRCLE: {
+                    int32_t dist_sq = dx * dx + dy * dy;
+                    int32_t r = (int32_t)z->param1;
+                    inside = (dist_sq <= r * r);
+                    break;
+                }
+                case ZONE_SHAPE_RING: {
+                    int32_t dist_sq = dx * dx + dy * dy;
+                    int32_t inner = (int32_t)z->param1;
+                    int32_t outer = (int32_t)z->param2;
+                    inside = (dist_sq >= inner * inner && dist_sq <= outer * outer);
+                    break;
+                }
+                case ZONE_SHAPE_WEDGE: {
+                    // Wedge: check angle and distance
+                    int32_t dist_sq = dx * dx + dy * dy;
+                    int32_t outer = (int32_t)z->param1;
+                    if (outer > 0 && dist_sq <= outer * outer) {
+                        // Compute angle in degrees (-180..+180)
+                        float angle = atan2f((float)dy, (float)dx) * 180.0f / 3.14159265f;
+                        float start = (float)z->angle_start;
+                        float end = (float)z->angle_end;
+                        // Normalize: handle wrapping
+                        if (start <= end) {
+                            inside = (angle >= start && angle <= end);
+                        } else {
+                            inside = (angle >= start || angle <= end);
+                        }
+                    }
+                    break;
+                }
+                case ZONE_SHAPE_RECT: {
+                    int32_t hw = (int32_t)z->param1 / 2;
+                    int32_t hh = (int32_t)z->param2 / 2;
+                    inside = (dx >= -hw && dx <= hw && dy >= -hh && dy <= hh);
+                    break;
+                }
+            }
+
+            if (inside && !z->active) {
+                z->active = true;
+                if (z->output_key != 0) {
+                    usb_kbd_set_key(0, z->output_key, true);
+                }
+            } else if (!inside && z->active) {
+                z->active = false;
+                if (z->output_key != 0) {
+                    usb_kbd_set_key(0, z->output_key, false);
+                }
+            }
+        }
+    }
+}
+
+void profile_runtime_handle_gyro(uint8_t device_id, int16_t gx, int16_t gy, int16_t gz) {
+    (void)device_id;  // Currently same config for both Joy-Cons
+
+    if (!s_gyro_enabled) return;
+
+    // Apply deadzone: zero out axes below threshold
+    float fx = (float)gx;
+    float fy = (float)gy;
+    float dz = (float)s_gyro_deadzone;
+
+    if (fabsf(fx) < dz) fx = 0.0f;
+    if (fabsf(fy) < dz) fy = 0.0f;
+
+    if (fx == 0.0f && fy == 0.0f) return;
+
+    // Apply sensitivity (÷100 so 100 = 1.0× multiplier)
+    float sx = fx * (float)s_gyro_sens_x / 100.0f;
+    float sy = fy * (float)s_gyro_sens_y / 100.0f;
+
+    // Apply acceleration curve
+    switch (s_gyro_accel) {
+        case GYRO_ACCEL_POWER: {
+            // Power curve: scale velocity by pow(magnitude, exponent-1)
+            // so total output = magnitude^exponent.
+            float mag = sqrtf(sx * sx + sy * sy);
+            if (mag > 0.01f) {
+                float exp_f = (float)s_gyro_accel_param / 100.0f;
+                float scale = powf(mag, exp_f - 1.0f);
+                sx *= scale;
+                sy *= scale;
+            }
+            break;
+        }
+        case GYRO_ACCEL_SMOOTH: {
+            // Smooth ramp: below param threshold linear, above ramps up
+            float mag = sqrtf(sx * sx + sy * sy);
+            float threshold = (float)s_gyro_accel_param;
+            if (mag > threshold && threshold > 0.01f) {
+                float excess = mag - threshold;
+                float scale = 1.0f + (excess / threshold);
+                sx *= scale;
+                sy *= scale;
+            }
+            break;
+        }
+        default:
+            break;
+    }
+
+    // Apply inversion
+    if (s_gyro_invert_x) sx = -sx;
+    if (s_gyro_invert_y) sy = -sy;
+
+    // Scale to mouse pixel deltas.
+    // Joy-Con gyro raw values are roughly ±rotation-rate in dps (degrees/sec).
+    // At ~66 Hz IMU rate, divide by a constant to get pixel movement.
+    // The factor 0.02 maps ~100 dps×sensitivity to ~2 px per sample at 1.0× sensitivity.
+    int16_t dx = (int16_t)(sx * 0.02f);
+    int16_t dy = (int16_t)(sy * 0.02f);
+
+    if (dx != 0 || dy != 0) {
+        usb_mouse_move(dx, dy);
     }
 }
