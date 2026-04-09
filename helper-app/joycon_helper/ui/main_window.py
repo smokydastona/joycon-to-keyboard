@@ -44,6 +44,7 @@ NAV_PROFILES = 3
 NAV_DEVICES = 4
 NAV_DIAGNOSTICS = 5
 NAV_HELP = 6
+NAV_SETTINGS = 7
 
 # Navigation item definitions: (icon_char, label)
 NAV_ITEMS = [
@@ -54,6 +55,7 @@ NAV_ITEMS = [
     ("🖱", "Devices"),
     ("🔧", "Diagnostics"),
     ("❓", "Help"),
+    ("⚙", "Settings"),
 ]
 
 
@@ -222,8 +224,8 @@ class MainWindow(QMainWindow):
         # Settings
         settings_btn = QPushButton("⚙")
         settings_btn.setFixedSize(32, 32)
-        settings_btn.setToolTip("Settings")
-        settings_btn.clicked.connect(self._open_settings)
+        settings_btn.setToolTip("Settings (Ctrl+8)")
+        settings_btn.clicked.connect(lambda: self._nav_to(NAV_SETTINGS))
         tb.addWidget(settings_btn)
 
         # Theme toggle
@@ -303,6 +305,9 @@ class MainWindow(QMainWindow):
         elif index == NAV_HELP:
             from .views.help_view import HelpView
             view = HelpView(self)
+        elif index == NAV_SETTINGS:
+            from .views.settings import SettingsView
+            view = SettingsView(self)
         else:
             view = QWidget()
 
@@ -652,8 +657,8 @@ class MainWindow(QMainWindow):
         # Refresh ports
         QShortcut(QKeySequence("Ctrl+R"), self).activated.connect(self._refresh_ports)
 
-        # Navigation: Ctrl+1..7
-        for i in range(min(7, len(NAV_ITEMS))):
+        # Navigation: Ctrl+1..8
+        for i in range(min(8, len(NAV_ITEMS))):
             QShortcut(QKeySequence(f"Ctrl+{i + 1}"), self).activated.connect(
                 lambda idx=i: self._nav_to(idx)
             )
@@ -860,7 +865,7 @@ class MainWindow(QMainWindow):
 
         self._tray_menu.addSeparator()
         settings_action = self._tray_menu.addAction("⚙ Settings")
-        settings_action.triggered.connect(self._open_settings)
+        settings_action.triggered.connect(lambda: (self._toggle_visibility() if not self.isVisible() else None, self._nav_to(NAV_SETTINGS)))
         self._tray_menu.addSeparator()
         quit_action = self._tray_menu.addAction("Quit")
         quit_action.triggered.connect(self._real_quit)

@@ -189,6 +189,47 @@ Set via profile JSON `stick.rapid_trigger` or the `set_rapid_trigger` serial com
 When a direction is inactive, the stick must exceed the activation threshold to turn on.
 Once active, it stays on until the value drops below the deactivation threshold.
 
+## Macro step types
+
+Macro steps are defined in the profile `macros[].steps` array. Each step has a `type` field:
+
+| Type            | Fields                          | Description                                |
+|-----------------|---------------------------------|--------------------------------------------|
+| `key`           | `key_id` (0–127), `pressed`     | Press or release a keyboard key            |
+| `delay`         | `ms` (0–5000)                   | Wait (with humanized jitter)               |
+| `mouse_button`  | `button` (1–31), `pressed`      | Press or release a USB HID mouse button    |
+| `macro_chain`   | `id` (string)                   | Enqueue another macro to run after this one |
+
+### Mouse button values
+
+| Button         | Value |
+|----------------|-------|
+| Left           | 1     |
+| Right          | 2     |
+| Middle         | 4     |
+| Back / Button4 | 8     |
+| Forward / Button5 | 16 |
+
+### Macro chaining example
+
+```json
+{
+  "macros": [
+    {"id": "combo1", "steps": [
+      {"type": "key", "key_id": 1, "pressed": true},
+      {"type": "delay", "ms": 50},
+      {"type": "key", "key_id": 1, "pressed": false},
+      {"type": "macro_chain", "id": "combo2"}
+    ]},
+    {"id": "combo2", "steps": [
+      {"type": "mouse_button", "button": 1, "pressed": true},
+      {"type": "delay", "ms": 30},
+      {"type": "mouse_button", "button": 1, "pressed": false}
+    ]}
+  ]
+}
+```
+
 ## Timing humanization
 
 Macros and turbo repeat use randomized timing jitter to avoid perfectly regular intervals

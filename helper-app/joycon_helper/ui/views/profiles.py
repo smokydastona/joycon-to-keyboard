@@ -1,19 +1,21 @@
 """Profiles view — profile management, import/export, share codes, presets.
 
 Merges the old Loadout + Share tabs into a unified profile management view.
+Includes search, tag chips, mapping preview, and profile icons.
 """
 from __future__ import annotations
 
 import json
 import logging
-from typing import List, TYPE_CHECKING
+from typing import Dict, List, Optional, TYPE_CHECKING
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
+from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtGui import QFont, QColor
 from PyQt6.QtWidgets import (
-    QCheckBox, QComboBox, QFileDialog, QGroupBox, QHBoxLayout, QInputDialog,
+    QCheckBox, QComboBox, QFileDialog,
+    QGridLayout, QGroupBox, QHBoxLayout, QInputDialog,
     QLabel, QLineEdit, QMessageBox,
-    QPushButton, QTableWidget, QTableWidgetItem, QTextEdit,
+    QPushButton, QScrollArea, QTableWidget, QTableWidgetItem, QTextEdit,
     QVBoxLayout, QWidget,
 )
 
@@ -24,6 +26,18 @@ if TYPE_CHECKING:
     from ..main_window import MainWindow
 
 log = logging.getLogger("joycon_helper.ui.views.profiles")
+
+# Tag presets
+PROFILE_TAGS = [
+    "FPS", "Racing", "Platformer", "RPG", "Strategy",
+    "Emulation", "Accessibility", "Custom",
+]
+
+# Quick-pick emoji icons for profiles
+PROFILE_ICONS = [
+    "🎮", "🕹️", "🏎️", "⚔️", "🛡️", "🏹", "🧙", "🚀",
+    "🎯", "🔫", "💣", "🗡️", "🌟", "🔥", "❄️", "⚡",
+]
 
 
 # Default empty profile structure
@@ -69,6 +83,17 @@ class ProfilesView(QWidget):
             QFont.Weight.Bold,
         ))
         left.addWidget(header)
+
+        # Search bar
+        search_row = QHBoxLayout()
+        search_icon = QLabel("🔍")
+        search_row.addWidget(search_icon)
+        self._search_input = QLineEdit()
+        self._search_input.setPlaceholderText("Search profiles by name or tag…")
+        self._search_input.setClearButtonEnabled(True)
+        self._search_input.textChanged.connect(self._on_search_changed)
+        search_row.addWidget(self._search_input)
+        left.addLayout(search_row)
 
         # Slot cards
         slot_group = QGroupBox("Device Slots")
@@ -246,14 +271,71 @@ class ProfilesView(QWidget):
     def _build_right_panel(self, parent_layout: QHBoxLayout) -> None:
         right = QVBoxLayout()
 
-        # Profile name
+        # Profile name + icon picker
         name_row = QHBoxLayout()
+        # Icon picker
+        self._icon_btn = QPushButton("🎮")
+        self._icon_btn.setFixedSize(36, 36)
+        self._icon_btn.setToolTip("Change profile icon")
+        self._icon_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._icon_btn.clicked.connect(self._pick_icon)
+        name_row.addWidget(self._icon_btn)
+
         name_row.addWidget(QLabel("Profile Name:"))
         self._name_edit = QLineEdit()
         self._name_edit.setPlaceholderText("My Profile")
         self._name_edit.textChanged.connect(self._on_name_changed)
         name_row.addWidget(self._name_edit)
         right.addLayout(name_row)
+
+        # Tag chips
+        tag_group = QGroupBox("Tags")
+        tag_lay = QHBoxLayout(tag_group)
+        self._tag_checks: Dict[str, QCheckBox] = {}
+        for tag in PROFILE_TAGS:
+            cb = QCheckBox(tag)
+            cb.setCursor(Qt.CursorShape.PointingHandCursor)
+            cb.toggled.connect(lambda checked, t=tag: self._on_tag_toggled(t, checked))
+            tag_lay.addWidget(cb)
+            self._tag_checks[tag] = cb
+        right.addWidget(tag_group)
+
+        # Mapping preview grid (mini summary of what's bound)
+        preview_group = QGroupBox("Mapping Preview")
+        preview_lay = QVBoxLayout(preview_group)
+        self._preview_grid = QGridLayout()
+        self._preview_grid.setSpacing(4)
+        self._preview_labels: Dict[str, QLabel] = {}
+        # Populate a 6-col grid of the common buttons
+        common_buttons = [
+            "A", "B", "X", "Y", "L", "R",
+            "ZL", "ZR", "Plus", "Minus", "Home", "Capture",
+            "D-Up", "D-Down", "D-Left", "D-Right", "L3", "R3",
+        ]
+        for i, bname in enumerate(common_buttons):
+            lbl = QLabel(bname)
+            lbl.setFixedSize(QSize(60, 24))
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl.setStyleSheet(
+                f"background: {self._main.theme.theme['colors']['surface']}; "
+                f"border: 1px solid {self._main.theme.theme['colors']['border_light']}; "
+                f"border-radius: 4px; font-size: 10px;"
+            )
+            self._preview_grid.addWidget(lbl, i // 6, i % 6)
+            self._preview_labels[bname] = lbl
+        preview_lay.addLayout(self._preview_grid)
+        right.addWidget(preview_group)
+
+        # Active layer indicator
+        layer_row = QHBoxLayout()
+        layer_row.addWidget(QLabel("Active Layer:"))
+        self._layer_indicator = QLabel("Base")
+        self._layer_indicator.setStyleSheet(
+            f"color: {self._main.theme.theme['colors']['accent']}; font-weight: bold;"
+        )
+        layer_row.addWidget(self._layer_indicator)
+        layer_row.addStretch()
+        right.addLayout(layer_row)
 
         # Profile JSON editor
         right.addWidget(QLabel("Profile JSON:"))
@@ -611,6 +693,105 @@ class ProfilesView(QWidget):
         self._main._app_switcher.set_default_slot(index)
 
     # -----------------------------------------------------------------
+    # Search, Tags, Icon, Preview
+    # -----------------------------------------------------------------
+
+    def _on_search_changed(self, text: str) -> None:
+        """Filter slot card visibility based on search text."""
+        query = text.strip().lower()
+        for i, btn in enumerate(self._slot_cards):
+            label = btn.text().lower()
+            btn.setVisible(not query or query in label)
+
+    def _on_tag_toggled(self, tag: str, checked: bool) -> None:
+        profile = self._main.get_profile()
+        tags = set(profile.get("tags", []))
+        if checked:
+            tags.add(tag)
+        else:
+            tags.discard(tag)
+        profile["tags"] = sorted(tags)
+        self._main.set_profile(profile)
+
+    def _pick_icon(self) -> None:
+        """Show a simple icon picker popup."""
+        from PyQt6.QtWidgets import QDialog, QGridLayout
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Pick Profile Icon")
+        dlg.setFixedSize(280, 200)
+        grid = QGridLayout(dlg)
+        for i, emoji in enumerate(PROFILE_ICONS):
+            btn = QPushButton(emoji)
+            btn.setFixedSize(40, 40)
+            btn.setStyleSheet("font-size: 20px;")
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.clicked.connect(lambda _, e=emoji: self._set_icon(e, dlg))
+            grid.addWidget(btn, i // 4, i % 4)
+        dlg.exec()
+
+    def _set_icon(self, emoji: str, dlg) -> None:
+        self._icon_btn.setText(emoji)
+        profile = self._main.get_profile()
+        profile["icon"] = emoji
+        self._main.set_profile(profile)
+        dlg.accept()
+
+    def _refresh_preview(self) -> None:
+        """Update the mapping preview grid to show bound/unbound status."""
+        profile = self._main.get_profile()
+        mappings = profile.get("mappings", {})
+        accent = self._main.theme.theme["colors"]["accent"]
+        surface = self._main.theme.theme["colors"]["surface"]
+        border = self._main.theme.theme["colors"]["border_light"]
+
+        for bname, lbl in self._preview_labels.items():
+            entry = mappings.get(bname, {})
+            is_mapped = isinstance(entry, dict) and (
+                entry.get("keycode") is not None or entry.get("type")
+            )
+            if is_mapped:
+                from ...hid_keycodes import _KEYCODE_NAMES
+                kc = entry.get("keycode")
+                t = entry.get("type")
+                if t:
+                    short = t[:3].upper()
+                elif kc is not None:
+                    short = _KEYCODE_NAMES.get(kc, "?")
+                else:
+                    short = "?"
+                lbl.setText(f"{bname}\n{short}")
+                lbl.setStyleSheet(
+                    f"background: {accent}; color: #fff; "
+                    f"border: 1px solid {accent}; "
+                    f"border-radius: 4px; font-size: 9px;"
+                )
+            else:
+                lbl.setText(bname)
+                lbl.setStyleSheet(
+                    f"background: {surface}; "
+                    f"border: 1px solid {border}; "
+                    f"border-radius: 4px; font-size: 10px;"
+                )
+
+        # Update layer indicator
+        layers = profile.get("layers", [])
+        if layers:
+            self._layer_indicator.setText(f"Base + {len(layers)} layer(s)")
+        else:
+            self._layer_indicator.setText("Base")
+
+        # Update tags
+        profile_tags = set(profile.get("tags", []))
+        for tag, cb in self._tag_checks.items():
+            cb.blockSignals(True)
+            cb.setChecked(tag in profile_tags)
+            cb.blockSignals(False)
+
+        # Update icon
+        icon = profile.get("icon", "🎮")
+        self._icon_btn.setText(icon)
+
+    # -----------------------------------------------------------------
     # Event handlers
     # -----------------------------------------------------------------
 
@@ -620,11 +801,14 @@ class ProfilesView(QWidget):
     def profile_loaded(self, slot: int, profile: dict) -> None:
         name = profile.get("name", f"(slot {slot})")
         if 0 <= slot < len(self._slot_cards):
-            self._slot_cards[slot].setText(f"Slot {slot}: {name}")
+            icon = profile.get("icon", "🎮")
+            self._slot_cards[slot].setText(f"{icon} Slot {slot}: {name}")
         self._refresh_editor()
+        self._refresh_preview()
 
     def profile_updated(self, profile: dict) -> None:
         self._refresh_editor()
+        self._refresh_preview()
 
     def apply_theme(self, theme: ThemeEngine) -> None:
         pass

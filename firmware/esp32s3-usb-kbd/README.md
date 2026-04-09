@@ -112,6 +112,19 @@ The profile system supports these mapping modes:
 
 Macros and turbo repeat use random jitter (±15% on macro delays, ±10% on turbo intervals) to avoid perfectly regular patterns detectable by anti-cheat. Controlled by the profile `"humanize"` field (default true) or the `set_humanize` serial command.
 
+### Macro step types
+
+Macro steps support four types:
+
+| Type            | Description                                              |
+|-----------------|----------------------------------------------------------|
+| `key`           | Press or release a keyboard key (`key_id` 0–127)         |
+| `delay`         | Wait a number of milliseconds (0–5000, jittered ±15%)    |
+| `mouse_button`  | Press or release a USB HID mouse button (1–31)           |
+| `macro_chain`   | Enqueue another macro to run after the current one ends  |
+
+See `docs/keymap.md` and `helper-app/protocol.md` for the full JSON schema.
+
 ### Layers
 
 Profiles may include up to 4 **overlay layers**. Each layer is activated by a controller button (hold or toggle mode). While active, a layer's sparse mapping overrides replace the base mappings for the listed key_ids; unlisted keys fall through to the base. See `helper-app/protocol.md` for the JSON schema.

@@ -530,7 +530,10 @@ class MappingView(QWidget):
             mod_str = f"\nModifier: 0x{mod:02X}" if mod else ""
             self._sel_mapping.setText(f"Mapped to: {label} (0x{keycode:02X}){mod_str}")
         else:
-            self._sel_mapping.setText("Not mapped — bind a key below")
+            self._sel_mapping.setText("Not mapped — double-click or press Edit to configure")
+
+        # Open the mapping popup on click
+        self._open_mapping_popup(name)
 
     def _on_hotspot_right_click(self, name: str, pos: object) -> None:
         self._on_hotspot_clicked(name)
@@ -543,6 +546,12 @@ class MappingView(QWidget):
         is_locked = name in self._locked_hotspots
 
         menu = QMenu(self)
+
+        # Edit Binding (opens the full popup)
+        edit_act = menu.addAction(f"\u270F Edit Binding — {name}")
+        edit_act.triggered.connect(lambda: self._open_mapping_popup(name))
+
+        menu.addSeparator()
 
         # Learn — case the controller button for this hotspot
         learn_act = menu.addAction(f"Case key_id for {name}")
@@ -714,6 +723,30 @@ class MappingView(QWidget):
             f"Locked: {'YES' if name in self._locked_hotspots else 'no'}",
         ]
         QMessageBox.information(self, f"Info — {name}", "\n".join(line for line in lines if line))
+
+    def _open_mapping_popup(self, name: str) -> None:
+        """Open the rich mapping editor popup for *name*."""
+        from .mapping_popup import open_mapping_popup
+
+        if name in self._locked_hotspots:
+            QMessageBox.warning(self, "Locked", f"{name} is locked. Unlock it first.")
+            return
+
+        profile = self._main.get_profile()
+        current_entry = profile.get("mappings", {}).get(name)
+
+        result = open_mapping_popup(self._main, name, current_entry, self)
+
+        if result == "__unbind__":
+            self._ctx_unbind(name)
+        elif result is not None:
+            profile = _ensure_mappings(profile)
+            profile["mappings"][name] = result
+            self._main.set_profile(profile)
+            self._refresh_mapping_visuals()
+            from .mapping_popup import MappingPopup
+            desc = MappingPopup._describe_entry(result)
+            self._sel_mapping.setText(f"Bound to: {desc}")
 
     def _on_hotspot_hovered(self, name: str) -> None:
         if name:

@@ -1,16 +1,21 @@
 """Sidebar navigation widget.
 
 A vertical left rail with icon + label nav items, collapsible between
-wide (200 px) and narrow (56 px) modes.
+wide (220 px) and narrow (56 px) modes.  Features animated transitions,
+shortcut hints, separator lines between nav groups, and glow effects.
 """
 from __future__ import annotations
 
 from typing import List, Optional
 
-from PyQt6.QtCore import QEasingCurve, QPropertyAnimation, Qt, pyqtSignal
+from PyQt6.QtCore import (
+    QEasingCurve, QPropertyAnimation, QSequentialAnimationGroup,
+    Qt, pyqtSignal,
+)
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget,
+    QFrame, QGraphicsDropShadowEffect, QHBoxLayout, QLabel,
+    QPushButton, QVBoxLayout, QWidget,
 )
 
 from ..theme import ThemeEngine
@@ -20,6 +25,7 @@ class SidebarItem(QPushButton):
     """A single nav item in the sidebar."""
 
     def __init__(self, icon_char: str, label: str, theme: ThemeEngine,
+                 shortcut_hint: str = "",
                  parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._icon_char = icon_char
@@ -27,10 +33,19 @@ class SidebarItem(QPushButton):
         self._theme = theme
         self._active = False
         self._expanded = True
+        self._shortcut_hint = shortcut_hint  # e.g. "Ctrl+1"
 
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setCheckable(True)
         self.setFixedHeight(48)
+
+        # Glow effect for active item
+        self._glow = QGraphicsDropShadowEffect(self)
+        self._glow.setBlurRadius(0)
+        self._glow.setOffset(0, 0)
+        self._glow.setColor(theme.theme["colors"].get("sidebar_active", "#4a7aba"))
+        self.setGraphicsEffect(self._glow)
+
         self._update_style()
 
     def set_expanded(self, expanded: bool) -> None:
@@ -38,17 +53,44 @@ class SidebarItem(QPushButton):
         self._update_text()
 
     def set_active(self, active: bool) -> None:
+        was_active = self._active
         self._active = active
         self.setChecked(active)
         self._update_style()
+        # Animate glow
+        if active and not was_active:
+            self._animate_glow_in()
+        elif not active and was_active:
+            self._glow.setBlurRadius(0)
+
+    def _animate_glow_in(self) -> None:
+        """Smooth glow-in when this item becomes active."""
+        from PyQt6.QtGui import QColor
+        accent = self._theme.theme["colors"].get("sidebar_active", "#4a7aba")
+        c = QColor(accent)
+        c.setAlpha(120)
+        self._glow.setColor(c)
+
+        anim = QPropertyAnimation(self._glow, b"blurRadius", self)
+        anim.setDuration(300)
+        anim.setStartValue(0)
+        anim.setEndValue(18)
+        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        anim.start(QPropertyAnimation.DeletionPolicy.DeleteWhenStopped)
 
     def _update_text(self) -> None:
         if self._expanded:
             self.setText(f"  {self._icon_char}   {self._label_text}")
-            self.setToolTip("")
+            if self._shortcut_hint:
+                self.setToolTip(f"{self._label_text}  ({self._shortcut_hint})")
+            else:
+                self.setToolTip("")
         else:
             self.setText(f"  {self._icon_char}")
-            self.setToolTip(self._label_text)
+            tip = self._label_text
+            if self._shortcut_hint:
+                tip += f"  ({self._shortcut_hint})"
+            self.setToolTip(tip)
 
     def _update_style(self) -> None:
         c = self._theme.theme["colors"]
@@ -86,8 +128,31 @@ class SidebarItem(QPushButton):
 
     def apply_theme(self, theme: ThemeEngine) -> None:
         self._theme = theme
+        from PyQt6.QtGui import QColor
+        accent = theme.theme["colors"].get("sidebar_active", "#4a7aba")
+        c = QColor(accent)
+        c.setAlpha(120)
+        self._glow.setColor(c)
         self._update_style()
         self._update_text()
+
+
+class _SidebarSeparator(QFrame):
+    """Thin horizontal line used between navigation groups."""
+
+    def __init__(self, theme: ThemeEngine, parent: Optional[QWidget] = None) -> None:
+        super().__init__(parent)
+        self._theme = theme
+        self.setFixedHeight(1)
+        self._apply_theme()
+
+    def _apply_theme(self) -> None:
+        c = self._theme.theme["colors"]
+        self.setStyleSheet(f"background: {c['border']}; margin: 6px 12px;")
+
+    def apply_theme(self, theme: ThemeEngine) -> None:
+        self._theme = theme
+        self._apply_theme()
 
 
 class SidebarWidget(QFrame):
@@ -98,11 +163,15 @@ class SidebarWidget(QFrame):
 
     nav_clicked = pyqtSignal(int)
 
+    # Group boundaries: separator inserted *before* these logical indices
+    _GROUP_BREAKS = {4, 7}  # before Devices, before Settings
+
     def __init__(self, theme: ThemeEngine, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         self._theme = theme
         self._expanded = True
         self._items: List[SidebarItem] = []
+        self._separators: List[_SidebarSeparator] = []
 
         self.setFixedWidth(self.EXPANDED_WIDTH)
         self.setObjectName("Sidebar")
@@ -155,7 +224,16 @@ class SidebarWidget(QFrame):
 
     def add_nav_item(self, icon_char: str, label: str) -> int:
         index = len(self._items)
-        item = SidebarItem(icon_char, label, self._theme, self)
+
+        # Insert separator before group breaks
+        if index in self._GROUP_BREAKS:
+            sep = _SidebarSeparator(self._theme, self)
+            self._nav_layout.addWidget(sep)
+            self._separators.append(sep)
+
+        shortcut = f"Ctrl+{index + 1}" if index < 9 else ""
+        item = SidebarItem(icon_char, label, self._theme,
+                           shortcut_hint=shortcut, parent=self)
         item.set_expanded(self._expanded)
         item._update_text()
         item.clicked.connect(lambda checked, idx=index: self._on_item_clicked(idx))
@@ -230,6 +308,8 @@ class SidebarWidget(QFrame):
             sep.setStyleSheet(f"background: {c['border']};")
         for item in self._items:
             item.apply_theme(self._theme)
+        for s in self._separators:
+            s.apply_theme(self._theme)
 
     def apply_theme(self, theme: ThemeEngine) -> None:
         self._theme = theme

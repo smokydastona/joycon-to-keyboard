@@ -86,11 +86,29 @@ class MacrosView(QWidget):
         add_btn.clicked.connect(self._add_macro)
         btn_row.addWidget(add_btn)
 
+        dup_macro_btn = QPushButton("Duplicate")
+        dup_macro_btn.clicked.connect(self._duplicate_macro)
+        btn_row.addWidget(dup_macro_btn)
+
         del_btn = QPushButton("Delete")
         del_btn.setProperty("danger", True)
         del_btn.clicked.connect(self._delete_macro)
         btn_row.addWidget(del_btn)
         left.addLayout(btn_row)
+
+        # Import/export row
+        io_row = QHBoxLayout()
+        export_macro_btn = QPushButton("Export")
+        export_macro_btn.setToolTip("Export the selected macro to a JSON file")
+        export_macro_btn.clicked.connect(self._export_macro)
+        io_row.addWidget(export_macro_btn)
+
+        import_macro_btn = QPushButton("Import")
+        import_macro_btn.setToolTip("Import a macro from a JSON file")
+        import_macro_btn.clicked.connect(self._import_macro)
+        io_row.addWidget(import_macro_btn)
+        io_row.addStretch()
+        left.addLayout(io_row)
 
         lay.addLayout(left, 1)
 
@@ -259,21 +277,23 @@ class MacrosView(QWidget):
     # -----------------------------------------------------------------
 
     def _build_layers_tab(self) -> None:
-        lay = QVBoxLayout(self._layers_tab)
+        lay = QHBoxLayout(self._layers_tab)
         lay.setContentsMargins(16, 16, 16, 16)
 
-        lay.addWidget(QLabel("Layer / Mask Configuration"))
+        # Left: layer list
+        left = QVBoxLayout()
+        left.addWidget(QLabel("Shift Layers"))
         info = QLabel(
             "Layers allow multiple mapping sets on the same controller. "
-            "A layer is activated by holding a trigger button, shifting "
-            "all other buttons to a different keymap."
+            "Holding the trigger button activates the layer's mappings."
         )
         info.setWordWrap(True)
         info.setStyleSheet(f"color: {self._main.theme.color('text_secondary')};")
-        lay.addWidget(info)
+        left.addWidget(info)
 
         self._layer_list = QListWidget()
-        lay.addWidget(self._layer_list, 1)
+        self._layer_list.itemClicked.connect(self._on_layer_selected)
+        left.addWidget(self._layer_list, 1)
 
         btn_row = QHBoxLayout()
         add_btn = QPushButton("+ Add Layer")
@@ -281,32 +301,95 @@ class MacrosView(QWidget):
         add_btn.clicked.connect(self._add_layer)
         btn_row.addWidget(add_btn)
 
+        dup_btn = QPushButton("Duplicate")
+        dup_btn.clicked.connect(self._duplicate_layer)
+        btn_row.addWidget(dup_btn)
+
         del_btn = QPushButton("Delete Layer")
         del_btn.setProperty("danger", True)
         del_btn.clicked.connect(self._delete_layer)
         btn_row.addWidget(del_btn)
         btn_row.addStretch()
-        lay.addLayout(btn_row)
+        left.addLayout(btn_row)
+
+        lay.addLayout(left, 1)
+
+        # Right: layer editor
+        right = QVBoxLayout()
+        right.addWidget(QLabel("Layer Editor"))
+
+        # Layer name
+        name_row = QHBoxLayout()
+        name_row.addWidget(QLabel("Name:"))
+        self._layer_name = QLineEdit()
+        self._layer_name.setPlaceholderText("Layer name")
+        name_row.addWidget(self._layer_name)
+        right.addLayout(name_row)
+
+        # Trigger button picker
+        trigger_row = QHBoxLayout()
+        trigger_row.addWidget(QLabel("Trigger Button:"))
+        self._layer_trigger = QComboBox()
+        self._layer_trigger.addItems([
+            "(none)", "L", "R", "ZL", "ZR", "SL", "SR",
+            "Plus", "Minus", "Home", "Capture",
+            "A", "B", "X", "Y",
+            "D-Up", "D-Down", "D-Left", "D-Right",
+        ])
+        self._layer_trigger.setToolTip("Hold this button to activate the layer")
+        trigger_row.addWidget(self._layer_trigger)
+        trigger_row.addStretch()
+        right.addLayout(trigger_row)
+
+        # Layer mappings list
+        right.addWidget(QLabel("Layer Overrides:"))
+        self._layer_mapping_list = QListWidget()
+        self._layer_mapping_list.setMinimumHeight(120)
+        right.addWidget(self._layer_mapping_list, 1)
+
+        override_row = QHBoxLayout()
+        add_override_btn = QPushButton("+ Add Override")
+        add_override_btn.setProperty("accent", True)
+        add_override_btn.setToolTip("Add a mapping override for this layer")
+        add_override_btn.clicked.connect(self._add_layer_override)
+        override_row.addWidget(add_override_btn)
+
+        del_override_btn = QPushButton("Remove Override")
+        del_override_btn.setProperty("danger", True)
+        del_override_btn.clicked.connect(self._remove_layer_override)
+        override_row.addWidget(del_override_btn)
+        override_row.addStretch()
+        right.addLayout(override_row)
+
+        save_layer_btn = QPushButton("Save Layer")
+        save_layer_btn.setProperty("accent", True)
+        save_layer_btn.clicked.connect(self._save_layer)
+        right.addWidget(save_layer_btn)
+
+        lay.addLayout(right, 2)
 
     # -----------------------------------------------------------------
     # Chords tab
     # -----------------------------------------------------------------
 
     def _build_chords_tab(self) -> None:
-        lay = QVBoxLayout(self._chords_tab)
+        lay = QHBoxLayout(self._chords_tab)
         lay.setContentsMargins(16, 16, 16, 16)
 
-        lay.addWidget(QLabel("Chord Mappings"))
+        # Left: chord list
+        left = QVBoxLayout()
+        left.addWidget(QLabel("Chord Mappings"))
         info = QLabel(
             "Chords trigger a unique output when multiple buttons are pressed "
-            "simultaneously. Define button combinations and their output here."
+            "simultaneously within the timing window."
         )
         info.setWordWrap(True)
         info.setStyleSheet(f"color: {self._main.theme.color('text_secondary')};")
-        lay.addWidget(info)
+        left.addWidget(info)
 
         self._chord_list = QListWidget()
-        lay.addWidget(self._chord_list, 1)
+        self._chord_list.itemClicked.connect(self._on_chord_selected)
+        left.addWidget(self._chord_list, 1)
 
         btn_row = QHBoxLayout()
         add_btn = QPushButton("+ Add Chord")
@@ -319,7 +402,52 @@ class MacrosView(QWidget):
         del_btn.clicked.connect(self._delete_chord)
         btn_row.addWidget(del_btn)
         btn_row.addStretch()
-        lay.addLayout(btn_row)
+        left.addLayout(btn_row)
+
+        lay.addLayout(left, 1)
+
+        # Right: chord editor
+        right = QVBoxLayout()
+        right.addWidget(QLabel("Chord Editor"))
+
+        # Combo buttons
+        right.addWidget(QLabel("Button Combination:"))
+        self._chord_buttons_input = QLineEdit()
+        self._chord_buttons_input.setPlaceholderText("e.g. A+B or L+R+ZL")
+        self._chord_buttons_input.setToolTip("Enter buttons separated by + (e.g. A+B)")
+        right.addWidget(self._chord_buttons_input)
+
+        # Output keycode
+        output_row = QHBoxLayout()
+        output_row.addWidget(QLabel("Output:"))
+        self._chord_output = QComboBox()
+        self._chord_output.setEditable(True)
+        self._chord_output.addItem("(none)", 0)
+        for code, name in sorted(_KEYCODE_NAMES.items()):
+            self._chord_output.addItem(name, code)
+        self._chord_output.setToolTip("Key to output when the chord is triggered")
+        output_row.addWidget(self._chord_output)
+        right.addLayout(output_row)
+
+        # Timing window
+        timing_row = QHBoxLayout()
+        timing_row.addWidget(QLabel("Timing Window:"))
+        self._chord_window = QSpinBox()
+        self._chord_window.setRange(50, 500)
+        self._chord_window.setValue(100)
+        self._chord_window.setSuffix(" ms")
+        self._chord_window.setToolTip("Maximum time between button presses to count as a chord (50-500ms)")
+        timing_row.addWidget(self._chord_window)
+        timing_row.addStretch()
+        right.addLayout(timing_row)
+
+        save_chord_btn = QPushButton("Save Chord")
+        save_chord_btn.setProperty("accent", True)
+        save_chord_btn.clicked.connect(self._save_chord)
+        right.addWidget(save_chord_btn)
+
+        right.addStretch()
+        lay.addLayout(right, 2)
 
     # -----------------------------------------------------------------
     # Stick tab
@@ -592,6 +720,61 @@ class MacrosView(QWidget):
                 )
             self._recording_steps = []
 
+    def _duplicate_macro(self) -> None:
+        import copy
+        idx = self._macro_list.currentRow()
+        if idx < 0:
+            return
+        profile = self._main.get_profile()
+        macros = profile.get("macros", [])
+        if 0 <= idx < len(macros):
+            dup = copy.deepcopy(macros[idx])
+            dup["name"] = f"{dup.get('name', 'Macro')} (copy)"
+            macros.append(dup)
+            self._main.set_profile(profile)
+            self._refresh_macro_list()
+
+    def _export_macro(self) -> None:
+        idx = self._macro_list.currentRow()
+        if idx < 0:
+            QMessageBox.information(self, "No Selection", "Select a macro to export.")
+            return
+        profile = self._main.get_profile()
+        macros = profile.get("macros", [])
+        if not (0 <= idx < len(macros)):
+            return
+        from PyQt6.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export Macro", "macro.json", "JSON Files (*.json)",
+        )
+        if not path:
+            return
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(macros[idx], f, indent=2, ensure_ascii=False)
+
+    def _import_macro(self) -> None:
+        from PyQt6.QtWidgets import QFileDialog
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Import Macro", "", "JSON Files (*.json);;All Files (*)",
+        )
+        if not path:
+            return
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            QMessageBox.critical(self, "Import Failed", str(e))
+            return
+        if not isinstance(data, dict) or "steps" not in data:
+            QMessageBox.warning(self, "Invalid", "File must be a macro JSON with a 'steps' key.")
+            return
+        profile = self._main.get_profile()
+        if "macros" not in profile:
+            profile["macros"] = []
+        profile["macros"].append(data)
+        self._main.set_profile(profile)
+        self._refresh_macro_list()
+
     def _refresh_macro_list(self) -> None:
         self._macro_list.clear()
         profile = self._main.get_profile()
@@ -616,6 +799,20 @@ class MacrosView(QWidget):
         self._main.set_profile(profile)
         self._refresh_layer_list()
 
+    def _duplicate_layer(self) -> None:
+        import copy
+        idx = self._layer_list.currentRow()
+        if idx < 0:
+            return
+        profile = self._main.get_profile()
+        layers = profile.get("layers", [])
+        if 0 <= idx < len(layers):
+            dup = copy.deepcopy(layers[idx])
+            dup["name"] = f"{dup.get('name', 'Layer')} (copy)"
+            layers.append(dup)
+            self._main.set_profile(profile)
+            self._refresh_layer_list()
+
     def _delete_layer(self) -> None:
         idx = self._layer_list.currentRow()
         if idx < 0:
@@ -626,6 +823,101 @@ class MacrosView(QWidget):
             layers.pop(idx)
             self._main.set_profile(profile)
             self._refresh_layer_list()
+
+    def _on_layer_selected(self, item: QListWidgetItem) -> None:
+        idx = self._layer_list.row(item)
+        profile = self._main.get_profile()
+        layers = profile.get("layers", [])
+        if 0 <= idx < len(layers):
+            layer = layers[idx]
+            self._layer_name.setText(layer.get("name", ""))
+            trigger = layer.get("trigger")
+            t_idx = self._layer_trigger.findText(trigger or "(none)")
+            self._layer_trigger.setCurrentIndex(max(0, t_idx))
+            self._refresh_layer_mapping_list(layer)
+
+    def _refresh_layer_mapping_list(self, layer: dict) -> None:
+        self._layer_mapping_list.clear()
+        mappings = layer.get("mappings", {})
+        for button, entry in sorted(mappings.items()):
+            if not isinstance(entry, dict):
+                continue
+            kc = entry.get("keycode")
+            if kc is not None:
+                label = _KEYCODE_NAMES.get(kc, f"0x{kc:02X}")
+                self._layer_mapping_list.addItem(f"{button} → {label}")
+            elif entry.get("type"):
+                self._layer_mapping_list.addItem(f"{button} → [{entry['type']}]")
+
+    def _add_layer_override(self) -> None:
+        idx = self._layer_list.currentRow()
+        if idx < 0:
+            QMessageBox.information(self, "No Layer", "Select a layer first.")
+            return
+
+        profile = self._main.get_profile()
+        layers = profile.get("layers", [])
+        if not (0 <= idx < len(layers)):
+            return
+
+        buttons = [
+            "A", "B", "X", "Y", "L", "R", "ZL", "ZR",
+            "Plus", "Minus", "Home", "Capture",
+            "D-Up", "D-Down", "D-Left", "D-Right",
+        ]
+        from PyQt6.QtWidgets import QInputDialog
+        button, ok = QInputDialog.getItem(
+            self, "Add Override", "Button to override:", buttons, 0, False,
+        )
+        if not ok or not button:
+            return
+
+        # Open the mapping popup for this override
+        from .mapping_popup import open_mapping_popup
+        current = layers[idx].get("mappings", {}).get(button)
+        result = open_mapping_popup(self._main, f"{button} (Layer)", current, self)
+
+        if result == "__unbind__":
+            layers[idx].get("mappings", {}).pop(button, None)
+        elif result is not None:
+            if "mappings" not in layers[idx]:
+                layers[idx]["mappings"] = {}
+            layers[idx]["mappings"][button] = result
+
+        self._main.set_profile(profile)
+        self._refresh_layer_mapping_list(layers[idx])
+
+    def _remove_layer_override(self) -> None:
+        l_idx = self._layer_list.currentRow()
+        m_idx = self._layer_mapping_list.currentRow()
+        if l_idx < 0 or m_idx < 0:
+            return
+        profile = self._main.get_profile()
+        layers = profile.get("layers", [])
+        if 0 <= l_idx < len(layers):
+            mappings = layers[l_idx].get("mappings", {})
+            keys = sorted(mappings.keys())
+            if 0 <= m_idx < len(keys):
+                del mappings[keys[m_idx]]
+                self._main.set_profile(profile)
+                self._refresh_layer_mapping_list(layers[l_idx])
+
+    def _save_layer(self) -> None:
+        idx = self._layer_list.currentRow()
+        if idx < 0:
+            QMessageBox.information(self, "No Selection", "Select a layer first.")
+            return
+        profile = self._main.get_profile()
+        layers = profile.get("layers", [])
+        if not (0 <= idx < len(layers)):
+            return
+        trigger = self._layer_trigger.currentText()
+        if trigger == "(none)":
+            trigger = None
+        layers[idx]["name"] = self._layer_name.text() or f"Layer {idx + 1}"
+        layers[idx]["trigger"] = trigger
+        self._main.set_profile(profile)
+        self._refresh_layer_list()
 
     def _refresh_layer_list(self) -> None:
         self._layer_list.clear()
@@ -642,6 +934,7 @@ class MacrosView(QWidget):
         profile["chords"].append({
             "buttons": [],
             "output": None,
+            "window_ms": 100,
         })
         self._main.set_profile(profile)
         self._refresh_chord_list()
@@ -657,13 +950,54 @@ class MacrosView(QWidget):
             self._main.set_profile(profile)
             self._refresh_chord_list()
 
+    def _on_chord_selected(self, item: QListWidgetItem) -> None:
+        idx = self._chord_list.row(item)
+        profile = self._main.get_profile()
+        chords = profile.get("chords", [])
+        if 0 <= idx < len(chords):
+            chord = chords[idx]
+            buttons = chord.get("buttons", [])
+            self._chord_buttons_input.setText("+".join(buttons))
+            output_kc = chord.get("output")
+            if isinstance(output_kc, int):
+                ci = self._chord_output.findData(output_kc)
+                self._chord_output.setCurrentIndex(max(0, ci))
+            else:
+                self._chord_output.setCurrentIndex(0)
+            self._chord_window.setValue(chord.get("window_ms", 100))
+
+    def _save_chord(self) -> None:
+        idx = self._chord_list.currentRow()
+        if idx < 0:
+            QMessageBox.information(self, "No Selection", "Select a chord first.")
+            return
+        profile = self._main.get_profile()
+        chords = profile.get("chords", [])
+        if not (0 <= idx < len(chords)):
+            return
+        buttons_text = self._chord_buttons_input.text().strip()
+        buttons = [b.strip() for b in buttons_text.split("+") if b.strip()]
+        output_kc = self._chord_output.currentData()
+        chords[idx] = {
+            "buttons": buttons,
+            "output": output_kc if output_kc else None,
+            "window_ms": self._chord_window.value(),
+        }
+        self._main.set_profile(profile)
+        self._refresh_chord_list()
+
     def _refresh_chord_list(self) -> None:
         self._chord_list.clear()
         profile = self._main.get_profile()
         for chord in profile.get("chords", []):
             buttons = chord.get("buttons", [])
-            output = chord.get("output", "—")
-            self._chord_list.addItem(f"{'+'.join(buttons)} → {output}")
+            output = chord.get("output")
+            window = chord.get("window_ms", 100)
+            output_name = "—"
+            if isinstance(output, int):
+                output_name = _KEYCODE_NAMES.get(output, f"0x{output:02X}")
+            combo = "+".join(buttons) if buttons else "(empty)"
+            self._chord_list.addItem(f"{combo} → {output_name} ({window}ms)")
 
     # -----------------------------------------------------------------
     # Stick config

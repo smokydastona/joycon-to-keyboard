@@ -1,17 +1,30 @@
-"""Always-on-top overlay window.
+"""Always-on-top overlay window (Key Pops).
 
 Shows a minimal, semi-transparent display of current key state, macro activity,
 slot information, active layer, and turbo state over other applications.
+Enhanced with bubble-style glow effects and customisable placement.
 """
 from __future__ import annotations
 
 from typing import Optional, Set
 
-from PyQt6.QtCore import QPoint, QRect, QSettings, QTimer, Qt
-from PyQt6.QtGui import QAction, QColor, QFont, QPainter
-from PyQt6.QtWidgets import QApplication, QMenu, QWidget
+from PyQt6.QtCore import QPoint, QRect, QSettings, QTimer, Qt, QPropertyAnimation, QEasingCurve
+from PyQt6.QtGui import QAction, QColor, QFont, QLinearGradient, QPainter, QPainterPath
+from PyQt6.QtWidgets import QApplication, QGraphicsDropShadowEffect, QMenu, QWidget
 
 from ..theme import ThemeEngine
+
+# Placement presets: (x_fraction, y_fraction) of screen
+PLACEMENT_PRESETS = {
+    "Top Left": (0.02, 0.02),
+    "Top Center": (0.4, 0.02),
+    "Top Right": (0.75, 0.02),
+    "Center Left": (0.02, 0.4),
+    "Center Right": (0.75, 0.4),
+    "Bottom Left": (0.02, 0.85),
+    "Bottom Center": (0.4, 0.85),
+    "Bottom Right": (0.75, 0.85),
+}
 
 
 class OverlayWindow(QWidget):
@@ -57,6 +70,21 @@ class OverlayWindow(QWidget):
         # Drag support
         self._drag_pos: Optional[QPoint] = None
 
+        # Glow/bubble shadow effect
+        self._glow = QGraphicsDropShadowEffect(self)
+        self._glow.setBlurRadius(24)
+        self._glow.setOffset(0, 0)
+        self._glow.setColor(QColor(theme.theme["colors"]["accent"]))
+        self.setGraphicsEffect(self._glow)
+
+        # Glow pulse animation for key presses
+        self._glow_anim = QPropertyAnimation(self._glow, b"blurRadius")
+        self._glow_anim.setDuration(400)
+        self._glow_anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+        # Bubble style from settings
+        self._bubble_style = settings.value("overlay_style", "bubble", type=str)
+
         # Fade timer for last-key flash
         self._fade_timer = QTimer(self)
         self._fade_timer.setSingleShot(True)
@@ -90,8 +118,18 @@ class OverlayWindow(QWidget):
         self._last_key_text = f"{action} {key_name}"
         if pressed:
             self._active_keys.add(key_name)
+            # Pulse glow on key press
+            self._glow_anim.stop()
+            self._glow_anim.setStartValue(24)
+            self._glow_anim.setEndValue(40)
+            self._glow_anim.start()
         else:
             self._active_keys.discard(key_name)
+            # Settle glow back
+            self._glow_anim.stop()
+            self._glow_anim.setStartValue(40)
+            self._glow_anim.setEndValue(24)
+            self._glow_anim.start()
         self._fade_timer.start()
         self._restart_auto_hide()
         self.update()
@@ -216,6 +254,13 @@ class OverlayWindow(QWidget):
             act.triggered.connect(lambda checked, o=level: self._set_opacity(o))
             opacity_menu.addAction(act)
 
+        # Placement presets
+        place_menu = menu.addMenu("Placement")
+        for name, (fx, fy) in PLACEMENT_PRESETS.items():
+            act = QAction(name, self)
+            act.triggered.connect(lambda checked, x=fx, y=fy: self._move_to_preset(x, y))
+            place_menu.addAction(act)
+
         # Compact mode toggle
         compact_act = QAction("Compact Mode", self)
         compact_act.setCheckable(True)
@@ -229,6 +274,17 @@ class OverlayWindow(QWidget):
 
         if hasattr(event, 'globalPos'):
             menu.exec(event.globalPos())
+
+    def _move_to_preset(self, fx: float, fy: float) -> None:
+        """Move the overlay to a fractional screen position."""
+        screen = QApplication.primaryScreen()
+        if screen:
+            geo = screen.availableGeometry()
+            x = int(geo.x() + geo.width() * fx)
+            y = int(geo.y() + geo.height() * fy)
+            pos = self._clamp_to_screen(QPoint(x, y))
+            self.move(pos)
+            QSettings().setValue("overlay_pos", pos)
 
     def _set_opacity(self, opacity: float) -> None:
         self._opacity = opacity

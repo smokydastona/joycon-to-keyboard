@@ -47,7 +47,18 @@ Profile schema (expected by the ESP32-S3 keyboard-side firmware):
 			"steps": [
 				{"type": "key", "key_id": 44, "pressed": true},
 				{"type": "delay", "ms": 50},
-				{"type": "key", "key_id": 44, "pressed": false}
+				{"type": "key", "key_id": 44, "pressed": false},
+				{"type": "mouse_button", "button": 1, "pressed": true},
+				{"type": "delay", "ms": 30},
+				{"type": "mouse_button", "button": 1, "pressed": false}
+			]
+		},
+		{
+			"id": "chain_target",
+			"steps": [
+				{"type": "key", "key_id": 10, "pressed": true},
+				{"type": "delay", "ms": 20},
+				{"type": "key", "key_id": 10, "pressed": false}
 			]
 		}
 	],
@@ -133,6 +144,21 @@ Notes:
 | `sequential` | Cycles through a list of outputs on each press. Contains `outputs` array. See below. |
 | `leader` | Activates leader key mode: buffers subsequent presses and matches against `leader_sequences`. No extra fields. |
 | `profile_switch` | Switches the active profile slot and reloads. Contains `slot` (0–3). See below. |
+
+### Macro step types
+
+Each step in a `macros[].steps` array has a `type` field:
+
+| type | fields | description |
+|------|--------|-------------|
+| `key` | `key_id` (0–127), `pressed` (bool) | Press or release a keyboard key. |
+| `delay` | `ms` (0–5000) | Wait with humanized jitter (±15%). |
+| `mouse_button` | `button` (1–31), `pressed` (bool) | Press or release a USB HID mouse button. |
+| `macro_chain` | `id` (string) | Enqueue another macro to run after the current one finishes. |
+
+Mouse button values: 1=left, 2=right, 4=middle, 8=back, 16=forward.
+
+Macro chaining is **non-recursive** — chained macros are enqueued and executed sequentially by the macro task, not inlined. Circular chains will eventually drain the 8-entry macro queue.
 
 ### Turbo mapping
 

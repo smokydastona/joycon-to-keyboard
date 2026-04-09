@@ -55,6 +55,8 @@ static uint32_t humanize_delay(uint32_t base_ms, int pct) {
 typedef enum {
     STEP_KEY = 1,
     STEP_DELAY = 2,
+    STEP_MOUSE_BUTTON = 3,
+    STEP_MACRO_CHAIN = 4,
 } step_type_t;
 
 typedef struct {
@@ -67,6 +69,13 @@ typedef struct {
         struct {
             uint16_t ms;
         } delay;
+        struct {
+            uint8_t button;   // MOUSE_BUTTON_LEFT=1, RIGHT=2, etc.
+            bool pressed;
+        } mouse;
+        struct {
+            int8_t macro_index;
+        } chain;
     } u;
 } macro_step_t;
 
@@ -826,6 +835,30 @@ static bool parse_macro_step(cJSON *step_obj, macro_step_t *out_step) {
         return true;
     }
 
+    if (strcmp(type->valuestring, "mouse_button") == 0) {
+        cJSON *btn = cJSON_GetObjectItemCaseSensitive(step_obj, "button");
+        cJSON *pressed = cJSON_GetObjectItemCaseSensitive(step_obj, "pressed");
+        if (!cJSON_IsNumber(btn) || btn->valueint < 1 || btn->valueint > 31) return false;
+        if (!cJSON_IsBool(pressed)) return false;
+
+        out_step->type = STEP_MOUSE_BUTTON;
+        out_step->u.mouse.button = (uint8_t)btn->valueint;
+        out_step->u.mouse.pressed = cJSON_IsTrue(pressed);
+        return true;
+    }
+
+    if (strcmp(type->valuestring, "macro_chain") == 0) {
+        cJSON *id = cJSON_GetObjectItemCaseSensitive(step_obj, "id");
+        if (!cJSON_IsString(id) || !id->valuestring) return false;
+        // Resolve macro id to index (deferred — filled in after macros are parsed).
+        // Store id temporarily in type-punned key_id; resolved in a second pass.
+        out_step->type = STEP_MACRO_CHAIN;
+        out_step->u.chain.macro_index = -1;
+        // Store the id string length + content in the key_id field temporarily.
+        // We'll resolve this after all macros are loaded — see parse_macros().
+        return true;
+    }
+
     return false;
 }
 
@@ -882,6 +915,40 @@ static void parse_macros(cJSON *root) {
     }
 
     s_macro_count = macro_count;
+
+    // Second pass: resolve STEP_MACRO_CHAIN references now that all macros
+    // are indexed. Walk the JSON again paired with parsed macros.
+    size_t mi = 0;
+    cJSON_ArrayForEach(macro_obj, macros) {
+        if (!cJSON_IsObject(macro_obj)) continue;
+        if (mi >= s_macro_count) break;
+
+        cJSON *steps = cJSON_GetObjectItemCaseSensitive(macro_obj, "steps");
+        if (!cJSON_IsArray(steps)) { mi++; continue; }
+
+        size_t si = 0;
+        cJSON *step_obj;
+        cJSON_ArrayForEach(step_obj, steps) {
+            if (si >= s_macros[mi].step_count) break;
+            if (s_macros[mi].steps[si].type == STEP_MACRO_CHAIN) {
+                cJSON *type = cJSON_GetObjectItemCaseSensitive(step_obj, "type");
+                if (cJSON_IsString(type) && type->valuestring &&
+                    strcmp(type->valuestring, "macro_chain") == 0) {
+                    cJSON *chain_id = cJSON_GetObjectItemCaseSensitive(step_obj, "id");
+                    if (cJSON_IsString(chain_id) && chain_id->valuestring) {
+                        int8_t idx = find_macro_index(chain_id->valuestring);
+                        s_macros[mi].steps[si].u.chain.macro_index = idx;
+                        if (idx < 0) {
+                            ESP_LOGW(TAG, "Macro chain target '%s' not found",
+                                     chain_id->valuestring);
+                        }
+                    }
+                }
+            }
+            si++;
+        }
+        mi++;
+    }
 }
 
 static void parse_mappings(cJSON *root) {
@@ -1644,6 +1711,24 @@ static void macro_task(void *arg) {
 
                 // Small yield to keep USB responsive.
                 vTaskDelay(pdMS_TO_TICKS(1));
+                continue;
+            }
+
+            if (st->type == STEP_MOUSE_BUTTON) {
+                usb_mouse_button(st->u.mouse.button, st->u.mouse.pressed);
+                vTaskDelay(pdMS_TO_TICKS(1));
+                continue;
+            }
+
+            if (st->type == STEP_MACRO_CHAIN) {
+                int8_t chain_idx = st->u.chain.macro_index;
+                if (chain_idx >= 0 && (size_t)chain_idx < s_macro_count) {
+                    // Enqueue the chained macro and continue.
+                    macro_req_t chain_req = {.macro_index = chain_idx};
+                    if (xQueueSend(s_macro_q, &chain_req, 0) != pdTRUE) {
+                        ESP_LOGW(TAG, "Macro chain queue full, dropped chain to %d", chain_idx);
+                    }
+                }
                 continue;
             }
         }
