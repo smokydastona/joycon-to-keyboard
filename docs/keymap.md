@@ -215,6 +215,7 @@ Macro steps are defined in the profile `macros[].steps` array. Each step has a `
 | `key`           | `key_id` (0–127), `pressed`     | Press or release a keyboard key            |
 | `delay`         | `ms` (0–5000)                   | Wait (with humanized jitter)               |
 | `mouse_button`  | `button` (1–31), `pressed`      | Press or release a USB HID mouse button    |
+| `mouse_move`    | `dx` (-127–127), `dy` (-127–127)| Move the mouse cursor (hardware HID)       |
 | `macro_chain`   | `id` (string)                   | Enqueue another macro to run after this one |
 
 ### Mouse button values
@@ -247,6 +248,23 @@ Macro steps are defined in the profile `macros[].steps` array. Each step has a `
 }
 ```
 
+### Mouse movement macro example
+
+```json
+{
+  "macros": [
+    {"id": "flick_shot", "steps": [
+      {"type": "mouse_move", "dx": 50, "dy": 0},
+      {"type": "delay", "ms": 16},
+      {"type": "mouse_button", "button": 1, "pressed": true},
+      {"type": "delay", "ms": 30},
+      {"type": "mouse_button", "button": 1, "pressed": false},
+      {"type": "mouse_move", "dx": -50, "dy": 0}
+    ]}
+  ]
+}
+```
+
 ## Timing humanization
 
 Macros and turbo repeat use randomized timing jitter to avoid perfectly regular intervals
@@ -271,6 +289,36 @@ All gestures use a cooldown timer (250ms default) to prevent rapid re-triggering
 Motion key IDs (26-31) can be remapped like any other key.
 
 This approach adapts to individual controller stick drift and range variations (inspired by the `StickCal` pattern from GamepadPhoenix).
+
+## Sniper button (sensitivity override)
+
+Mapping type `sniper` temporarily overrides mouse sensitivity while held.
+Useful for precision aiming in FPS games — like Razer/Logitech DPI-shift.
+
+```json
+{"type": "sniper", "sensitivity": 3}
+```
+
+When the button is held, sensitivity drops to the configured value (default: 3).
+On release, the previous sensitivity is restored. All processing happens on the
+ESP32-S3 hardware — anti-cheat safe.
+
+## DPI cycling
+
+Mapping type `dpi_cycle` cycles through a list of sensitivity presets on each press.
+Like the DPI button found on every gaming mouse, but executed entirely in hardware.
+
+```json
+{"type": "dpi_cycle"}
+```
+
+Presets are configured at the profile root:
+
+```json
+{"dpi_presets": [5, 10, 20, 30, 50]}
+```
+
+Each press advances to the next preset. Wraps around to the first after the last.
 
 ## Custom remapping via `remap_hid`
 

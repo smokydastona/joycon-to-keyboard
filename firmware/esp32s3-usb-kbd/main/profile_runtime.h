@@ -28,3 +28,21 @@ void profile_runtime_handle_analog(uint8_t device_id, int16_t x, int16_t y);
 // device_id: 0=left Joy-Con, 1=right Joy-Con.
 // gx, gy, gz: averaged raw gyro values (yaw, pitch, roll).
 void profile_runtime_handle_gyro(uint8_t device_id, int16_t gx, int16_t gy, int16_t gz);
+
+// Start gyro calibration: collects N samples at rest and computes bias offsets.
+// Returns true if started, false if already in progress.
+bool profile_runtime_start_gyro_cal(void);
+
+// Check if calibration is currently running.
+bool profile_runtime_gyro_cal_active(void);
+
+// Retrieve current gyro bias offsets (populated after calibration or NVS load).
+void profile_runtime_get_gyro_bias(int16_t *bx, int16_t *by, int16_t *bz);
+
+// Set gyro bias offsets manually (e.g. from helper-app or NVS restore).
+void profile_runtime_set_gyro_bias(int16_t bx, int16_t by, int16_t bz);
+
+// Send an LED pattern command to the ESP32 host via UART control channel.
+// pattern: 0=off, 1=solid, 2=blink, 3=pulse, 4=rainbow
+// r,g,b: colour (0-255); speed: blink/pulse speed in ms
+void profile_runtime_set_led(uint8_t pattern, uint8_t r, uint8_t g, uint8_t b, uint16_t speed);

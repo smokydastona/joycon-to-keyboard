@@ -7,13 +7,12 @@ Provides sub-tabs for:
 """
 from __future__ import annotations
 
-import json
 import logging
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
-    QCheckBox, QComboBox, QGroupBox, QHBoxLayout, QHeaderView,
+    QCheckBox, QComboBox, QHBoxLayout, QHeaderView,
     QLabel, QPushButton, QScrollArea, QSlider, QSpinBox,
     QTabWidget, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
@@ -58,16 +57,17 @@ class GyroZonesView(QWidget):
         vbox = QVBoxLayout(container)
 
         # Enable toggle
-        enable_card = Card("Gyro Enable")
-        enable_layout = QHBoxLayout()
+        enable_card = Card(self._mw.theme)
+        enable_lay = QVBoxLayout(enable_card)
+        enable_lay.addWidget(QLabel("🎯  Gyro Enable"))
         self._gyro_enabled = QCheckBox("Enable gyro-to-mouse")
-        enable_layout.addWidget(self._gyro_enabled)
-        enable_card.body_layout.addLayout(enable_layout)
+        enable_lay.addWidget(self._gyro_enabled)
         vbox.addWidget(enable_card)
 
         # Sensitivity
-        sens_card = Card("Sensitivity")
-        sens_layout = QVBoxLayout()
+        sens_card = Card(self._mw.theme)
+        sens_lay = QVBoxLayout(sens_card)
+        sens_lay.addWidget(QLabel("📐  Sensitivity"))
 
         sx_row = QHBoxLayout()
         sx_row.addWidget(QLabel("X (yaw):"))
@@ -78,7 +78,7 @@ class GyroZonesView(QWidget):
         self._sens_x.valueChanged.connect(lambda v: self._sens_x_label.setText(str(v)))
         sx_row.addWidget(self._sens_x)
         sx_row.addWidget(self._sens_x_label)
-        sens_layout.addLayout(sx_row)
+        sens_lay.addLayout(sx_row)
 
         sy_row = QHBoxLayout()
         sy_row.addWidget(QLabel("Y (pitch):"))
@@ -89,32 +89,33 @@ class GyroZonesView(QWidget):
         self._sens_y.valueChanged.connect(lambda v: self._sens_y_label.setText(str(v)))
         sy_row.addWidget(self._sens_y)
         sy_row.addWidget(self._sens_y_label)
-        sens_layout.addLayout(sy_row)
-
-        sens_card.body_layout.addLayout(sens_layout)
+        sens_lay.addLayout(sy_row)
         vbox.addWidget(sens_card)
 
         # Deadzone
-        dz_card = Card("Deadzone")
-        dz_layout = QHBoxLayout()
-        dz_layout.addWidget(QLabel("Threshold:"))
+        dz_card = Card(self._mw.theme)
+        dz_lay = QVBoxLayout(dz_card)
+        dz_lay.addWidget(QLabel("⭕  Deadzone"))
+        dz_row = QHBoxLayout()
+        dz_row.addWidget(QLabel("Threshold:"))
         self._dz = QSpinBox()
         self._dz.setRange(0, 500)
         self._dz.setValue(50)
-        dz_layout.addWidget(self._dz)
-        dz_card.body_layout.addLayout(dz_layout)
+        dz_row.addWidget(self._dz)
+        dz_lay.addLayout(dz_row)
         vbox.addWidget(dz_card)
 
         # Acceleration
-        accel_card = Card("Acceleration Curve")
-        accel_layout = QVBoxLayout()
+        accel_card = Card(self._mw.theme)
+        accel_lay = QVBoxLayout(accel_card)
+        accel_lay.addWidget(QLabel("📈  Acceleration Curve"))
 
         type_row = QHBoxLayout()
         type_row.addWidget(QLabel("Type:"))
         self._accel_type = QComboBox()
         self._accel_type.addItems(ACCEL_TYPES)
         type_row.addWidget(self._accel_type)
-        accel_layout.addLayout(type_row)
+        accel_lay.addLayout(type_row)
 
         param_row = QHBoxLayout()
         param_row.addWidget(QLabel("Parameter:"))
@@ -122,20 +123,65 @@ class GyroZonesView(QWidget):
         self._accel_param.setRange(50, 500)
         self._accel_param.setValue(150)
         param_row.addWidget(self._accel_param)
-        accel_layout.addLayout(param_row)
-
-        accel_card.body_layout.addLayout(accel_layout)
+        accel_lay.addLayout(param_row)
         vbox.addWidget(accel_card)
 
         # Inversion
-        inv_card = Card("Axis Inversion")
-        inv_layout = QHBoxLayout()
+        inv_card = Card(self._mw.theme)
+        inv_lay = QVBoxLayout(inv_card)
+        inv_lay.addWidget(QLabel("🔄  Axis Inversion"))
+        inv_row = QHBoxLayout()
         self._invert_x = QCheckBox("Invert X")
         self._invert_y = QCheckBox("Invert Y")
-        inv_layout.addWidget(self._invert_x)
-        inv_layout.addWidget(self._invert_y)
-        inv_card.body_layout.addLayout(inv_layout)
+        inv_row.addWidget(self._invert_x)
+        inv_row.addWidget(self._invert_y)
+        inv_lay.addLayout(inv_row)
         vbox.addWidget(inv_card)
+
+        # Flick Stick
+        flick_card = Card(self._mw.theme)
+        flick_lay = QVBoxLayout(flick_card)
+        flick_lay.addWidget(QLabel("🕹  Flick Stick"))
+        self._flick_enabled = QCheckBox("Enable flick stick (right stick)")
+        flick_lay.addWidget(self._flick_enabled)
+
+        ft_row = QHBoxLayout()
+        ft_row.addWidget(QLabel("Threshold:"))
+        self._flick_threshold = QSpinBox()
+        self._flick_threshold.setRange(500, 4096)
+        self._flick_threshold.setValue(3000)
+        ft_row.addWidget(self._flick_threshold)
+        flick_lay.addLayout(ft_row)
+
+        fs_row = QHBoxLayout()
+        fs_row.addWidget(QLabel("Snap (degrees, 0=off):"))
+        self._flick_snap = QSpinBox()
+        self._flick_snap.setRange(0, 180)
+        self._flick_snap.setValue(0)
+        fs_row.addWidget(self._flick_snap)
+        flick_lay.addLayout(fs_row)
+        vbox.addWidget(flick_card)
+
+        # Stick Acceleration Curve
+        sa_card = Card(self._mw.theme)
+        sa_lay = QVBoxLayout(sa_card)
+        sa_lay.addWidget(QLabel("📊  Stick Acceleration Curve"))
+
+        sat_row = QHBoxLayout()
+        sat_row.addWidget(QLabel("Type:"))
+        self._stick_accel_type = QComboBox()
+        self._stick_accel_type.addItems(["linear", "power", "s-curve"])
+        sat_row.addWidget(self._stick_accel_type)
+        sa_lay.addLayout(sat_row)
+
+        sap_row = QHBoxLayout()
+        sap_row.addWidget(QLabel("Parameter:"))
+        self._stick_accel_param = QSpinBox()
+        self._stick_accel_param.setRange(50, 500)
+        self._stick_accel_param.setValue(200)
+        sap_row.addWidget(self._stick_accel_param)
+        sa_lay.addLayout(sap_row)
+        vbox.addWidget(sa_card)
 
         # Apply button
         btn_row = QHBoxLayout()
@@ -149,7 +195,7 @@ class GyroZonesView(QWidget):
         return scroll
 
     def _apply_gyro(self) -> None:
-        """Send gyro config as part of current profile update."""
+        """Send gyro + flick stick + stick accel config."""
         gyro = {
             "enabled": self._gyro_enabled.isChecked(),
             "sensitivity_x": self._sens_x.value(),
@@ -160,9 +206,23 @@ class GyroZonesView(QWidget):
             "invert_x": self._invert_x.isChecked(),
             "invert_y": self._invert_y.isChecked(),
         }
-        if self._mw.is_connected:
-            self._mw.serial.send_obj({"cmd": "set_gyro", "gyro": gyro})
-            log.info("Sent gyro config: %s", gyro)
+        flick_stick = {
+            "enabled": self._flick_enabled.isChecked(),
+            "threshold": self._flick_threshold.value(),
+            "snap_degrees": self._flick_snap.value(),
+        }
+        stick_accel = {
+            "type": self._stick_accel_type.currentIndex(),
+            "param": self._stick_accel_param.value(),
+        }
+        if self._mw.bridge.is_connected:
+            self._mw.bridge.send_cmd({
+                "cmd": "set_gyro",
+                "gyro": gyro,
+                "flick_stick": flick_stick,
+                "stick_accel": stick_accel,
+            })
+            log.info("Sent gyro/flick/accel config")
 
     # ------------------------------------------------------------------
     # Zones Tab
@@ -240,8 +300,8 @@ class GyroZonesView(QWidget):
                 "output_key": _spin_val(row, 5),
             })
 
-        if self._mw.is_connected:
-            self._mw.serial.send_obj({"cmd": "set_zones", "zones": zones})
+        if self._mw.bridge.is_connected:
+            self._mw.bridge.send_cmd({"cmd": "set_zones", "zones": zones})
             log.info("Sent %d zones", len(zones))
 
     # ------------------------------------------------------------------
@@ -314,8 +374,8 @@ class GyroZonesView(QWidget):
                 "flags": _spin_val(row, 4),
             })
 
-        if self._mw.is_connected:
-            self._mw.serial.send_obj({"cmd": "set_activators", "activators": acts})
+        if self._mw.bridge.is_connected:
+            self._mw.bridge.send_cmd({"cmd": "set_activators", "activators": acts})
             log.info("Sent %d activators", len(acts))
 
     # ------------------------------------------------------------------
@@ -332,6 +392,21 @@ class GyroZonesView(QWidget):
             "accel_param": self._accel_param.value(),
             "invert_x": self._invert_x.isChecked(),
             "invert_y": self._invert_y.isChecked(),
+        }
+
+    def get_flick_stick_data(self) -> dict:
+        """Return flick stick settings for profile serialization."""
+        return {
+            "enabled": self._flick_enabled.isChecked(),
+            "threshold": self._flick_threshold.value(),
+            "snap_degrees": self._flick_snap.value(),
+        }
+
+    def get_stick_accel_data(self) -> dict:
+        """Return stick acceleration curve settings for profile serialization."""
+        return {
+            "type": self._stick_accel_type.currentIndex(),
+            "param": self._stick_accel_param.value(),
         }
 
     def get_zones_data(self) -> list:
@@ -386,6 +461,17 @@ class GyroZonesView(QWidget):
         self._accel_param.setValue(gyro.get("accel_param", 150))
         self._invert_x.setChecked(gyro.get("invert_x", False))
         self._invert_y.setChecked(gyro.get("invert_y", False))
+
+        # Load flick stick
+        flick = profile.get("flick_stick", {})
+        self._flick_enabled.setChecked(flick.get("enabled", False))
+        self._flick_threshold.setValue(flick.get("threshold", 3000))
+        self._flick_snap.setValue(flick.get("snap_degrees", 0))
+
+        # Load stick accel
+        saccel = profile.get("stick_accel", {})
+        self._stick_accel_type.setCurrentIndex(saccel.get("type", 0))
+        self._stick_accel_param.setValue(saccel.get("param", 200))
 
         # Load zones
         self._zone_table.setRowCount(0)

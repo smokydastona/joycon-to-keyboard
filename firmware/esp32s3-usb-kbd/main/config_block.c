@@ -668,6 +668,46 @@ static void apply_gyro_config(int slot, const uint8_t *p, size_t len) {
     respond_block_ok(CFG_BLOCK_GYRO);
 }
 
+static void apply_flick_stick_config(int slot, const uint8_t *p, size_t len) {
+    if (len < 5) { respond_block_err("flick_too_short"); return; }
+    /* Binary format:
+     *   [0]    enabled:u8
+     *   [1-2]  threshold:u16-LE
+     *   [3-4]  snap_degrees:u16-LE
+     */
+    cJSON *flick = cJSON_CreateObject();
+    cJSON_AddBoolToObject(flick, "enabled", p[0] != 0);
+    cJSON_AddNumberToObject(flick, "threshold", rd16(&p[1]));
+    cJSON_AddNumberToObject(flick, "snap_degrees", rd16(&p[3]));
+
+    if (s_atomic_active && s_atomic_root) {
+        cJSON_DeleteItemFromObjectCaseSensitive(s_atomic_root, "flick_stick");
+        cJSON_AddItemToObject(s_atomic_root, "flick_stick", flick);
+    } else {
+        cJSON_Delete(flick);
+    }
+    respond_block_ok(CFG_BLOCK_FLICK_STICK);
+}
+
+static void apply_stick_accel_config(int slot, const uint8_t *p, size_t len) {
+    if (len < 3) { respond_block_err("stick_accel_too_short"); return; }
+    /* Binary format:
+     *   [0]    type:u8 (0=linear, 1=power, 2=s-curve)
+     *   [1-2]  param:u16-LE
+     */
+    cJSON *saccel = cJSON_CreateObject();
+    cJSON_AddNumberToObject(saccel, "type", p[0]);
+    cJSON_AddNumberToObject(saccel, "param", rd16(&p[1]));
+
+    if (s_atomic_active && s_atomic_root) {
+        cJSON_DeleteItemFromObjectCaseSensitive(s_atomic_root, "stick_accel");
+        cJSON_AddItemToObject(s_atomic_root, "stick_accel", saccel);
+    } else {
+        cJSON_Delete(saccel);
+    }
+    respond_block_ok(CFG_BLOCK_STICK_ACCEL);
+}
+
 static void apply_profile_begin(int slot) {
     if (s_atomic_active) {
         /* Abort any in-progress push */
@@ -768,6 +808,12 @@ static void process_block(uint8_t block_type, uint8_t slot, const uint8_t *paylo
             break;
         case CFG_BLOCK_GYRO:
             apply_gyro_config(slot, payload, len);
+            break;
+        case CFG_BLOCK_FLICK_STICK:
+            apply_flick_stick_config(slot, payload, len);
+            break;
+        case CFG_BLOCK_STICK_ACCEL:
+            apply_stick_accel_config(slot, payload, len);
             break;
         case CFG_BLOCK_BULK_JSON:
             /* Fallback: treat payload as raw JSON profile string */

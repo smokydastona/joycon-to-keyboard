@@ -26,6 +26,8 @@ CFG_BLOCK_STICK      = 0x05
 CFG_BLOCK_ZONE       = 0x06
 CFG_BLOCK_ACTIVATOR  = 0x07
 CFG_BLOCK_GYRO       = 0x08
+CFG_BLOCK_FLICK_STICK = 0x09
+CFG_BLOCK_STICK_ACCEL = 0x0A
 CFG_BLOCK_PROFILE_BEGIN = 0xF0
 CFG_BLOCK_PROFILE_END   = 0xF1
 CFG_BLOCK_PROFILE_ABORT = 0xF2
@@ -187,6 +189,16 @@ class SerialClient:
             gyro = profile.get("gyro")
             if gyro:
                 self._send_gyro_block(slot, gyro)
+
+            # --- flick stick ---
+            flick = profile.get("flick_stick")
+            if flick:
+                self._send_flick_stick_block(slot, flick)
+
+            # --- stick acceleration curve ---
+            saccel = profile.get("stick_accel")
+            if saccel:
+                self._send_stick_accel_block(slot, saccel)
 
             self.send_config_block(CFG_BLOCK_PROFILE_END, slot, b"")
         except Exception:
@@ -384,6 +396,29 @@ class SerialClient:
                           1 if gyro.get("invert_y", False) else 0)
 
         self.send_config_block(CFG_BLOCK_GYRO, slot, buf)
+
+    def _send_flick_stick_block(self, slot: int, flick: dict) -> None:
+        """Encode and send flick stick configuration.
+
+        Binary format:
+          enabled:u8  threshold:u16-LE  snap_degrees:u16-LE
+        """
+        buf = struct.pack("<BHH",
+                          1 if flick.get("enabled", False) else 0,
+                          flick.get("threshold", 3000),
+                          flick.get("snap_degrees", 0))
+        self.send_config_block(CFG_BLOCK_FLICK_STICK, slot, buf)
+
+    def _send_stick_accel_block(self, slot: int, saccel: dict) -> None:
+        """Encode and send stick acceleration curve configuration.
+
+        Binary format:
+          type:u8  param:u16-LE
+        """
+        buf = struct.pack("<BH",
+                          saccel.get("type", 0),
+                          saccel.get("param", 200))
+        self.send_config_block(CFG_BLOCK_STICK_ACCEL, slot, buf)
 
     def _rx_loop(self) -> None:
         if self._ser is None:

@@ -743,6 +743,51 @@ static void handle_line(const char *line) {
             cdc_write_json(rsp);
             cJSON_Delete(rsp);
         }
+    } else if (strcmp(cmd->valuestring, "gyro_cal_start") == 0) {
+        bool ok = profile_runtime_start_gyro_cal();
+        cJSON *rsp = cJSON_CreateObject();
+        if (rsp) {
+            cJSON_AddStringToObject(rsp, "rsp", "gyro_cal_start");
+            cJSON_AddBoolToObject(rsp, "ok", ok);
+            if (!ok) cJSON_AddStringToObject(rsp, "error", "already_active");
+            cdc_write_json(rsp);
+            cJSON_Delete(rsp);
+        }
+    } else if (strcmp(cmd->valuestring, "gyro_cal_status") == 0) {
+        cJSON *rsp = cJSON_CreateObject();
+        if (rsp) {
+            cJSON_AddStringToObject(rsp, "rsp", "gyro_cal_status");
+            cJSON_AddBoolToObject(rsp, "active", profile_runtime_gyro_cal_active());
+            int16_t bx, by, bz;
+            profile_runtime_get_gyro_bias(&bx, &by, &bz);
+            cJSON_AddNumberToObject(rsp, "bias_x", bx);
+            cJSON_AddNumberToObject(rsp, "bias_y", by);
+            cJSON_AddNumberToObject(rsp, "bias_z", bz);
+            cdc_write_json(rsp);
+            cJSON_Delete(rsp);
+        }
+    } else if (strcmp(cmd->valuestring, "gyro_cal_set") == 0) {
+        cJSON *bx_j = cJSON_GetObjectItemCaseSensitive(root, "bias_x");
+        cJSON *by_j = cJSON_GetObjectItemCaseSensitive(root, "bias_y");
+        cJSON *bz_j = cJSON_GetObjectItemCaseSensitive(root, "bias_z");
+        int16_t bx = cJSON_IsNumber(bx_j) ? (int16_t)bx_j->valueint : 0;
+        int16_t by = cJSON_IsNumber(by_j) ? (int16_t)by_j->valueint : 0;
+        int16_t bz = cJSON_IsNumber(bz_j) ? (int16_t)bz_j->valueint : 0;
+        profile_runtime_set_gyro_bias(bx, by, bz);
+        respond_ok_simple("gyro_cal_set");
+    } else if (strcmp(cmd->valuestring, "set_led") == 0) {
+        cJSON *pat_j = cJSON_GetObjectItemCaseSensitive(root, "pattern");
+        cJSON *r_j = cJSON_GetObjectItemCaseSensitive(root, "r");
+        cJSON *g_j = cJSON_GetObjectItemCaseSensitive(root, "g");
+        cJSON *b_j = cJSON_GetObjectItemCaseSensitive(root, "b");
+        cJSON *spd_j = cJSON_GetObjectItemCaseSensitive(root, "speed");
+        uint8_t pat = cJSON_IsNumber(pat_j) ? (uint8_t)pat_j->valueint : 0;
+        uint8_t r = cJSON_IsNumber(r_j) ? (uint8_t)r_j->valueint : 0;
+        uint8_t g = cJSON_IsNumber(g_j) ? (uint8_t)g_j->valueint : 0;
+        uint8_t b = cJSON_IsNumber(b_j) ? (uint8_t)b_j->valueint : 0;
+        uint16_t speed = cJSON_IsNumber(spd_j) ? (uint16_t)spd_j->valueint : 500;
+        profile_runtime_set_led(pat, r, g, b, speed);
+        respond_ok_simple("set_led");
     } else {
         respond_error(cmd->valuestring, "unknown_cmd");
     }

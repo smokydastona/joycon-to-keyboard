@@ -45,6 +45,7 @@ NAV_DEVICES = 4
 NAV_DIAGNOSTICS = 5
 NAV_HELP = 6
 NAV_SETTINGS = 7
+NAV_GYRO_ZONES = 8
 
 # Navigation item definitions: (icon_char, label)
 NAV_ITEMS = [
@@ -56,6 +57,7 @@ NAV_ITEMS = [
     ("🔧", "Diagnostics"),
     ("❓", "Help"),
     ("⚙", "Settings"),
+    ("🎯", "Gyro & Zones"),
 ]
 
 
@@ -308,6 +310,9 @@ class MainWindow(QMainWindow):
         elif index == NAV_SETTINGS:
             from .views.settings import SettingsView
             view = SettingsView(self)
+        elif index == NAV_GYRO_ZONES:
+            from .views.gyro_zones import GyroZonesView
+            view = GyroZonesView(self)
         else:
             view = QWidget()
 

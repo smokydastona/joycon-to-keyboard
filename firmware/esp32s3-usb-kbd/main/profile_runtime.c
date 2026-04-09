@@ -58,6 +58,7 @@ typedef enum {
     STEP_DELAY = 2,
     STEP_MOUSE_BUTTON = 3,
     STEP_MACRO_CHAIN = 4,
+    STEP_MOUSE_MOVE = 5,
 } step_type_t;
 
 typedef struct {
@@ -77,6 +78,10 @@ typedef struct {
         struct {
             int8_t macro_index;
         } chain;
+        struct {
+            int8_t dx;
+            int8_t dy;
+        } mouse_move;
     } u;
 } macro_step_t;
 
@@ -102,6 +107,8 @@ typedef enum {
     MAP_SEQUENTIAL = 12,
     MAP_LEADER = 13,
     MAP_PROFILE_SWITCH = 14,
+    MAP_SNIPER = 15,
+    MAP_DPI_CYCLE = 16,
 } map_mode_t;
 
 typedef struct {
@@ -147,6 +154,8 @@ typedef struct {
     // Leader fields (MAP_LEADER) — leader key just sets s_leader_active
     // Profile switch fields (MAP_PROFILE_SWITCH)
     uint8_t profile_slot;  // 0..3
+    // Sniper fields (MAP_SNIPER)
+    uint16_t sniper_sensitivity;  // override sensitivity while held
 } map_entry_t;
 
 // --- Layer system ---
@@ -580,6 +589,17 @@ typedef enum {
 static stick_mode_t s_right_stick_mode = STICK_MODE_KEYS;
 static uint16_t s_mouse_sensitivity = 10;  // sensitivity multiplier (1-50)
 
+// --- DPI presets (cycled by MAP_DPI_CYCLE) ---
+#define DPI_PRESET_MAX 5
+static uint16_t s_dpi_presets[DPI_PRESET_MAX] = {5, 10, 20, 30, 50};
+static uint8_t  s_dpi_preset_count = 5;
+static uint8_t  s_dpi_preset_index = 1;  // default → preset[1] = 10
+
+// --- Sniper mode (temporary sensitivity override while held) ---
+static bool     s_sniper_active = false;
+static uint16_t s_sniper_sensitivity = 3;  // default: very slow for precision
+static uint16_t s_base_sensitivity = 10;   // saved before sniper activates
+
 // --- Sprint zone (left stick magnitude → sprint key) ---
 static bool s_sprint_zone_enabled = false;
 static uint8_t s_sprint_zone_threshold = 90;  // % of max deflection
@@ -602,6 +622,41 @@ static gyro_accel_t s_gyro_accel   = GYRO_ACCEL_NONE;
 static uint16_t s_gyro_accel_param = 150;    // ×100 for POWER (150 = 1.5 exponent)
 static bool     s_gyro_invert_x    = false;
 static bool     s_gyro_invert_y    = false;
+
+// --- Flick stick system ---
+// When enabled on right stick: a fast stick deflection triggers a 180°
+// camera "flick" to the stick angle, then gyro yaw controls aiming while
+// stick is held.  On release the stick resets.
+static bool     s_flick_stick_enabled = false;
+static uint16_t s_flick_stick_threshold = 3000;  // magnitude threshold to enter flick (0..4096)
+static uint16_t s_flick_snap_degrees   = 0;      // if >0, snap flick to nearest N degrees (e.g. 45)
+// runtime state
+static bool     s_flick_active     = false;       // stick currently in deflected "flick" state
+static float    s_flick_last_angle = 0.0f;        // last raw stick angle while flicking (radians)
+
+// --- Configurable acceleration curves for stick-to-mouse ---
+typedef enum {
+    STICK_ACCEL_LINEAR = 0,   // no curve, raw proportional
+    STICK_ACCEL_POWER  = 1,   // power curve (like gyro)
+    STICK_ACCEL_SCURVE = 2,   // S-curve: slow→fast→slow
+} stick_accel_t;
+
+static stick_accel_t s_stick_accel       = STICK_ACCEL_LINEAR;
+static uint16_t      s_stick_accel_param = 200;   // ×100 exponent for power; midpoint for S-curve
+
+// --- Gyro calibration (bias offsets subtracted from raw data) ---
+static int16_t  s_gyro_bias_x  = 0;
+static int16_t  s_gyro_bias_y  = 0;
+static int16_t  s_gyro_bias_z  = 0;
+
+// Calibration wizard state: when active, samples are accumulated
+// and averaged to compute bias.
+#define GYRO_CAL_SAMPLES 128
+static bool     s_cal_active    = false;
+static int      s_cal_count     = 0;
+static int32_t  s_cal_sum_x     = 0;
+static int32_t  s_cal_sum_y     = 0;
+static int32_t  s_cal_sum_z     = 0;
 
 // --- Zone system (stick regions → key outputs) ---
 #define MAX_ZONES 16
@@ -770,6 +825,13 @@ static void free_profile(void) {
     // Reset stick mode and sprint zone.
     s_right_stick_mode = STICK_MODE_KEYS;
     s_mouse_sensitivity = 10;
+    s_sniper_active = false;
+    s_sniper_sensitivity = 3;
+    s_base_sensitivity = 10;
+    s_dpi_preset_count = 5;
+    s_dpi_preset_index = 1;
+    s_dpi_presets[0] = 5; s_dpi_presets[1] = 10; s_dpi_presets[2] = 20;
+    s_dpi_presets[3] = 30; s_dpi_presets[4] = 50;
     s_sprint_zone_enabled = false;
     s_sprint_zone_threshold = 90;
     s_sprint_key_mod = 0;
@@ -788,6 +850,17 @@ static void free_profile(void) {
     s_gyro_accel_param = 150;
     s_gyro_invert_x = false;
     s_gyro_invert_y = false;
+
+    // Reset flick stick.
+    s_flick_stick_enabled = false;
+    s_flick_stick_threshold = 3000;
+    s_flick_snap_degrees = 0;
+    s_flick_active = false;
+    s_flick_last_angle = 0.0f;
+
+    // Reset stick acceleration curve.
+    s_stick_accel = STICK_ACCEL_LINEAR;
+    s_stick_accel_param = 200;
 
     // Reset zones — release any active zone keys first.
     for (size_t i = 0; i < s_zone_count; i++) {
@@ -942,6 +1015,20 @@ static bool parse_macro_step(cJSON *step_obj, macro_step_t *out_step) {
         out_step->type = STEP_MOUSE_BUTTON;
         out_step->u.mouse.button = (uint8_t)btn->valueint;
         out_step->u.mouse.pressed = cJSON_IsTrue(pressed);
+        return true;
+    }
+
+    if (strcmp(type->valuestring, "mouse_move") == 0) {
+        cJSON *dx_j = cJSON_GetObjectItemCaseSensitive(step_obj, "dx");
+        cJSON *dy_j = cJSON_GetObjectItemCaseSensitive(step_obj, "dy");
+        if (!cJSON_IsNumber(dx_j) || !cJSON_IsNumber(dy_j)) return false;
+        int dxv = dx_j->valueint;
+        int dyv = dy_j->valueint;
+        if (dxv < -127 || dxv > 127 || dyv < -127 || dyv > 127) return false;
+
+        out_step->type = STEP_MOUSE_MOVE;
+        out_step->u.mouse_move.dx = (int8_t)dxv;
+        out_step->u.mouse_move.dy = (int8_t)dyv;
         return true;
     }
 
@@ -1288,6 +1375,21 @@ static void parse_mappings(cJSON *root) {
             continue;
         }
 
+        if (strcmp(type->valuestring, "sniper") == 0) {
+            cJSON *sens_j = cJSON_GetObjectItemCaseSensitive(entry, "sensitivity");
+            s_map[key_id].mode = MAP_SNIPER;
+            s_map[key_id].sniper_sensitivity = 3;  // default
+            if (cJSON_IsNumber(sens_j) && sens_j->valueint >= 1 && sens_j->valueint <= 50) {
+                s_map[key_id].sniper_sensitivity = (uint16_t)sens_j->valueint;
+            }
+            continue;
+        }
+
+        if (strcmp(type->valuestring, "dpi_cycle") == 0) {
+            s_map[key_id].mode = MAP_DPI_CYCLE;
+            continue;
+        }
+
         ESP_LOGW(TAG, "Unknown mapping type '%s' for key %d", type->valuestring, key_id);
     }
 }
@@ -1590,7 +1692,8 @@ static void load_profile_json(const char *json) {
     static const char *known_keys[] = {
         "ver", "mappings", "macros", "layers", "chords",
         "leader_sequences", "right_stick_mode", "mouse_sensitivity",
-        "sprint_zone", "humanize", "stick", "gyro", "zones", "activators", NULL
+        "sprint_zone", "humanize", "stick", "gyro", "zones", "activators",
+        "flick_stick", "stick_accel", NULL
     };
     bool has_any = false;
     for (const char **k = known_keys; *k; k++) {
@@ -1668,6 +1771,36 @@ static void load_profile_json(const char *json) {
         if (v < 1) v = 1;
         if (v > 50) v = 50;
         s_mouse_sensitivity = (uint16_t)v;
+        s_base_sensitivity = s_mouse_sensitivity;
+    }
+
+    // --- Parse DPI presets ---
+    cJSON *dpi_j = cJSON_GetObjectItemCaseSensitive(root, "dpi_presets");
+    if (cJSON_IsArray(dpi_j)) {
+        int cnt = cJSON_GetArraySize(dpi_j);
+        if (cnt > DPI_PRESET_MAX) cnt = DPI_PRESET_MAX;
+        int valid = 0;
+        cJSON *item;
+        cJSON_ArrayForEach(item, dpi_j) {
+            if (valid >= cnt) break;
+            if (!cJSON_IsNumber(item)) continue;
+            int v = item->valueint;
+            if (v < 1) v = 1;
+            if (v > 50) v = 50;
+            s_dpi_presets[valid++] = (uint16_t)v;
+        }
+        if (valid > 0) {
+            s_dpi_preset_count = (uint8_t)valid;
+            // Find index of current sensitivity in presets.
+            s_dpi_preset_index = 0;
+            for (int i = 0; i < valid; i++) {
+                if (s_dpi_presets[i] == s_mouse_sensitivity) {
+                    s_dpi_preset_index = (uint8_t)i;
+                    break;
+                }
+            }
+            ESP_LOGI(TAG, "DPI presets: %u entries, active index %u", valid, s_dpi_preset_index);
+        }
     }
 
     // --- Parse sprint zone ---
@@ -1788,6 +1921,40 @@ static void load_profile_json(const char *json) {
         ESP_LOGI(TAG, "Gyro: en=%d sens=%u/%u dz=%u accel=%d param=%u inv=%d/%d",
                  s_gyro_enabled, s_gyro_sens_x, s_gyro_sens_y, s_gyro_deadzone,
                  s_gyro_accel, s_gyro_accel_param, s_gyro_invert_x, s_gyro_invert_y);
+    }
+
+    // --- Flick stick configuration ---
+    cJSON *flick = cJSON_GetObjectItemCaseSensitive(root, "flick_stick");
+    if (cJSON_IsObject(flick)) {
+        cJSON *fen = cJSON_GetObjectItemCaseSensitive(flick, "enabled");
+        if (cJSON_IsBool(fen)) {
+            s_flick_stick_enabled = cJSON_IsTrue(fen);
+        }
+        cJSON *fth = cJSON_GetObjectItemCaseSensitive(flick, "threshold");
+        if (cJSON_IsNumber(fth)) {
+            s_flick_stick_threshold = (uint16_t)fth->valueint;
+        }
+        cJSON *fsnap = cJSON_GetObjectItemCaseSensitive(flick, "snap_degrees");
+        if (cJSON_IsNumber(fsnap)) {
+            s_flick_snap_degrees = (uint16_t)fsnap->valueint;
+        }
+        ESP_LOGI(TAG, "Flick stick: en=%d threshold=%u snap=%u",
+                 s_flick_stick_enabled, s_flick_stick_threshold, s_flick_snap_degrees);
+    }
+
+    // --- Stick acceleration curve ---
+    cJSON *saccel = cJSON_GetObjectItemCaseSensitive(root, "stick_accel");
+    if (cJSON_IsObject(saccel)) {
+        cJSON *st_j = cJSON_GetObjectItemCaseSensitive(saccel, "type");
+        if (cJSON_IsNumber(st_j)) {
+            int v = st_j->valueint;
+            if (v >= 0 && v <= 2) s_stick_accel = (stick_accel_t)v;
+        }
+        cJSON *sp_j = cJSON_GetObjectItemCaseSensitive(saccel, "param");
+        if (cJSON_IsNumber(sp_j)) {
+            s_stick_accel_param = (uint16_t)sp_j->valueint;
+        }
+        ESP_LOGI(TAG, "Stick accel: type=%d param=%u", s_stick_accel, s_stick_accel_param);
     }
 
     // --- Parse zones ---
@@ -1965,6 +2132,12 @@ static void macro_task(void *arg) {
                 }
                 continue;
             }
+
+            if (st->type == STEP_MOUSE_MOVE) {
+                usb_mouse_move(st->u.mouse_move.dx, st->u.mouse_move.dy);
+                vTaskDelay(pdMS_TO_TICKS(1));
+                continue;
+            }
         }
 
         // Safety: ensure any macro-held keys are released.
@@ -2003,6 +2176,22 @@ void profile_runtime_init(void) {
     }
 
     xTaskCreate(macro_task, "macro", 4096, NULL, 5, NULL);
+
+    // Restore gyro calibration bias from NVS (if previously calibrated).
+    {
+        nvs_handle_t h;
+        if (nvs_open("gyro_cal", NVS_READONLY, &h) == ESP_OK) {
+            int16_t bx = 0, by = 0, bz = 0;
+            nvs_get_i16(h, "bx", &bx);
+            nvs_get_i16(h, "by", &by);
+            nvs_get_i16(h, "bz", &bz);
+            nvs_close(h);
+            s_gyro_bias_x = bx;
+            s_gyro_bias_y = by;
+            s_gyro_bias_z = bz;
+            ESP_LOGI(TAG, "Restored gyro bias from NVS: (%d,%d,%d)", bx, by, bz);
+        }
+    }
 
     profile_runtime_reload();
 }
@@ -2307,6 +2496,28 @@ static void dispatch_mapping(map_entry_t *m, bool pressed, uint8_t key_id) {
             }
             return;
 
+        case MAP_SNIPER:
+            if (pressed) {
+                s_sniper_active = true;
+                s_base_sensitivity = s_mouse_sensitivity;
+                s_mouse_sensitivity = m->sniper_sensitivity;
+                ESP_LOGI(TAG, "Sniper ON (sens %u → %u)", s_base_sensitivity, s_mouse_sensitivity);
+            } else {
+                s_sniper_active = false;
+                s_mouse_sensitivity = s_base_sensitivity;
+                ESP_LOGI(TAG, "Sniper OFF (sens → %u)", s_mouse_sensitivity);
+            }
+            return;
+
+        case MAP_DPI_CYCLE:
+            if (pressed && s_dpi_preset_count > 0) {
+                s_dpi_preset_index = (uint8_t)((s_dpi_preset_index + 1) % s_dpi_preset_count);
+                s_mouse_sensitivity = s_dpi_presets[s_dpi_preset_index];
+                s_base_sensitivity = s_mouse_sensitivity;
+                ESP_LOGI(TAG, "DPI cycle → preset %u (sens %u)", s_dpi_preset_index, s_mouse_sensitivity);
+            }
+            return;
+
         case MAP_PASSTHROUGH:
         default:
             send_key_id(pressed, m->remap_to);
@@ -2599,15 +2810,100 @@ void profile_runtime_handle_analog(uint8_t device_id, int16_t x, int16_t y) {
         // --- Right stick: mouse / scroll / keys ---
         switch (s_right_stick_mode) {
             case STICK_MODE_MOUSE: {
-                // Convert normalized stick (-4096..+4096) to mouse delta.
-                // Apply sensitivity scaling. Deadzone: ignore small values.
-                int16_t dx = 0, dy = 0;
-                if (x > 200 || x < -200) {
-                    dx = (int16_t)((int32_t)x * (int32_t)s_mouse_sensitivity / 4096);
+                int32_t mag_sq = (int32_t)x * x + (int32_t)y * y;
+                int32_t ft = (int32_t)s_flick_stick_threshold;
+
+                if (s_flick_stick_enabled) {
+                    // Flick-stick mode: on initial deflection past threshold,
+                    // output a large horizontal mouse delta corresponding to
+                    // the stick angle (180° flick).  While held, track angle
+                    // changes and convert them to horizontal mouse movement
+                    // (for camera turning).  On release, reset.
+                    if (mag_sq >= ft * ft) {
+                        float angle = atan2f((float)y, (float)x);  // radians
+
+                        // Optional snap to nearest N degrees
+                        if (s_flick_snap_degrees > 0) {
+                            float snap_rad = (float)s_flick_snap_degrees * 3.14159265f / 180.0f;
+                            angle = snap_rad * (float)(int)(angle / snap_rad + (angle >= 0 ? 0.5f : -0.5f));
+                        }
+
+                        if (!s_flick_active) {
+                            // Initial flick: convert stick angle to a camera turn.
+                            // Full rightward stick → 0°, upward → +90°, etc.
+                            // Map angle to mouse pixels.  A full 180° (π rad)
+                            // maps to ~800 px (typical 360° turn at 400 dpi × 10 sens).
+                            float flick_px = angle * 800.0f / 3.14159265f;
+                            int16_t dx = (int16_t)flick_px;
+                            if (dx != 0) usb_mouse_move(dx, 0);
+
+                            s_flick_active = true;
+                            s_flick_last_angle = angle;
+                        } else {
+                            // Sustained hold: track angle delta for smooth turning.
+                            float delta = angle - s_flick_last_angle;
+                            // Normalize to (-π, π]
+                            if (delta > 3.14159265f) delta -= 2.0f * 3.14159265f;
+                            else if (delta < -3.14159265f) delta += 2.0f * 3.14159265f;
+
+                            float turn_px = delta * 800.0f / 3.14159265f;
+                            int16_t dx = (int16_t)turn_px;
+                            if (dx != 0) usb_mouse_move(dx, 0);
+
+                            s_flick_last_angle = angle;
+                        }
+                    } else {
+                        s_flick_active = false;
+                    }
+                    break;
                 }
-                if (y > 200 || y < -200) {
-                    dy = (int16_t)((int32_t)y * (int32_t)s_mouse_sensitivity / 4096);
+
+                // Normal stick-to-mouse with configurable acceleration curve.
+                float fx = (float)x;
+                float fy = (float)y;
+                // Deadzone
+                if (fx > -200.0f && fx < 200.0f) fx = 0.0f;
+                if (fy > -200.0f && fy < 200.0f) fy = 0.0f;
+                if (fx == 0.0f && fy == 0.0f) break;
+
+                // Normalize to 0..1 range
+                float nx = fx / 4096.0f;
+                float ny = fy / 4096.0f;
+
+                // Apply acceleration curve
+                switch (s_stick_accel) {
+                    case STICK_ACCEL_POWER: {
+                        float mag = sqrtf(nx * nx + ny * ny);
+                        if (mag > 0.001f) {
+                            float exp_f = (float)s_stick_accel_param / 100.0f;
+                            float scale = powf(mag, exp_f - 1.0f);
+                            nx *= scale;
+                            ny *= scale;
+                        }
+                        break;
+                    }
+                    case STICK_ACCEL_SCURVE: {
+                        // S-curve: smoothstep-like. Midpoint param controls
+                        // transition sharpness.
+                        float mag = sqrtf(nx * nx + ny * ny);
+                        if (mag > 0.001f) {
+                            float clamped = mag;
+                            if (clamped > 1.0f) clamped = 1.0f;
+                            // Hermite smoothstep: 3t² - 2t³
+                            float t = clamped;
+                            float smooth = t * t * (3.0f - 2.0f * t);
+                            float scale = smooth / mag;
+                            nx *= scale;
+                            ny *= scale;
+                        }
+                        break;
+                    }
+                    default:
+                        break;
                 }
+
+                int16_t dx = (int16_t)(nx * (float)s_mouse_sensitivity);
+                int16_t dy = (int16_t)(ny * (float)s_mouse_sensitivity);
                 if (dx != 0 || dy != 0) {
                     usb_mouse_move(dx, dy);
                 }
@@ -2717,6 +3013,38 @@ void profile_runtime_handle_analog(uint8_t device_id, int16_t x, int16_t y) {
 void profile_runtime_handle_gyro(uint8_t device_id, int16_t gx, int16_t gy, int16_t gz) {
     (void)device_id;  // Currently same config for both Joy-Cons
 
+    // If calibration is active, accumulate samples.
+    if (s_cal_active) {
+        s_cal_sum_x += gx;
+        s_cal_sum_y += gy;
+        s_cal_sum_z += gz;
+        s_cal_count++;
+        if (s_cal_count >= GYRO_CAL_SAMPLES) {
+            s_gyro_bias_x = (int16_t)(s_cal_sum_x / GYRO_CAL_SAMPLES);
+            s_gyro_bias_y = (int16_t)(s_cal_sum_y / GYRO_CAL_SAMPLES);
+            s_gyro_bias_z = (int16_t)(s_cal_sum_z / GYRO_CAL_SAMPLES);
+            s_cal_active = false;
+            ESP_LOGI(TAG, "Gyro calibration done: bias=(%d,%d,%d)",
+                     s_gyro_bias_x, s_gyro_bias_y, s_gyro_bias_z);
+
+            // Persist to NVS
+            nvs_handle_t h;
+            if (nvs_open("gyro_cal", NVS_READWRITE, &h) == ESP_OK) {
+                nvs_set_i16(h, "bx", s_gyro_bias_x);
+                nvs_set_i16(h, "by", s_gyro_bias_y);
+                nvs_set_i16(h, "bz", s_gyro_bias_z);
+                nvs_commit(h);
+                nvs_close(h);
+            }
+        }
+        return;  // Don't process gyro input during calibration
+    }
+
+    // Apply calibration bias
+    gx -= s_gyro_bias_x;
+    gy -= s_gyro_bias_y;
+    gz -= s_gyro_bias_z;
+
     if (!s_gyro_enabled) return;
 
     // Apply deadzone: zero out axes below threshold
@@ -2736,8 +3064,6 @@ void profile_runtime_handle_gyro(uint8_t device_id, int16_t gx, int16_t gy, int1
     // Apply acceleration curve
     switch (s_gyro_accel) {
         case GYRO_ACCEL_POWER: {
-            // Power curve: scale velocity by pow(magnitude, exponent-1)
-            // so total output = magnitude^exponent.
             float mag = sqrtf(sx * sx + sy * sy);
             if (mag > 0.01f) {
                 float exp_f = (float)s_gyro_accel_param / 100.0f;
@@ -2748,7 +3074,6 @@ void profile_runtime_handle_gyro(uint8_t device_id, int16_t gx, int16_t gy, int1
             break;
         }
         case GYRO_ACCEL_SMOOTH: {
-            // Smooth ramp: below param threshold linear, above ramps up
             float mag = sqrtf(sx * sx + sy * sy);
             float threshold = (float)s_gyro_accel_param;
             if (mag > threshold && threshold > 0.01f) {
@@ -2768,13 +3093,58 @@ void profile_runtime_handle_gyro(uint8_t device_id, int16_t gx, int16_t gy, int1
     if (s_gyro_invert_y) sy = -sy;
 
     // Scale to mouse pixel deltas.
-    // Joy-Con gyro raw values are roughly ±rotation-rate in dps (degrees/sec).
-    // At ~66 Hz IMU rate, divide by a constant to get pixel movement.
-    // The factor 0.02 maps ~100 dps×sensitivity to ~2 px per sample at 1.0× sensitivity.
     int16_t dx = (int16_t)(sx * 0.02f);
     int16_t dy = (int16_t)(sy * 0.02f);
 
     if (dx != 0 || dy != 0) {
         usb_mouse_move(dx, dy);
     }
+}
+
+// -----------------------------------------------------------------
+// Gyro calibration API
+// -----------------------------------------------------------------
+
+bool profile_runtime_start_gyro_cal(void) {
+    if (s_cal_active) return false;
+    s_cal_active = true;
+    s_cal_count = 0;
+    s_cal_sum_x = 0;
+    s_cal_sum_y = 0;
+    s_cal_sum_z = 0;
+    ESP_LOGI(TAG, "Gyro calibration started (%d samples)", GYRO_CAL_SAMPLES);
+    return true;
+}
+
+bool profile_runtime_gyro_cal_active(void) {
+    return s_cal_active;
+}
+
+void profile_runtime_get_gyro_bias(int16_t *bx, int16_t *by, int16_t *bz) {
+    if (bx) *bx = s_gyro_bias_x;
+    if (by) *by = s_gyro_bias_y;
+    if (bz) *bz = s_gyro_bias_z;
+}
+
+void profile_runtime_set_gyro_bias(int16_t bx, int16_t by, int16_t bz) {
+    s_gyro_bias_x = bx;
+    s_gyro_bias_y = by;
+    s_gyro_bias_z = bz;
+    ESP_LOGI(TAG, "Gyro bias set to (%d,%d,%d)", bx, by, bz);
+}
+
+// -----------------------------------------------------------------
+// LED pattern control — sends command to ESP32 host via UART ctrl
+// -----------------------------------------------------------------
+
+void profile_runtime_set_led(uint8_t pattern, uint8_t r, uint8_t g, uint8_t b, uint16_t speed) {
+    // UART control command 0x0A: LED pattern
+    // payload: [pattern, r, g, b, speed_lo, speed_hi]
+    uint8_t payload[6] = {
+        pattern, r, g, b,
+        (uint8_t)(speed & 0xFF),
+        (uint8_t)((speed >> 8) & 0xFF)
+    };
+    uart_proto_send_ctrl(0x0A, payload, 6);
+    ESP_LOGI(TAG, "LED pattern=%u rgb=(%u,%u,%u) speed=%u", pattern, r, g, b, speed);
 }
