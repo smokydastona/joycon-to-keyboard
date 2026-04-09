@@ -48,9 +48,20 @@ except ImportError:
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-# Import Joy-Con shapes + positions from the authoritative constants.py
+# Import shapes + positions from the authoritative constants.py
 sys.path.insert(0, str(REPO_ROOT / "helper-app"))
-from joycon_helper.ui.constants import JOYCON_BUTTON_SHAPES, KEYMAP_HOTSPOTS  # noqa: E402
+from joycon_helper.ui.constants import (  # noqa: E402
+    JOYCON_BUTTON_SHAPES,
+    KEYMAP_HOTSPOTS,
+    M913_HOTSPOTS as _M913_NORM,
+    INCEDIUS_HOTSPOTS as _INCEDIUS_NORM,
+    MOUSE_HOTSPOTS as _MOUSE_NORM,
+    KBD_HOTSPOTS as _KBD_NORM,
+    M913_WIDE,
+    INCEDIUS_WIDE,
+    MOUSE_WIDE,
+    KBD_WIDE,
+)
 
 UI_DIR = REPO_ROOT / "docs" / "ui"
 OUT_DIR = UI_DIR / "button_overlays"
@@ -355,197 +366,32 @@ JOYCON_HOTSPOTS: list[tuple[str, int, int]] = [
 ]
 
 # ── M913 Stock (16 buttons) ──────────────────────────────────────────────
-# Positions approximate on the composited m913.png (mouse centered ~782, 459).
-# Side buttons are the 12-key thumb grid on the left side of the mouse body.
+# Computed from the authoritative normalised positions in constants.py.
 M913_HOTSPOTS: list[tuple[str, int, int]] = [
-    # Main buttons
-    ("left",       898,  648),
-    ("right",      928,  527),
-    ("middle",     828,  568),
-    ("fire",       921,  586),
-    # Scroll wheel
-    ("scroll_up",  834,  514),
-    ("scroll_down",814,  623),
-    # Side buttons — 4 rows × 3 cols
-    ("side1",      545,  298),
-    ("side2",      634,  260),
-    ("side3",      711,  239),
-    ("side4",      620,  333),
-    ("side5",      701,  312),
-    ("side6",      682,  381),
-    ("side7",      602,  412),
-    ("side8",      517,  367),
-    ("side9",      701,  443),
-    ("side10",     603,  483),
-    ("side11",     503,  455),
-    ("side12",     600,  576),
+    (name, int(nx * IMAGE_W), int(ny * IMAGE_H))
+    for name, nx, ny in _M913_NORM["dark"]
 ]
 
-M913_WIDE = {"left", "right"}
-
-# ── Incedius M913 (16 buttons, same physical mouse, same button IDs) ─────
-# Uses the same pixel positions and side1-12 naming as M913 stock.
+# ── Incedius M913 (16 buttons, same physical mouse, different skin) ──────
+# Computed from the authoritative normalised positions in constants.py.
 INCEDIUS_HOTSPOTS: list[tuple[str, int, int]] = [
-    # Main buttons
-    ("left",       898,  648),
-    ("right",      928,  527),
-    ("middle",     828,  568),
-    ("fire",       921,  586),
-    # Scroll wheel
-    ("scroll_up",  834,  514),
-    ("scroll_down",814,  623),
-    # Side buttons (same side1-12 IDs as stock M913)
-    ("side1",      545,  298),
-    ("side2",      634,  260),
-    ("side3",      711,  239),
-    ("side4",      620,  333),
-    ("side5",      701,  312),
-    ("side6",      682,  381),
-    ("side7",      602,  412),
-    ("side8",      517,  367),
-    ("side9",      701,  443),
-    ("side10",     603,  483),
-    ("side11",     503,  455),
-    ("side12",     600,  576),
+    (name, int(nx * IMAGE_W), int(ny * IMAGE_H))
+    for name, nx, ny in _INCEDIUS_NORM["dark"]
 ]
-
-INCEDIUS_WIDE = {"left", "right"}
 
 # ── Keyboard (103 keys) ──────────────────────────────────────────────────
-# Must stay in sync with KBD_HOTSPOTS in app.py.
+# Computed from the authoritative normalised positions in constants.py.
 KBD_HOTSPOTS: list[tuple[str, int, int]] = [
-    # Function row
-    ("Esc",     97,  155),
-    ("F1",     207,  155),
-    ("F2",     267,  155),
-    ("F3",     327,  155),
-    ("F4",     387,  155),
-    ("F5",     477,  155),
-    ("F6",     537,  155),
-    ("F7",     597,  155),
-    ("F8",     657,  155),
-    ("F9",     747,  155),
-    ("F10",    807,  155),
-    ("F11",    867,  155),
-    ("F12",    927,  155),
-    # Nav cluster — top row
-    ("PrtSc", 1007,  155),
-    ("ScrLk", 1067,  155),
-    ("Pause", 1127,  155),
-    # Number row
-    ("Grave",   97,  275),
-    ("1",      157,  275),
-    ("2",      217,  275),
-    ("3",      277,  275),
-    ("4",      337,  275),
-    ("5",      397,  275),
-    ("6",      457,  275),
-    ("7",      517,  275),
-    ("8",      577,  275),
-    ("9",      637,  275),
-    ("0",      697,  275),
-    ("Minus",  757,  275),
-    ("Equal",  817,  275),
-    ("Backspace", 907, 275),
-    ("Ins",   1007,  275),
-    ("Home",  1067,  275),
-    ("PgUp",  1127,  275),
-    ("NumLk", 1217,  275),
-    ("KPDiv", 1277,  275),
-    ("KPMul", 1337,  275),
-    ("KPMin", 1397,  275),
-    # QWERTY row
-    ("Tab",    117,  350),
-    ("Q",      187,  350),
-    ("W",      247,  350),
-    ("E",      307,  350),
-    ("R",      367,  350),
-    ("T",      427,  350),
-    ("Y",      487,  350),
-    ("U",      547,  350),
-    ("I",      607,  350),
-    ("O",      667,  350),
-    ("P",      727,  350),
-    ("LBracket", 787, 350),
-    ("RBracket", 847, 350),
-    ("Backslash", 917, 350),
-    ("Del",   1007,  350),
-    ("End",   1067,  350),
-    ("PgDn",  1127,  350),
-    ("KP7",   1217,  350),
-    ("KP8",   1277,  350),
-    ("KP9",   1337,  350),
-    ("KPPlus",1397,  390),
-    # Home row
-    ("CapsLk", 127,  430),
-    ("A",      207,  430),
-    ("S",      267,  430),
-    ("D",      327,  430),
-    ("F",      387,  430),
-    ("G",      447,  430),
-    ("H",      507,  430),
-    ("J",      567,  430),
-    ("K",      627,  430),
-    ("L",      687,  430),
-    ("Semicolon", 747, 430),
-    ("Apostrophe", 807, 430),
-    ("Enter",  897,  430),
-    ("KP4",   1217,  430),
-    ("KP5",   1277,  430),
-    ("KP6",   1337,  430),
-    # Shift row
-    ("LShift", 137,  510),
-    ("Z",      247,  510),
-    ("X",      307,  510),
-    ("C",      367,  510),
-    ("V",      427,  510),
-    ("B",      487,  510),
-    ("N",      547,  510),
-    ("M",      607,  510),
-    ("Comma",  667,  510),
-    ("Period", 727,  510),
-    ("Slash",  787,  510),
-    ("RShift", 887,  510),
-    ("Up",    1067,  510),
-    ("KP1",   1217,  510),
-    ("KP2",   1277,  510),
-    ("KP3",   1337,  510),
-    ("KPEnter", 1397, 545),
-    # Bottom row
-    ("LCtrl",  117,  590),
-    ("Win",    187,  590),
-    ("LAlt",   247,  590),
-    ("Space",  487,  590),
-    ("RAlt",   667,  590),
-    ("Fn",     727,  590),
-    ("RCtrl",  847,  590),
-    ("Left",  1007,  590),
-    ("Down",  1067,  590),
-    ("Right", 1127,  590),
-    ("KP0",   1247,  590),
-    ("KPDot", 1337,  590),
+    (name, int(nx * IMAGE_W), int(ny * IMAGE_H))
+    for name, nx, ny in _KBD_NORM["dark"]
 ]
 
-KBD_WIDE = {
-    "Backspace", "Tab", "CapsLk", "Enter", "LShift", "RShift",
-    "Space", "LCtrl", "RCtrl", "KP0", "KPPlus", "KPEnter",
-}
-
-# ── Generic Mouse (7 buttons — future-proof placeholder) ─────────────────
-# Positions centered on a 1536×1024 canvas assuming a standard top-down
-# mouse silhouette (Razer Basilisk X HyperSpeed layout).
-# Labels match razer_device.BUTTON_SLOTS keys for overlay integration.
+# ── Generic Mouse (7 buttons) ────────────────────────────────────────────
+# Computed from the authoritative normalised positions in constants.py.
 MOUSE_HOTSPOTS: list[tuple[str, int, int]] = [
-    ("left",        700,  310),
-    ("right",       850,  310),
-    ("middle",      775,  260),
-    ("scroll_up",   775,  220),
-    ("scroll_down", 775,  310),
-    ("back",        645,  430),
-    ("forward",     645,  380),
+    (name, int(nx * IMAGE_W), int(ny * IMAGE_H))
+    for name, nx, ny in _MOUSE_NORM["dark"]
 ]
-
-MOUSE_WIDE = {"left", "right"}
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Rainbow colour palettes — one uniform colour per rainbow hue, all devices
