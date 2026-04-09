@@ -359,26 +359,26 @@ JOYCON_HOTSPOTS: list[tuple[str, int, int]] = [
 # Side buttons are the 12-key thumb grid on the left side of the mouse body.
 M913_HOTSPOTS: list[tuple[str, int, int]] = [
     # Main buttons
-    ("left",       670,  250),
-    ("right",      890,  250),
-    ("middle",     785,  225),
-    ("fire",       700,  360),
+    ("left",       898,  648),
+    ("right",      928,  527),
+    ("middle",     828,  568),
+    ("fire",       921,  586),
     # Scroll wheel
-    ("scroll_up",  785,  190),
-    ("scroll_down",785,  260),
+    ("scroll_up",  834,  514),
+    ("scroll_down",814,  623),
     # Side buttons — 4 rows × 3 cols
-    ("side1",      530,  380),
-    ("side2",      575,  380),
-    ("side3",      620,  380),
-    ("side4",      530,  435),
-    ("side5",      575,  435),
-    ("side6",      620,  435),
-    ("side7",      530,  490),
-    ("side8",      575,  490),
-    ("side9",      620,  490),
-    ("side10",     530,  540),
-    ("side11",     575,  540),
-    ("side12",     620,  540),
+    ("side1",      545,  298),
+    ("side2",      634,  260),
+    ("side3",      711,  239),
+    ("side4",      620,  333),
+    ("side5",      701,  312),
+    ("side6",      682,  381),
+    ("side7",      602,  412),
+    ("side8",      517,  367),
+    ("side9",      701,  443),
+    ("side10",     603,  483),
+    ("side11",     503,  455),
+    ("side12",     600,  576),
 ]
 
 M913_WIDE = {"left", "right"}
@@ -386,28 +386,28 @@ M913_WIDE = {"left", "right"}
 # ── Incedius M913 (16 buttons, same physical mouse, different labels) ────
 # Uses the same pixel positions as M913 stock but with IncediusMod naming.
 INCEDIUS_HOTSPOTS: list[tuple[str, int, int]] = [
-    # Main buttons (unchanged)
-    ("left",       670,  250),
-    ("right",      890,  250),
-    ("middle",     785,  225),
-    ("fire",       700,  360),
+    # Main buttons
+    ("left",       898,  648),
+    ("right",      928,  527),
+    ("middle",     828,  568),
+    ("fire",       921,  586),
     # Scroll wheel
-    ("scroll_up",  785,  190),
-    ("scroll_down",785,  260),
+    ("scroll_up",  834,  514),
+    ("scroll_down",814,  623),
     # Thumb buttons (side1-6 → Thumb 1-6)
-    ("Thumb1",     530,  380),
-    ("Thumb2",     575,  380),
-    ("Thumb3",     620,  380),
-    ("Thumb4",     530,  435),
-    ("Thumb5",     575,  435),
-    ("Thumb6",     620,  435),
+    ("Thumb1",     545,  298),
+    ("Thumb2",     634,  260),
+    ("Thumb3",     711,  239),
+    ("Thumb4",     620,  333),
+    ("Thumb5",     701,  312),
+    ("Thumb6",     682,  381),
     # Finger buttons (side7-12 → Finger 1-6)
-    ("Finger1",    530,  490),
-    ("Finger2",    575,  490),
-    ("Finger3",    620,  490),
-    ("Finger4",    530,  540),
-    ("Finger5",    575,  540),
-    ("Finger6",    620,  540),
+    ("Finger1",    602,  412),
+    ("Finger2",    517,  367),
+    ("Finger3",    701,  443),
+    ("Finger4",    603,  483),
+    ("Finger5",    503,  455),
+    ("Finger6",    600,  576),
 ]
 
 INCEDIUS_WIDE = {"left", "right"}
