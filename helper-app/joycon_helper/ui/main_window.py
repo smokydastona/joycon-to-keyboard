@@ -16,7 +16,7 @@ from PyQt6.QtCore import QSettings, QSize, QTimer, Qt
 from PyQt6.QtGui import QAction, QFont, QIcon, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
     QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
-    QDockWidget, QFormLayout, QHBoxLayout, QLabel, QLineEdit,
+    QFormLayout, QHBoxLayout, QLabel, QLineEdit,
     QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QPushButton,
     QSizePolicy, QSlider, QSpinBox, QStackedWidget,
     QSystemTrayIcon, QTabWidget, QToolBar, QVBoxLayout, QWidget,
@@ -103,8 +103,8 @@ class MainWindow(QMainWindow):
         self._setup_window()
         self._build_toolbar()
         self._build_sidebar()
+        self._build_log_widget()
         self._build_views()
-        self._build_log_dock()
         self._build_status_bar()
         self._build_shortcuts()
         self._build_tray_icon()
@@ -311,25 +311,16 @@ class MainWindow(QMainWindow):
         return view
 
     # -----------------------------------------------------------------
-    # Log dock
+    # Device log widget (embedded in Dashboard)
     # -----------------------------------------------------------------
 
-    def _build_log_dock(self) -> None:
-        dock = QDockWidget("Device Log", self)
-        dock.setObjectName("LogDock")
-        dock.setAllowedAreas(
-            Qt.DockWidgetArea.BottomDockWidgetArea |
-            Qt.DockWidgetArea.RightDockWidgetArea
-        )
-
+    def _build_log_widget(self) -> None:
         self._log_text = QPlainTextEdit()
         self._log_text.setReadOnly(True)
         self._log_text.setMaximumBlockCount(2000)
         self._log_text.setFont(QFont(
             self.theme.typo("mono_family"), self.theme.typo("mono_size")
         ))
-        dock.setWidget(self._log_text)
-        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, dock)
 
     # -----------------------------------------------------------------
     # Status bar

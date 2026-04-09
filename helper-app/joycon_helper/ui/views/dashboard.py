@@ -43,6 +43,7 @@ class DashboardView(QScrollArea):
         self._build_status_cards()
         self._build_quick_actions()
         self._build_device_preview()
+        self._build_device_log()
         self._layout.addStretch()
 
     # -----------------------------------------------------------------
@@ -146,6 +147,16 @@ class DashboardView(QScrollArea):
             self._device_image.setText("(No device image found)")
 
         lay.addWidget(self._device_image)
+        self._layout.addWidget(group)
+
+    # -----------------------------------------------------------------
+    def _build_device_log(self) -> None:
+        group = QGroupBox("Device Log")
+        lay = QVBoxLayout(group)
+        # Re-parent the log widget owned by MainWindow into this group
+        log_widget = self._main._log_text
+        log_widget.setMinimumHeight(150)
+        lay.addWidget(log_widget)
         self._layout.addWidget(group)
 
     # -----------------------------------------------------------------
