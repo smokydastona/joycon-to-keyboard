@@ -97,10 +97,16 @@ Verify example (adjust filenames/version):
 cosign verify-blob --signature .\BindBandit.exe.sig --certificate .\BindBandit.exe.crt --certificate-oidc-issuer https://token.actions.githubusercontent.com --certificate-identity-regexp "^https://github.com/smokydastona/joy-con/.github/workflows/build-release-bundle.yml@refs/.*$" .\BindBandit.exe
 ```
 
+## Quick Start — Web Flasher
+
+Flash both boards from your browser (Chrome/Edge) — no ESP-IDF or drivers needed:
+
+👉 **<https://smokydastona.github.io/joycon-to-keyboard/>**
+
 ## Next
 
 0) Wiring (one USB dongle): see `docs/wiring.md`
-1) Firmware install / flashing (Windows): see `docs/firmware-install.md`
+1) Firmware install / flashing: see `docs/firmware-install.md`
 2) Build and flash ESP32-S3 firmware: see `firmware/esp32s3-usb-kbd/README.md`
 3) Build and flash ESP32 firmware: see `firmware/esp32-hid-host-uart/README.md`
 4) Edit key mapping in `docs/keymap.md` (then update the ESP32 mapping table)

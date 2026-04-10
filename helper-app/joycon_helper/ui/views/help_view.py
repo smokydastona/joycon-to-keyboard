@@ -98,10 +98,15 @@ def _sections() -> List[Tuple[str, str, bool]]:
         (
             "💾 Firmware Installation",
             (
-                "## First-time flash (blank boards)\n"
+                "## One-click browser flash (easiest)\n"
+                "Open the Bind Bandit Web Flasher in Chrome or Edge:\n"
+                "  https://smokydastona.github.io/joycon-to-keyboard/\n"
+                "Plug in each board, click Connect & Install. No drivers or "
+                "ESP-IDF needed. Erases flash by default (clean NVS).\n\n"
+                "## Helper app flash\n"
                 "Use the Diagnostics → Initial Flash section to download and flash "
                 "the latest firmware automatically, or flash from local .bin files.\n\n"
-                "## Manual build\n"
+                "## Manual build (advanced)\n"
                 "  cd firmware/esp32-hid-host-uart\n"
                 "  idf.py set-target esp32\n"
                 "  idf.py build\n"

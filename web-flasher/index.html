@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bind Bandit — Web Flasher</title>
+  <link rel="stylesheet" href="style.css" />
+  <script
+    type="module"
+    src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"
+  ></script>
+</head>
+<body>
+  <header>
+    <h1>🎮 <span>Bind Bandit</span> Web Flasher</h1>
+    <p>
+      Flash your ESP32 boards directly from the browser — no drivers, no
+      ESP-IDF install needed. Just plug in, pick a board, and click Install.
+    </p>
+  </header>
+
+  <div class="unsupported" id="unsupported">
+    ⚠️ Your browser does not support Web Serial. Please use
+    <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong> on desktop.
+  </div>
+
+  <section class="boards">
+    <!-- ESP32-S3 USB Keyboard -->
+    <div class="card">
+      <div>
+        <span class="chip">Step 1</span>
+        <h2>ESP32-S3 — USB Keyboard</h2>
+      </div>
+      <p>
+        The board that plugs into your PC. Enumerates as a USB HID keyboard
+        + CDC serial COM port for the helper app.
+      </p>
+      <esp-web-install-button manifest="manifest-esp32s3.json">
+        <button slot="activate">Connect &amp; Install ESP32-S3</button>
+      </esp-web-install-button>
+    </div>
+
+    <!-- ESP32 BT Host -->
+    <div class="card">
+      <div>
+        <span class="chip">Step 2</span>
+        <h2>ESP32 — Bluetooth Host</h2>
+      </div>
+      <p>
+        The board that connects wirelessly to your Joy-Con (or compatible
+        controller) over Bluetooth Classic and sends UART frames to the
+        ESP32-S3.
+      </p>
+      <esp-web-install-button manifest="manifest-esp32.json">
+        <button slot="activate">Connect &amp; Install ESP32</button>
+      </esp-web-install-button>
+    </div>
+  </section>
+
+  <section class="steps">
+    <h3>How it works</h3>
+    <ol>
+      <li><strong>Pick a board</strong> above and click its Install button.</li>
+      <li><strong>Select the serial port</strong> in the browser dialog (the ESP32 board you plugged in).</li>
+      <li>ESP Web Tools will <strong>erase flash</strong> (clean NVS) and write the latest firmware.</li>
+      <li>After flashing both boards, <strong>wire them together</strong> per
+        <a href="https://github.com/smokydastona/joycon-to-keyboard/blob/main/docs/wiring.md"
+           target="_blank" rel="noopener">docs/wiring.md</a>.</li>
+      <li>Download <strong>Bind Bandit</strong> (the helper app) from the
+        <a href="https://github.com/smokydastona/joycon-to-keyboard/releases/latest"
+           target="_blank" rel="noopener">latest release</a>
+        to configure key mappings, profiles, and OTA updates.</li>
+    </ol>
+  </section>
+
+  <section class="notes">
+    <details>
+      <summary>ℹ️ Notes &amp; Troubleshooting</summary>
+      <ul>
+        <li><strong>Browser support:</strong> Web Serial requires Chrome 89+ or Edge 89+ on desktop. Safari, Firefox, and mobile browsers are not supported.</li>
+        <li><strong>Erase all flash</strong> is enabled by default (recommended for first-time flashing). This clears NVS settings — you'll reconfigure via the helper app.</li>
+        <li><strong>ESP32-S3 first:</strong> Flash the S3 board first since it's the front of the dongle (USB to PC).</li>
+        <li><strong>Download mode:</strong> If the board doesn't appear as a serial port, hold the <code>BOOT</code> button while pressing <code>RESET</code>, then try again.</li>
+        <li><strong>OTA updates:</strong> After initial flash, future firmware updates can be done from within the Bind Bandit helper app (no web flasher needed).</li>
+        <li><strong>Already have the helper app?</strong> You can also flash from the Diagnostics → Initial Flash section inside the app.</li>
+      </ul>
+    </details>
+  </section>
+
+  <footer>
+    <a href="https://github.com/smokydastona/joycon-to-keyboard" target="_blank" rel="noopener">
+      smokydastona/joycon-to-keyboard
+    </a>
+    · Powered by <a href="https://esphome.github.io/esp-web-tools/" target="_blank" rel="noopener">ESP Web Tools</a>
+  </footer>
+
+  <script>
+    if (!("serial" in navigator)) {
+      document.getElementById("unsupported").style.display = "block";
+    }
+  </script>
+</body>
+</html>

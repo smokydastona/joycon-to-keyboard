@@ -1,6 +1,32 @@
-# Firmware install / flashing guide (Windows, ESP-IDF)
+# Firmware install / flashing guide
 
-This guide is intentionally detailed and assumes you want a **single custom USB dongle**:
+This guide covers all the ways to get firmware onto your ESP32 boards.
+
+---
+
+## One-Click Browser Flash (recommended for first-time setup)
+
+The fastest way to flash both boards — no installs, no command line.
+
+1. Open the **Bind Bandit Web Flasher**: <https://smokydastona.github.io/joycon-to-keyboard/>
+2. Use **Google Chrome** or **Microsoft Edge** (Web Serial required).
+3. Plug in your **ESP32-S3** board via USB and click **Connect & Install ESP32-S3**.
+4. Plug in your **ESP32** board via USB and click **Connect & Install ESP32**.
+5. If a board doesn't show up, hold **BOOT** while pressing **RESET** to enter download mode.
+
+The web flasher erases all flash (clean NVS) by default — recommended for new boards. After flashing, wire the boards together per `docs/wiring.md` and use the Bind Bandit helper app for configuration.
+
+---
+
+## Helper App Flash (alternative)
+
+The Bind Bandit helper app (Diagnostics → Initial Flash) can also flash new boards. See the **Installing / Updating the Helper App** section in the app's Help tab.
+
+---
+
+## Manual ESP-IDF Flash (advanced)
+
+This section is intentionally detailed and assumes you want a **single custom USB dongle**:
 
 - The **ESP32-S3** is the only board that plugs into the PC by USB.
 - The **ESP32 (Classic BT)** lives inside the dongle, is powered from the ESP32-S3, and connects wirelessly to the controller.
