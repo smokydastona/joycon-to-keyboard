@@ -1,0 +1,16 @@
+{
+  "name": "Bind Bandit — ESP32 Bluetooth Host",
+  "version": "0.1.193",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [
+        {
+          "path": "https://github.com/smokydastona/joycon-to-keyboard/releases/download/v0.1.193/esp32-hid-host-uart-merged.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}

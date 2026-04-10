@@ -1,0 +1,16 @@
+{
+  "name": "Bind Bandit — ESP32-S3 USB Keyboard",
+  "version": "0.1.193",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        {
+          "path": "https://github.com/smokydastona/joycon-to-keyboard/releases/download/v0.1.193/esp32s3-usb-kbd-merged.bin",
+          "offset": 0
+        }
+      ]
+    }
+  ]
+}
