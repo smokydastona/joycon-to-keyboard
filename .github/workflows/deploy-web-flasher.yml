@@ -1,0 +1,58 @@
+# -----------------------------------------------------------
+# Deploy web flasher to GitHub Pages
+#
+# Always-on: deploys whenever web-flasher/ content changes on
+# main, after every release, or on manual dispatch.
+# Manifests use /releases/latest/download/ URLs so they
+# always point to the newest firmware binaries.
+# -----------------------------------------------------------
+name: Deploy Web Flasher
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "web-flasher/**"
+  workflow_run:
+    workflows: ["Build Release Bundle"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to GitHub Pages
+    runs-on: ubuntu-latest
+
+    # Only deploy after a successful release (workflow_run) or on push/dispatch
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./web-flasher
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
