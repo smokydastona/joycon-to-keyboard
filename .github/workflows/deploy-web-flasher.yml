@@ -54,9 +54,10 @@ jobs:
           set -euo pipefail
           mkdir -p web-flasher/firmware
 
-          # Download merged binaries from the latest release
+          # Download firmware binaries from the latest release.
+          # Release assets are merged binaries (bootloader + partition table + app).
           gh release download --repo "${{ github.repository }}" \
-            --pattern "*-merged.bin" \
+            --pattern "esp32*.bin" \
             --dir web-flasher/firmware \
             --clobber || echo "⚠️ No release found yet — firmware dir will be empty"
 

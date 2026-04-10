@@ -358,11 +358,11 @@ def download_and_flash_initial(
         )
     _status(f"Detected: {chip}")
 
-    # Figure out which app binary to download.
+    # Figure out which firmware asset to download (merged binary).
     if chip == "esp32s3":
-        app_asset = fw_updater.FW_ASSET_S3
+        fw_asset = fw_updater.FW_ASSET_S3
     else:
-        app_asset = fw_updater.FW_ASSET_ESP32
+        fw_asset = fw_updater.FW_ASSET_ESP32
 
     # Fetch release info.
     _status("Fetching latest release…")
@@ -381,58 +381,24 @@ def download_and_flash_initial(
     import os  # noqa: F811
 
     with tempfile.TemporaryDirectory(prefix="bindbnd_") as tmpdir:
-        # Download app binary (required).
-        app_dl = fw_updater._find_asset(release, app_asset)
-        if not app_dl:
-            raise RuntimeError(f"Release {tag} has no asset named '{app_asset}'")
+        # Download merged firmware binary.
+        fw_dl = fw_updater._find_asset(release, fw_asset)
+        if not fw_dl:
+            raise RuntimeError(f"Release {tag} has no asset named '{fw_asset}'")
 
-        _status(f"Downloading {app_asset}…")
-        app_data = fw_updater.download_firmware(
-            app_dl["browser_download_url"],
-            expected_sha256=sha256sums.get(app_asset),
+        _status(f"Downloading {fw_asset}…")
+        fw_data = fw_updater.download_firmware(
+            fw_dl["browser_download_url"],
+            expected_sha256=sha256sums.get(fw_asset),
         )
-        app_path = os.path.join(tmpdir, app_asset)
-        with open(app_path, "wb") as f:
-            f.write(app_data)
+        fw_path = os.path.join(tmpdir, fw_asset)
+        with open(fw_path, "wb") as f:
+            f.write(fw_data)
 
-        # Try to download bootloader + partition table (optional release assets).
-        bl_name = f"{chip}-bootloader.bin"
-        pt_name = f"{chip}-partition-table.bin"
-
-        bl_asset = fw_updater._find_asset(release, bl_name)
-        pt_asset = fw_updater._find_asset(release, pt_name)
-
-        bl_path: Optional[str] = None
-        pt_path: Optional[str] = None
-
-        if bl_asset and pt_asset:
-            _status(f"Downloading {bl_name}…")
-            bl_data = fw_updater.download_firmware(
-                bl_asset["browser_download_url"],
-                expected_sha256=sha256sums.get(bl_name),
-            )
-            bl_path = os.path.join(tmpdir, bl_name)
-            with open(bl_path, "wb") as f:
-                f.write(bl_data)
-
-            _status(f"Downloading {pt_name}…")
-            pt_data = fw_updater.download_firmware(
-                pt_asset["browser_download_url"],
-                expected_sha256=sha256sums.get(pt_name),
-            )
-            pt_path = os.path.join(tmpdir, pt_name)
-            with open(pt_path, "wb") as f:
-                f.write(pt_data)
-        else:
-            _status("Bootloader/partition-table not in release — app-only flash.\n"
-                    "(The board must have an existing bootloader.)")
-
-        # Flash.
+        # Flash as merged binary (bootloader + partition table + app at 0x0).
         flash_firmware(
             port,
-            app_bin=app_path,
-            bootloader_bin=bl_path,
-            partition_table_bin=pt_path,
+            merged_bin=fw_path,
             chip=chip,
             erase_all=True,
             progress_cb=progress_cb,

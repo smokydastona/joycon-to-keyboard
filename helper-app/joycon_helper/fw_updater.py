@@ -30,9 +30,16 @@ except ImportError:
 
 log = logging.getLogger("joycon_helper.fw_updater")
 
-# GitHub release asset names for firmware binaries.
+# GitHub release asset names for firmware binaries (merged: bootloader +
+# partition table + app).  OTA needs only the app portion, so we strip the
+# leading 0x10000 bytes after download — see ``extract_app_from_merged()``.
 FW_ASSET_S3 = "esp32s3-usb-kbd.bin"
 FW_ASSET_ESP32 = "esp32-hid-host-uart.bin"
+
+# Offset where the app image starts inside a merged binary produced by
+# ``esptool.py merge_bin`` (bootloader @ 0x0, partition-table @ 0x8000,
+# app @ 0x10000).
+_APP_OFFSET = 0x10000
 
 # Board identifiers used in the serial protocol.
 BOARD_S3 = "esp32s3"
@@ -269,6 +276,29 @@ def compute_sha256(data: bytes) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Merged-binary helpers
+# ---------------------------------------------------------------------------
+
+def extract_app_from_merged(data: bytes) -> bytes:
+    """Return the app-only portion of a merged firmware binary.
+
+    Merged binaries produced by ``esptool.py merge_bin`` contain:
+      0x0000  bootloader
+      0x8000  partition table
+      0x10000 application
+
+    OTA writes directly to the app partition, so we strip the first
+    ``_APP_OFFSET`` (0x10000 = 64 KiB) bytes.
+    """
+    if len(data) <= _APP_OFFSET:
+        raise ValueError(
+            f"Firmware binary too small ({len(data)} bytes) to contain an app "
+            f"image at offset {_APP_OFFSET:#x}."
+        )
+    return data[_APP_OFFSET:]
+
+
+# ---------------------------------------------------------------------------
 # Serial OTA flashing
 # ---------------------------------------------------------------------------
 
@@ -386,3 +416,132 @@ class FirmwareFlasher:
             if line.parsed and line.parsed.get("rsp") == expected_rsp:
                 return line.parsed
         return None
+
+
+# ---------------------------------------------------------------------------
+# High-level OTA helper used by the diagnostics UI
+# ---------------------------------------------------------------------------
+
+class FwUpdater:
+    """Convenience wrapper around the lower-level OTA helpers.
+
+    Provides the three operations the diagnostics view needs:
+    ``check_versions``, ``do_update``, and ``flash_from_file``.
+    """
+
+    def __init__(self, serial_client: Any = None) -> None:
+        self._ser = serial_client
+
+    # -- version check (network only, serial optional) -------------------
+
+    def check_versions(self) -> Dict[str, Any]:
+        """Return dict with *s3*, *esp32*, *update_available*, *latest* keys."""
+        s3_ver: Optional[str] = None
+        esp32_ver: Optional[str] = None
+
+        # Try to read current device versions via serial.
+        if self._ser:
+            try:
+                flasher = FirmwareFlasher(self._ser)
+                s3_ver = flasher.get_version(BOARD_S3)
+            except Exception:
+                log.debug("Could not read S3 version", exc_info=True)
+            try:
+                flasher = FirmwareFlasher(self._ser)
+                esp32_ver = flasher.get_version(BOARD_ESP32)
+            except Exception:
+                log.debug("Could not read ESP32 version", exc_info=True)
+
+        info: Dict[str, Any] = {
+            "s3": s3_ver or "—",
+            "esp32": esp32_ver or "—",
+            "update_available": False,
+            "latest": "—",
+        }
+
+        result = check_firmware_updates(
+            current_s3=s3_ver,
+            current_esp32=esp32_ver,
+        )
+        if result:
+            info["update_available"] = True
+            info["latest"] = result.get("version", "?")
+            info["_result"] = result  # stash for do_update
+        return info
+
+    # -- OTA update from GitHub ------------------------------------------
+
+    def do_update(
+        self,
+        *,
+        progress_cb: Optional[Callable[[str, int], None]] = None,
+    ) -> None:
+        """Download latest firmware from GitHub and flash via OTA."""
+        if not self._ser:
+            raise RuntimeError("No serial connection — cannot OTA flash.")
+
+        # Re-fetch update info.
+        flasher = FirmwareFlasher(self._ser)
+        s3_ver = flasher.get_version(BOARD_S3)
+        esp32_ver = flasher.get_version(BOARD_ESP32)
+        result = check_firmware_updates(current_s3=s3_ver, current_esp32=esp32_ver)
+        if not result:
+            raise RuntimeError("No firmware update available.")
+
+        boards = result["boards"]
+        for board, binfo in boards.items():
+            if progress_cb:
+                progress_cb(f"Downloading {binfo['asset_name']}…", 0)
+            data = download_firmware(
+                binfo["download_url"],
+                expected_sha256=binfo.get("expected_sha256"),
+                expected_size=binfo.get("size", 0),
+            )
+            # Release binaries are merged images — extract app portion for OTA.
+            app_data = extract_app_from_merged(data)
+            if progress_cb:
+                progress_cb(f"Flashing {board}…", 0)
+            flasher.flash(
+                board, app_data,
+                progress_cb=lambda done, tot: (
+                    progress_cb(f"Flashing {board}…", int(done * 100 / tot))
+                    if progress_cb else None
+                ),
+            )
+        if progress_cb:
+            progress_cb("Done", 100)
+
+    # -- flash a local file ----------------------------------------------
+
+    def flash_from_file(
+        self,
+        path: str,
+        *,
+        board: str = BOARD_S3,
+        progress_cb: Optional[Callable[[str, int], None]] = None,
+    ) -> None:
+        """Read a local firmware binary and flash via OTA."""
+        if not self._ser:
+            raise RuntimeError("No serial connection — cannot OTA flash.")
+
+        import pathlib
+        data = pathlib.Path(path).read_bytes()
+        # If the file looks like a merged binary (has bootloader header before
+        # the app offset), extract the app portion.
+        if len(data) > _APP_OFFSET:
+            app_data = extract_app_from_merged(data)
+        else:
+            app_data = data
+
+        if progress_cb:
+            progress_cb("Flashing…", 0)
+        flasher = FirmwareFlasher(self._ser)
+        flasher.flash(
+            board, app_data,
+            progress_cb=lambda done, tot: (
+                progress_cb("Flashing…", int(done * 100 / tot))
+                if progress_cb else None
+            ),
+        )
+        if progress_cb:
+            progress_cb("Done", 100)

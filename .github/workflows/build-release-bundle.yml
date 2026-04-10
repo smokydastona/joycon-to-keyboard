@@ -381,32 +381,21 @@ jobs:
           TITLE="Bind Bandit ${TAG}"
           NOTES="Build version: ${{ needs.version-metadata.outputs.build_version }}"
 
-          # Prepare firmware binaries for direct OTA download.
-          # The helper app looks for esp32s3-usb-kbd.bin and esp32-hid-host-uart.bin.
-          S3_BIN=$(find release-bundle/firmware/esp32s3-usb-kbd -maxdepth 1 -name '*.bin' ! -name 'bootloader.bin' ! -name 'partition-table.bin' ! -name '*-merged.bin' | head -n1)
-          ESP32_BIN=$(find release-bundle/firmware/esp32-hid-host-uart -maxdepth 1 -name '*.bin' ! -name 'bootloader.bin' ! -name 'partition-table.bin' ! -name '*-merged.bin' | head -n1)
-
+          # Publish merged binaries (bootloader + partition table + app) as the
+          # single firmware file per board.  The helper app extracts the app
+          # portion for OTA; initial flash and web flasher use them as-is.
           ASSETS=()
           ASSETS+=("release-bundle/helper-app/BindBandit.exe")
-          if [ -n "$S3_BIN" ]; then
-            cp "$S3_BIN" release-bundle/esp32s3-usb-kbd.bin
-            ASSETS+=("release-bundle/esp32s3-usb-kbd.bin")
-          fi
-          if [ -n "$ESP32_BIN" ]; then
-            cp "$ESP32_BIN" release-bundle/esp32-hid-host-uart.bin
-            ASSETS+=("release-bundle/esp32-hid-host-uart.bin")
-          fi
 
-          # Merged binaries for web flasher (bootloader + partition table + app at offset 0x0)
           S3_MERGED="release-bundle/firmware/esp32s3-usb-kbd/esp32s3-usb-kbd-merged.bin"
           ESP32_MERGED="release-bundle/firmware/esp32-hid-host-uart/esp32-hid-host-uart-merged.bin"
           if [ -f "$S3_MERGED" ]; then
-            cp "$S3_MERGED" release-bundle/esp32s3-usb-kbd-merged.bin
-            ASSETS+=("release-bundle/esp32s3-usb-kbd-merged.bin")
+            cp "$S3_MERGED" release-bundle/esp32s3-usb-kbd.bin
+            ASSETS+=("release-bundle/esp32s3-usb-kbd.bin")
           fi
           if [ -f "$ESP32_MERGED" ]; then
-            cp "$ESP32_MERGED" release-bundle/esp32-hid-host-uart-merged.bin
-            ASSETS+=("release-bundle/esp32-hid-host-uart-merged.bin")
+            cp "$ESP32_MERGED" release-bundle/esp32-hid-host-uart.bin
+            ASSETS+=("release-bundle/esp32-hid-host-uart.bin")
           fi
 
           gh release create "${TAG}" \

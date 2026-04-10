@@ -306,7 +306,7 @@ class DiagnosticsView(QWidget):
         def _check():
             try:
                 from ...fw_updater import FwUpdater
-                updater = FwUpdater()
+                updater = FwUpdater(self._main.bridge.client)
                 info = updater.check_versions()
                 QTimer.singleShot(0, lambda: self._on_fw_versions(info))
             except Exception as exc:
@@ -344,7 +344,7 @@ class DiagnosticsView(QWidget):
         def _update():
             try:
                 from ...fw_updater import FwUpdater
-                updater = FwUpdater()
+                updater = FwUpdater(self._main.bridge.client)
                 updater.do_update(
                     progress_cb=lambda step, pct: self._flash_progress.emit(step, pct),
                 )
@@ -368,7 +368,7 @@ class DiagnosticsView(QWidget):
         def _flash():
             try:
                 from ...fw_updater import FwUpdater
-                updater = FwUpdater()
+                updater = FwUpdater(self._main.bridge.client)
                 updater.flash_from_file(
                     path,
                     progress_cb=lambda step, pct: self._flash_progress.emit(step, pct),

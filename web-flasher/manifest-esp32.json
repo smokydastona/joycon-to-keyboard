@@ -7,7 +7,7 @@
       "chipFamily": "ESP32",
       "parts": [
         {
-          "path": "firmware/esp32-hid-host-uart-merged.bin",
+          "path": "firmware/esp32-hid-host-uart.bin",
           "offset": 0
         }
       ]
