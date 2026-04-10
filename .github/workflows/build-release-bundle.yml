@@ -427,8 +427,12 @@ jobs:
       - create-release
 
     permissions:
-      contents: write
       pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
 
     steps:
       - name: Checkout repo
@@ -450,10 +454,14 @@ jobs:
           sed -i "s|RELEASE_VERSION|${VER}|g" web-flasher/manifest-esp32.json
           sed -i "s|RELEASE_URL_BASE|${BASE_URL}|g" web-flasher/manifest-esp32.json
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./web-flasher
-          destination_dir: .
-          keep_files: false
+          path: ./web-flasher
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
