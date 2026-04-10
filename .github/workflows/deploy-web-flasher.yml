@@ -3,8 +3,8 @@
 #
 # Always-on: deploys whenever web-flasher/ content changes on
 # main, after every release, or on manual dispatch.
-# Manifests use /releases/latest/download/ URLs so they
-# always point to the newest firmware binaries.
+# Firmware binaries are downloaded from the latest release and
+# served alongside the page (same origin — no CORS issues).
 # -----------------------------------------------------------
 name: Deploy Web Flasher
 
@@ -36,6 +36,7 @@ jobs:
     permissions:
       pages: write
       id-token: write
+      contents: read
 
     environment:
       name: github-pages
@@ -44,6 +45,22 @@ jobs:
     steps:
       - name: Checkout repo
         uses: actions/checkout@v5
+
+      - name: Download firmware from latest release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p web-flasher/firmware
+
+          # Download merged binaries from the latest release
+          gh release download --repo "${{ github.repository }}" \
+            --pattern "*-merged.bin" \
+            --dir web-flasher/firmware \
+            --clobber || echo "⚠️ No release found yet — firmware dir will be empty"
+
+          ls -lh web-flasher/firmware/ || true
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
