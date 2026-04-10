@@ -94,10 +94,72 @@
     · Powered by <a href="https://esphome.github.io/esp-web-tools/" target="_blank" rel="noopener">ESP Web Tools</a>
   </footer>
 
+  <section class="notes" id="diag-section" style="display:none">
+    <h3>🔎 Diagnostics</h3>
+    <pre id="diag-log" style="background:#161b22;padding:1em;border-radius:8px;overflow-x:auto;font-size:0.85em;max-height:300px;overflow-y:auto;color:#c9d1d9"></pre>
+  </section>
+
   <script>
     if (!("serial" in navigator)) {
       document.getElementById("unsupported").style.display = "block";
     }
+
+    /* ── Diagnostics: auto-run on page load ── */
+    const diagLog = document.getElementById("diag-log");
+    const diagSec = document.getElementById("diag-section");
+    function dlog(msg) {
+      diagSec.style.display = "block";
+      diagLog.textContent += msg + "\n";
+    }
+
+    async function runDiag() {
+      const manifests = [
+        "manifest-esp32s3.json",
+        "manifest-esp32.json"
+      ];
+      for (const mUrl of manifests) {
+        try {
+          dlog(`Fetching manifest: ${mUrl}`);
+          const mResp = await fetch(mUrl);
+          dlog(`  Status: ${mResp.status} ${mResp.statusText}  Type: ${mResp.headers.get("content-type")}`);
+          if (!mResp.ok) { dlog("  ❌ Manifest fetch failed"); continue; }
+          const mJson = await mResp.json();
+          dlog(`  ✅ Manifest parsed — name: ${mJson.name}`);
+          for (const build of mJson.builds || []) {
+            for (const part of build.parts || []) {
+              const fwUrl = new URL(part.path, new URL(mUrl, location.href)).href;
+              dlog(`  Fetching firmware: ${fwUrl}`);
+              try {
+                const fwResp = await fetch(fwUrl);
+                dlog(`    Status: ${fwResp.status} ${fwResp.statusText}  Type: ${fwResp.headers.get("content-type")}  Size: ${fwResp.headers.get("content-length")} bytes`);
+                if (fwResp.ok) {
+                  const blob = await fwResp.blob();
+                  dlog(`    ✅ Firmware downloaded — ${blob.size} bytes`);
+                } else {
+                  dlog(`    ❌ Firmware fetch failed`);
+                }
+              } catch (fwErr) {
+                dlog(`    ❌ Firmware fetch error: ${fwErr.message}`);
+              }
+            }
+          }
+        } catch (mErr) {
+          dlog(`  ❌ Manifest error: ${mErr.message}`);
+        }
+      }
+      dlog("Done.");
+    }
+    runDiag();
+
+    /* ── Listen for ESP Web Tools errors ── */
+    document.querySelectorAll("esp-web-install-button").forEach(btn => {
+      btn.addEventListener("state-changed", e => {
+        dlog(`[ESP] state-changed: ${JSON.stringify(e.detail)}`);
+      });
+      btn.addEventListener("error", e => {
+        dlog(`[ESP] error event: ${e.detail?.message || e.detail || e}`);
+      });
+    });
   </script>
 </body>
 </html>
