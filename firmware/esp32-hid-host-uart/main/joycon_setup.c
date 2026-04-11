@@ -171,7 +171,10 @@ static void send_subcmd(setup_instance_t *inst, uint8_t subcmd_id,
         memcpy(&buf[11], data, copy);
     }
 
-    uint8_t total_len = 11 + copy;
+    // Joy-Con expects full-length output reports (49 bytes for report 0x01).
+    // Sending truncated reports causes the controller to silently ignore
+    // subcommands after the first one.  The buffer is already zero-filled.
+    uint8_t total_len = 49;
 
     // Guard: handle 0xFF (BTA_HH_INVALID_HANDLE) would crash in the BT
     // stack.  This can happen if the connection completed before BTA
@@ -743,6 +746,9 @@ bool joycon_setup_on_report(uint8_t device_id, const uint8_t *report, uint16_t l
         return false;
     }
 
+    ESP_LOGI(TAG, "[%d] 0x21 report in state %d, len=%u",
+             device_id, inst->state, (unsigned)len);
+
     // 0x21 report layout (Joy-Con / Pro Controller):
     //   [0]     = 0x21  (report id)
     //   [1]     = timer
@@ -945,7 +951,8 @@ void joycon_setup_send_rumble(uint8_t device_id, uint16_t freq_hz, uint8_t amp_1
     rumble[3] = (uint8_t)(lf_amp & 0x7F);
 
     // Output report: 0x10 = rumble-only
-    uint8_t buf[10] = {0};
+    // Use full 49-byte buffer to match what the Joy-Con firmware expects.
+    uint8_t buf[49] = {0};
     buf[0] = OUTPUT_RUMBLE_ONLY;
     buf[1] = inst->packet_num;
     inst->packet_num = (inst->packet_num + 1) & 0x0F;

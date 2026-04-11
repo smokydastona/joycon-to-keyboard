@@ -276,6 +276,16 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
             schedule_reconnect();
 #endif
             break;
+        case ESP_HIDH_DATA_EVT:
+            ESP_LOGD(TAG, "HID send_data result: status=%d handle=%u reason=%u",
+                     param->send_data.status, param->send_data.handle,
+                     param->send_data.reason);
+            if (param->send_data.status != ESP_HIDH_OK) {
+                ESP_LOGE(TAG, "HID send_data FAILED: status=%d handle=%u reason=%u",
+                         param->send_data.status, param->send_data.handle,
+                         param->send_data.reason);
+            }
+            break;
         case ESP_HIDH_DATA_IND_EVT:
             if (param->data_ind.status == ESP_HIDH_OK && param->data_ind.data && param->data_ind.len) {
                 // Evidence-first workflow: only log when report bytes change.
