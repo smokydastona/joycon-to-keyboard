@@ -60,9 +60,9 @@ void uart_proto_init(void) {
                                         &s_uart_queue, 0));
     ESP_ERROR_CHECK(uart_param_config(port, &cfg));
 
-    // On ESP32-S3, GPIO43/44 are the I/O MUX default pins for UART0 (console).
-    // Reset them to plain GPIO function before routing bridge UART through
-    // the GPIO matrix, so the I/O MUX assignment doesn't shadow our signal.
+    // Reset pins to plain GPIO function before routing bridge UART through
+    // the GPIO matrix.  This is a safety measure in case the bootloader or
+    // another peripheral left an I/O MUX assignment on these pins.
     gpio_reset_pin((gpio_num_t)CONFIG_BRIDGE_UART_TX_GPIO);
     gpio_reset_pin((gpio_num_t)CONFIG_BRIDGE_UART_RX_GPIO);
 

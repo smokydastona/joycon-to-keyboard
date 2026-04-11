@@ -51,12 +51,18 @@ From `firmware/esp32-hid-host-uart/README.md`:
 
 From `docs/arduino-nano-esp32-setup.md`:
 
-- Nano `RX0` = **GPIO44** (this is what ESP-IDF `menuconfig` wants)
-- Nano `TX0` = **GPIO43**
+- Nano bridge `RX` = **D2 / GPIO5**
+- Nano bridge `TX` = **D3 / GPIO6**
 
-So the default “minimum wiring” becomes:
+> **Note:** Earlier firmware versions used D0/D1 (GPIO44/43), but those are
+> the I/O-MUX default pins for the hardware UART0 console.  Even with
+> `CONFIG_ESP_CONSOLE_NONE`, the bootloader briefly drives UART0 on these
+> pins, and the I/O-MUX assignment can shadow the GPIO-matrix routing for
+> UART1.  Moving to D2/D3 avoids the conflict entirely.
 
-- ESP32 GPIO17 (TX) → Nano RX0 (GPIO44)
+So the default "minimum wiring" becomes:
+
+- ESP32 GPIO17 (TX) → Nano D2 (GPIO5)
 - GND ↔ GND
 - Nano 5V/VUSB → ESP32 VIN/5V
 
@@ -78,7 +84,7 @@ This is what makes it a *single dongle*: the Nano powers the NodeMCU.
 
 ### UART data (ESP32 → ESP32-S3)
 
-- NodeMCU **UART2_TX (GPIO17)** → Nano **D0 / RX0 (GPIO44)**
+- NodeMCU **UART2_TX (GPIO17)** → Nano **D2 (GPIO5)**
 
 ### Optional return UART (ESP32-S3 → ESP32)
 
@@ -86,7 +92,7 @@ Not required for basic one-way key output.
 
 Required if you want the **helper app to initiate controller connect/scan** (no button presses on the boards).
 
-- Nano **D1 / TX0 (GPIO43)** → NodeMCU **UART2_RX (GPIO16)**
+- Nano **D3 (GPIO6)** → NodeMCU **UART2_RX (GPIO16)**
 
 ## Voltage levels (important)
 

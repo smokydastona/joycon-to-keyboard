@@ -172,13 +172,18 @@ Set:
 
 If you’re using **Arduino Nano ESP32-S3 (ABX00083)**:
 
-- `RX0` = `GPIO44`
-- `TX0` = `GPIO43`
+- `D2` = `GPIO5`  (bridge RX)
+- `D3` = `GPIO6`  (bridge TX)
 
 So set:
 
-- `Bridge UART RX GPIO` = `44`
-- `Bridge UART TX GPIO` = `43`
+- `Bridge UART RX GPIO` = `5`
+- `Bridge UART TX GPIO` = `6`
+
+> **Why not D0/D1 (GPIO44/43)?** Those pins are the I/O MUX default for
+> UART0. Even with the console disabled, the bootloader briefly
+> initialises UART0 on those pins and the I/O MUX assignment shadows the
+> GPIO matrix routing used by bridge UART1, silently blocking reception.
 
 2) **UART port selection**
 
@@ -330,7 +335,7 @@ At this stage it’s expected that the mapper may not yet emit real keyboard key
 - Confirm **GND ↔ GND** between the boards.
 - Confirm the baud rate is `921600` on both ends.
 - Confirm you did TX → RX (not TX → TX).
-- Confirm you used the correct GPIO numbers in `menuconfig` (Nano labels like `RX0` are not the same as ESP32-S3 GPIO numbers; for ABX00083 `RX0=GPIO44`).
+- Confirm you used the correct GPIO numbers in `menuconfig` (Nano labels like `D2` are not the same as ESP32-S3 GPIO numbers; for ABX00083 `D2=GPIO5`, `D3=GPIO6`).
 
 ### ESP32 finds nothing over Bluetooth
 

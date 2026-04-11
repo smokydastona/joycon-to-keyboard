@@ -9,6 +9,8 @@ Until then, entries are grouped by date.
 
 ### Added
 
+- **Bridge UART relocated to GPIO5/6 (Nano D2/D3)**: Moved bridge UART RX/TX from GPIO44/43 (Nano D0/D1) to GPIO5/6 (Nano D2/D3). Root cause: GPIO43/44 are the I/O MUX defaults for UART0; the bootloader briefly initialises UART0 on those pins and the I/O MUX assignment has higher priority than the GPIO matrix routing for UART1, silently blocking all bridge UART reception even after `CONFIG_ESP_CONSOLE_NONE` and `gpio_reset_pin()` were applied. GPIO5/6 have no UART0 association and are fully conflict-free. Updated Kconfig defaults, wiring.md, arduino-nano-esp32-setup.md, firmware-install.md, sdkconfig.defaults, and help tab.
+
 - **UART diagnostic CDC command (`uart_diag`)**: Added a `{"cmd":"uart_diag"}` command to the ESP32-S3 CDC protocol. Reports bridge UART port, baud, configured GPIO pins, RX pin logic level, buffered byte count, and up to 16 sample bytes read with a 100 ms timeout. Used to diagnose why zero UART frames arrive despite correct software configuration.
 
 - **Nintendo 0x30 key emitting enabled**: Enabled `CONFIG_JOYCON_HOST_TRY_NINTENDO_0X30` and `CONFIG_JOYCON_HOST_NINTENDO_0X30_EMIT_KEYS` in `sdkconfig.defaults`. The Joy-Con setup FSM confirms type=1 (Joy-Con L), fw=3.139, and standard 0x30 full-input reports are streaming correctly after four bug-fix iterations. Button presses and stick movements now generate UART key events to the S3.

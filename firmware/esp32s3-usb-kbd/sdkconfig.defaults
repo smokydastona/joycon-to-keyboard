@@ -3,11 +3,10 @@
 
 CONFIG_TINYUSB_CDC_ENABLED=y
 
-# Disable the default UART0 console.  On ESP32-S3 the default console
-# pins are GPIO43 (TX) / GPIO44 (RX), which are the same pins used
-# by the bridge UART.  The I/O MUX assignment for UART0 has higher
-# priority than the GPIO matrix routing used by UART1, so leaving the
-# console enabled silently blocks bridge UART reception on those pins.
+# Disable the default UART0 console.  The bridge UART now uses GPIO5/6
+# (Nano D2/D3) which are free of UART0 conflicts, but disabling the
+# console is still recommended to avoid any I/O MUX contention and to
+# save resources.
 CONFIG_ESP_CONSOLE_NONE=y
 
 # Two HID interface instances: keyboard (instance 0) + mouse (instance 1).

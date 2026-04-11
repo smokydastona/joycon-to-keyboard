@@ -34,23 +34,28 @@ Use: `firmware/esp32s3-usb-kbd/`
 
 Build target is `esp32s3`.
 
-## Critical setting: RX0 is an Arduino pin label, ESP-IDF wants GPIO numbers
+## Critical setting: bridge UART GPIO numbers
 
 In ESP-IDF, `menuconfig` expects the **ESP32-S3 GPIO number**, not the silk-screen label.
 
-For **Arduino Nano ESP32 (ABX00083)**, the official pinout maps:
+For **Arduino Nano ESP32 (ABX00083)**, the bridge UART uses:
 
-- `RX0` = `GPIO44`
-- `TX0` = `GPIO43`
+- Bridge `RX` = **D2** = `GPIO5`
+- Bridge `TX` = **D3** = `GPIO6`
+
+> **Why not D0/D1 (GPIO44/43)?** Those are the I/O-MUX default pins for
+> the hardware UART0 console.  Even with `CONFIG_ESP_CONSOLE_NONE`, the
+> bootloader briefly drives UART0 on those pins and the I/O-MUX assignment
+> can shadow GPIO-matrix routing for UART1.  GPIO5/6 avoid the conflict.
 
 So set:
 
-`idf.py menuconfig` → `Bind Bandit (ESP32-S3 USB Keyboard)` → `Bridge UART RX GPIO` = `44`
+`idf.py menuconfig` → `Bind Bandit (ESP32-S3 USB Keyboard)` → `Bridge UART RX GPIO` = `5`
 
 Also set:
 - `Bridge UART baud` to `921600`
 - `UART port` to whichever UART you prefer (default `1` in this repo)
 
-## If you paste the RX0 GPIO mapping
+## If you paste the RX GPIO mapping
 
-The repo defaults are already set for `RX0=GPIO44` / `TX0=GPIO43`.
+The repo defaults are already set for `RX=GPIO5` / `TX=GPIO6`.
