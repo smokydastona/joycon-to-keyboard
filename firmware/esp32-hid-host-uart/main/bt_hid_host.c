@@ -289,22 +289,27 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
                 // Evidence-first workflow: only log when report bytes change.
                 // This avoids flooding and makes it easier to identify toggling bits.
                 if (CONFIG_JOYCON_HOST_LOG_REPORTS) {
-                    // Compare only the first 12 bytes (report_id, timer,
-                    // buttons, sticks) — bytes 13+ are IMU data that changes
-                    // every frame and would flood the console UART, blocking
-                    // the BT callback task and killing the connection.
-                    static uint8_t last[12];
+                    // Compare bytes 2..11 (connection_info, buttons, sticks).
+                    // Skip byte 0 (report_id, constant) and byte 1 (timer,
+                    // increments every frame).  Bytes 12+ are IMU data that
+                    // changes every frame.  Without this gating the console
+                    // UART floods at 60 Hz, blocking the BT callback task.
+                    static uint8_t last[10];  // bytes 2..11
                     static bool have_last = false;
 
-                    uint16_t cmp_len = param->data_ind.len;
-                    if (cmp_len > sizeof(last)) cmp_len = sizeof(last);
-
-                    bool changed = !have_last ||
-                                   memcmp(last, param->data_ind.data, cmp_len) != 0;
+                    bool changed = true;
+                    if (param->data_ind.len > 2) {
+                        const uint8_t *cmp_start = param->data_ind.data + 2;
+                        uint16_t avail = param->data_ind.len - 2;
+                        uint16_t cmp_len = (avail > sizeof(last)) ? sizeof(last) : avail;
+                        changed = !have_last ||
+                                  memcmp(last, cmp_start, cmp_len) != 0;
+                        if (changed) {
+                            memcpy(last, cmp_start, cmp_len);
+                            have_last = true;
+                        }
+                    }
                     if (changed) {
-                        memcpy(last, param->data_ind.data, cmp_len);
-                        have_last = true;
-
                         ESP_LOGI(TAG, "HID report len=%u", (unsigned)param->data_ind.len);
                         ESP_LOG_BUFFER_HEX_LEVEL(TAG, param->data_ind.data,
                                                  (param->data_ind.len > 64) ? 64 : param->data_ind.len,
