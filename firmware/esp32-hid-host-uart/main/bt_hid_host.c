@@ -189,6 +189,21 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
                 break;
             }
 
+            // Non-zero status means the connection attempt failed (e.g.
+            // page timeout, auth failure).  Do NOT mark the slot as
+            // connected or start the FSM — the device isn't reachable.
+            if (param->open.status != 0) {
+                ESP_LOGW(TAG, "HID OPEN failed (status=%d); scheduling reconnect",
+                         param->open.status);
+                s_connecting = false;
+#if CONFIG_JOYCON_HOST_AUTO_RECONNECT
+                schedule_reconnect();
+#else
+                bt_hid_host_start_discovery();
+#endif
+                break;
+            }
+
             bridge_send_bt_status(4, param->open.bd_addr, NULL);
 
             // Best-effort: stash this connection into the requested slot.

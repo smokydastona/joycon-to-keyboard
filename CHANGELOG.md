@@ -13,6 +13,8 @@ Until then, entries are grouped by date.
 
 ### Fixed
 
+- **Reconnect failure starts FSM on disconnected device**: When a reconnect attempt fails (e.g. page timeout → `HID OPEN status=6`), the code unconditionally started the setup FSM with the returned handle, causing an infinite loop of `send_data FAILED` errors. Fixed by checking `param->open.status != 0` and scheduling another reconnect attempt (with exponential backoff) instead of starting the FSM.
+
 - **ESP32-S3 bridge UART blocked by console UART0 on GPIO43/44**: On ESP32-S3, the default console UART (UART0) uses GPIO43 (TX) and GPIO44 (RX) via I/O MUX, which has higher priority than the GPIO matrix routing used by bridge UART1 on the same pins. This silently prevented bridge UART reception, making the entire Joy-Con → UART → USB HID pipeline non-functional. Fixed by disabling the console UART (`CONFIG_ESP_CONSOLE_NONE=y` in `sdkconfig.defaults`) and calling `gpio_reset_pin()` on the bridge UART pins before `uart_set_pin()` to ensure the I/O MUX is reset to GPIO function.
 
 - **Discovery timer cascade prevents Joy-Con from being found**: `bt_hid_host_start_discovery()` calls `esp_bt_gap_cancel_discovery()` before starting a new scan, which fires `DISC_STATE_CHANGED(0)`. That state-0 event unconditionally started a 2 s restart timer, which fired mid-scan and cancelled it via the next `cancel_discovery()` call, creating an infinite loop of 2 s scans instead of the configured 10 s. Fixed by stopping the restart timer when a scan actually starts (state=1) and only arming a new timer on state=0 when no timer is already pending.
