@@ -363,7 +363,9 @@ static bool wait_esp32_ota_rsp(uint8_t expected_rsp_id, int timeout_ms) {
 
     TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(timeout_ms);
     while (xTaskGetTickCount() < deadline) {
-        tud_task();
+        // Do NOT call tud_task() here — tinyusb_driver_install() already runs
+        // TinyUSB in its own FreeRTOS task.  Calling tud_task() from a second
+        // task concurrently corrupts TinyUSB's CDC TX/RX state machine.
 
         // Poll UART for frames; the main loop's frame processing is inlined here.
         uart_frame_t f;
