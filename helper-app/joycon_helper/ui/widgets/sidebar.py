@@ -6,16 +6,23 @@ shortcut hints, separator lines between nav groups, and glow effects.
 """
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import ClassVar
 
 from PyQt6.QtCore import (
-    QEasingCurve, QPropertyAnimation,
-    Qt, pyqtSignal,
+    QEasingCurve,
+    QPropertyAnimation,
+    Qt,
+    pyqtSignal,
 )
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtWidgets import (
-    QFrame, QGraphicsDropShadowEffect, QHBoxLayout, QLabel,
-    QPushButton, QVBoxLayout, QWidget,
+    QFrame,
+    QGraphicsDropShadowEffect,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
 )
 
 from ..theme import ThemeEngine
@@ -26,7 +33,7 @@ class SidebarItem(QPushButton):
 
     def __init__(self, icon_char: str, label: str, theme: ThemeEngine,
                  shortcut_hint: str = "",
-                 parent: Optional[QWidget] = None) -> None:
+                 parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._icon_char = icon_char
         self._label_text = label
@@ -140,7 +147,7 @@ class SidebarItem(QPushButton):
 class _SidebarSeparator(QFrame):
     """Thin horizontal line used between navigation groups."""
 
-    def __init__(self, theme: ThemeEngine, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, theme: ThemeEngine, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._theme = theme
         self.setFixedHeight(1)
@@ -164,14 +171,14 @@ class SidebarWidget(QFrame):
     nav_clicked = pyqtSignal(int)
 
     # Group boundaries: separator inserted *before* these logical indices
-    _GROUP_BREAKS = {4, 7}  # before Devices, before Settings
+    _GROUP_BREAKS: ClassVar[set[int]] = {4, 7}  # before Devices, before Settings
 
-    def __init__(self, theme: ThemeEngine, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, theme: ThemeEngine, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._theme = theme
         self._expanded = True
-        self._items: List[SidebarItem] = []
-        self._separators: List[_SidebarSeparator] = []
+        self._items: list[SidebarItem] = []
+        self._separators: list[_SidebarSeparator] = []
 
         self.setFixedWidth(self.EXPANDED_WIDTH)
         self.setObjectName("Sidebar")

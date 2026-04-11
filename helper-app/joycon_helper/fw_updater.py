@@ -16,8 +16,9 @@ import json
 import logging
 import ssl
 import time
+from collections.abc import Callable
 from datetime import datetime
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any
 from urllib.request import Request, urlopen
 
 from .updater import RELEASES_URL
@@ -71,9 +72,9 @@ _RETRY_BACKOFF_BASE = 1.0  # seconds; doubles each retry
 # Version helpers
 # ---------------------------------------------------------------------------
 
-def _parse_version(tag: str) -> Tuple[int, ...]:
+def _parse_version(tag: str) -> tuple[int, ...]:
     tag = tag.strip().lstrip("v")
-    parts: List[int] = []
+    parts: list[int] = []
     for seg in tag.split("."):
         seg = seg.split("+")[0].split("-")[0]
         try:
@@ -87,21 +88,21 @@ def _parse_version(tag: str) -> Tuple[int, ...]:
 # GitHub Releases helpers
 # ---------------------------------------------------------------------------
 
-def _fetch_latest_release() -> Dict[str, Any]:
+def _fetch_latest_release() -> dict[str, Any]:
     req = Request(RELEASES_URL, headers={"Accept": "application/vnd.github+json"})
     ctx = ssl.create_default_context()
     with urlopen(req, timeout=_HTTP_TIMEOUT, context=ctx) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
-def _find_asset(release: Dict[str, Any], name: str) -> Optional[Dict[str, Any]]:
+def _find_asset(release: dict[str, Any], name: str) -> dict[str, Any] | None:
     for asset in release.get("assets", []):
         if asset.get("name", "") == name:
             return asset
     return None
 
 
-def _fetch_sha256sums(release: Dict[str, Any]) -> Dict[str, str]:
+def _fetch_sha256sums(release: dict[str, Any]) -> dict[str, str]:
     """Try to download a sha256sums.txt asset and return {filename: hash}."""
     asset = _find_asset(release, "sha256sums.txt")
     if not asset:
@@ -111,7 +112,7 @@ def _fetch_sha256sums(release: Dict[str, Any]) -> Dict[str, str]:
         ctx = ssl.create_default_context()
         with urlopen(req, timeout=_HTTP_TIMEOUT, context=ctx) as resp:
             text = resp.read().decode("utf-8")
-        result: Dict[str, str] = {}
+        result: dict[str, str] = {}
         for line in text.strip().splitlines():
             parts = line.split(None, 1)
             if len(parts) == 2:
@@ -124,9 +125,9 @@ def _fetch_sha256sums(release: Dict[str, Any]) -> Dict[str, str]:
 
 
 def check_firmware_updates(
-    current_s3: Optional[str] = None,
-    current_esp32: Optional[str] = None,
-) -> Optional[Dict[str, Any]]:
+    current_s3: str | None = None,
+    current_esp32: str | None = None,
+) -> dict[str, Any] | None:
     """Check GitHub for newer firmware binaries.
 
     Returns a dict with release metadata and per-board info,
@@ -165,7 +166,7 @@ def check_firmware_updates(
     # Extract release notes (Markdown body).
     release_notes = (release.get("body") or "").strip()
 
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "tag": tag,
         "version": tag.lstrip("v"),
         "boards": {},
@@ -213,15 +214,15 @@ def check_firmware_updates(
 def download_firmware(
     url: str,
     *,
-    progress_cb: Optional[Callable[[int, int], None]] = None,
-    expected_sha256: Optional[str] = None,
+    progress_cb: Callable[[int, int], None] | None = None,
+    expected_sha256: str | None = None,
     expected_size: int = 0,
 ) -> bytes:
     """Download a firmware binary with retry, SHA-256 verification, and size check.
 
     Raises ``RuntimeError`` on hash mismatch or persistent download failure.
     """
-    last_err: Optional[Exception] = None
+    last_err: Exception | None = None
     for attempt in range(1, _MAX_RETRIES + 1):
         try:
             log.info("Downloading firmware from %s (attempt %d/%d)", url, attempt, _MAX_RETRIES)
@@ -311,9 +312,9 @@ class FirmwareFlasher:
     def __init__(self, serial_client: Any) -> None:
         self._ser = serial_client
 
-    def get_version(self, board: str = BOARD_S3) -> Optional[str]:
+    def get_version(self, board: str = BOARD_S3) -> str | None:
         """Query firmware version from a board. Returns version string or None."""
-        cmd: Dict[str, Any] = {"cmd": "fw_version"}
+        cmd: dict[str, Any] = {"cmd": "fw_version"}
         if board == BOARD_ESP32:
             cmd["board"] = "esp32"
 
@@ -328,7 +329,7 @@ class FirmwareFlasher:
         board: str,
         firmware: bytes,
         *,
-        progress_cb: Optional[Callable[[int, int], None]] = None,
+        progress_cb: Callable[[int, int], None] | None = None,
     ) -> None:
         """Flash firmware to a board over serial.
 
@@ -338,7 +339,7 @@ class FirmwareFlasher:
         log.info("Starting OTA flash: board=%s size=%d", board, total)
 
         # 1. Begin
-        cmd_begin: Dict[str, Any] = {"cmd": "fw_update_begin", "size": total}
+        cmd_begin: dict[str, Any] = {"cmd": "fw_update_begin", "size": total}
         if board == BOARD_ESP32:
             cmd_begin["board"] = "esp32"
         self._ser.send_obj(cmd_begin)
@@ -357,7 +358,7 @@ class FirmwareFlasher:
 
                 last_err = ""
                 for attempt in range(1, _OTA_CHUNK_RETRIES + 1):
-                    cmd_data: Dict[str, Any] = {"cmd": "fw_update_data", "data": b64}
+                    cmd_data: dict[str, Any] = {"cmd": "fw_update_data", "data": b64}
                     if board == BOARD_ESP32:
                         cmd_data["board"] = "esp32"
                     self._ser.send_obj(cmd_data)
@@ -384,7 +385,7 @@ class FirmwareFlasher:
         except Exception:
             # Abort on any failure.
             try:
-                abort_cmd: Dict[str, Any] = {"cmd": "fw_update_abort"}
+                abort_cmd: dict[str, Any] = {"cmd": "fw_update_abort"}
                 if board == BOARD_ESP32:
                     abort_cmd["board"] = "esp32"
                 self._ser.send_obj(abort_cmd)
@@ -393,7 +394,7 @@ class FirmwareFlasher:
             raise
 
         # 3. Finalize
-        cmd_end: Dict[str, Any] = {"cmd": "fw_update_end"}
+        cmd_end: dict[str, Any] = {"cmd": "fw_update_end"}
         if board == BOARD_ESP32:
             cmd_end["board"] = "esp32"
         self._ser.send_obj(cmd_end)
@@ -405,7 +406,7 @@ class FirmwareFlasher:
 
         log.info("OTA flash complete for %s — device will reboot", board)
 
-    def _wait_response(self, expected_rsp: str, timeout: float = 10) -> Optional[Dict[str, Any]]:
+    def _wait_response(self, expected_rsp: str, timeout: float = 10) -> dict[str, Any] | None:
         """Drain RX queue looking for a JSON response matching expected_rsp."""
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
@@ -434,10 +435,10 @@ class FwUpdater:
 
     # -- version check (network only, serial optional) -------------------
 
-    def check_versions(self) -> Dict[str, Any]:
+    def check_versions(self) -> dict[str, Any]:
         """Return dict with *s3*, *esp32*, *update_available*, *latest* keys."""
-        s3_ver: Optional[str] = None
-        esp32_ver: Optional[str] = None
+        s3_ver: str | None = None
+        esp32_ver: str | None = None
 
         # Try to read current device versions via serial.
         if self._ser:
@@ -452,7 +453,7 @@ class FwUpdater:
             except Exception:
                 log.debug("Could not read ESP32 version", exc_info=True)
 
-        info: Dict[str, Any] = {
+        info: dict[str, Any] = {
             "s3": s3_ver or "—",
             "esp32": esp32_ver or "—",
             "update_available": False,
@@ -474,7 +475,7 @@ class FwUpdater:
     def do_update(
         self,
         *,
-        progress_cb: Optional[Callable[[str, int], None]] = None,
+        progress_cb: Callable[[str, int], None] | None = None,
     ) -> None:
         """Download latest firmware from GitHub and flash via OTA."""
         if not self._ser:
@@ -503,8 +504,8 @@ class FwUpdater:
                 progress_cb(f"Flashing {board}…", 0)
             flasher.flash(
                 board, app_data,
-                progress_cb=lambda done, tot: (
-                    progress_cb(f"Flashing {board}…", int(done * 100 / tot))
+                progress_cb=lambda done, tot, _b=board: (
+                    progress_cb(f"Flashing {_b}…", int(done * 100 / tot))
                     if progress_cb else None
                 ),
             )
@@ -518,7 +519,7 @@ class FwUpdater:
         path: str,
         *,
         board: str = BOARD_S3,
-        progress_cb: Optional[Callable[[str, int], None]] = None,
+        progress_cb: Callable[[str, int], None] | None = None,
     ) -> None:
         """Read a local firmware binary and flash via OTA."""
         if not self._ser:

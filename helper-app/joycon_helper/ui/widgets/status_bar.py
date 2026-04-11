@@ -1,8 +1,6 @@
 """Status bar widget with connection state, slot info, and mode indicators."""
 from __future__ import annotations
 
-from typing import Optional
-
 from PyQt6.QtWidgets import QLabel, QStatusBar, QWidget
 
 from ..theme import ThemeEngine
@@ -11,7 +9,7 @@ from ..theme import ThemeEngine
 class AppStatusBar(QStatusBar):
     """Application status bar showing connection, slot, battery, and mode info."""
 
-    def __init__(self, theme: ThemeEngine, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, theme: ThemeEngine, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._theme = theme
 

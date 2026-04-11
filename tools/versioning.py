@@ -3,10 +3,9 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict
-
+from typing import Any
 
 BASE_MAJOR = 0
 BASE_MINOR = 1
@@ -25,7 +24,7 @@ def _short_sha() -> str:
     return _git(["rev-parse", "--short", "HEAD"])
 
 
-def _source_record(*, next_commit: bool) -> Dict[str, Any]:
+def _source_record(*, next_commit: bool) -> dict[str, Any]:
     commit_count = _commit_count() + (1 if next_commit else 0)
     version = f"{BASE_MAJOR}.{BASE_MINOR}.{commit_count}"
     return {
@@ -37,11 +36,11 @@ def _source_record(*, next_commit: bool) -> Dict[str, Any]:
         "patch": commit_count,
         "commit_count": commit_count,
         "git_sha": _short_sha(),
-        "updated_at_utc": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
+        "updated_at_utc": datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
     }
 
 
-def _load_repo_version(path: Path) -> Dict[str, Any]:
+def _load_repo_version(path: Path) -> dict[str, Any]:
     obj = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(obj, dict):
         raise ValueError(f"repo version file is not a JSON object: {path}")
@@ -51,7 +50,7 @@ def _load_repo_version(path: Path) -> Dict[str, Any]:
     return obj
 
 
-def _build_values(repo_version: Dict[str, Any], run_number: int) -> Dict[str, str]:
+def _build_values(repo_version: dict[str, Any], run_number: int) -> dict[str, str]:
     major = int(repo_version["major"])
     minor = int(repo_version["minor"])
     patch = int(repo_version["patch"])
@@ -131,7 +130,7 @@ def _write_app_version(args: argparse.Namespace) -> int:
     """Write helper-app/joycon_helper/_version.py with the current version."""
     repo_version = _load_repo_version(Path(args.repo_version))
     version = str(repo_version["version"])
-    build_date = datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    build_date = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(

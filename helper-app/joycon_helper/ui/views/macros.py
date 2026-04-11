@@ -8,19 +8,32 @@ from __future__ import annotations
 import json
 import logging
 import time
-from typing import Any, Dict, List, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QComboBox, QDoubleSpinBox, QGroupBox, QHBoxLayout, QLabel,
-    QLineEdit, QListWidget, QListWidgetItem, QMessageBox,
-    QPushButton, QSpinBox, QStackedWidget, QTabWidget, QTextEdit, QVBoxLayout, QWidget,
+    QComboBox,
+    QDoubleSpinBox,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMessageBox,
+    QPushButton,
+    QSpinBox,
+    QStackedWidget,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
+from ...hid_keycodes import _KEYCODE_NAMES
 from ..theme import ThemeEngine
 from ..widgets.curve_preview import CurvePreviewWidget
-from ...hid_keycodes import _KEYCODE_NAMES
 
 if TYPE_CHECKING:
     from ..main_window import MainWindow
@@ -28,7 +41,7 @@ if TYPE_CHECKING:
 log = logging.getLogger("joycon_helper.ui.views.macros")
 
 # Reverse map: display name → keycode
-_NAME_TO_KEYCODE: Dict[str, int] = {v: k for k, v in _KEYCODE_NAMES.items()}
+_NAME_TO_KEYCODE: dict[str, int] = {v: k for k, v in _KEYCODE_NAMES.items()}
 
 
 class MacrosView(QWidget):
@@ -268,7 +281,7 @@ class MacrosView(QWidget):
         right.addLayout(rec_row)
 
         # Internal step data (list of dicts)
-        self._visual_steps: List[Dict[str, Any]] = []
+        self._visual_steps: list[dict[str, Any]] = []
 
         lay.addLayout(right, 2)
 
@@ -707,7 +720,7 @@ class MacrosView(QWidget):
     def _toggle_record(self, checked: bool) -> None:
         if checked:
             self._record_btn.setText("⏹ Stop Recording")
-            self._recording_steps: List[Dict[str, Any]] = []
+            self._recording_steps: list[dict[str, Any]] = []
             self._recording_start = None
         else:
             self._record_btn.setText("🔴 Record")
@@ -760,7 +773,7 @@ class MacrosView(QWidget):
         if not path:
             return
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 data = json.load(f)
         except Exception as e:
             QMessageBox.critical(self, "Import Failed", str(e))

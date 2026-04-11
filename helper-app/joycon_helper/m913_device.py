@@ -11,13 +11,14 @@ The mouse's own MCU handles everything — no software input injection.
 from __future__ import annotations
 
 import configparser
+import contextlib
 import json
 import logging
 import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 log = logging.getLogger("joycon_helper.m913")
 
@@ -50,7 +51,7 @@ CTRL_INDEX = 0x0001  # Interface 1
 # ---------------------------------------------------------------------------
 # Button names (physical → index)
 # ---------------------------------------------------------------------------
-BUTTON_NAMES: Dict[str, int] = {
+BUTTON_NAMES: dict[str, int] = {
     "side1": 0,
     "side2": 1,
     "side3": 2,
@@ -70,7 +71,7 @@ BUTTON_NAMES: Dict[str, int] = {
 }
 
 BUTTON_INDEX_TO_NAME = {v: k for k, v in BUTTON_NAMES.items()}
-BUTTON_DISPLAY_NAMES: Dict[str, str] = {
+BUTTON_DISPLAY_NAMES: dict[str, str] = {
     "side1": "Side 1",
     "side2": "Side 2",
     "side3": "Side 3",
@@ -93,9 +94,9 @@ BUTTON_DISPLAY_NAMES: Dict[str, str] = {
 # Layout modes — alternative display-name sets for physical mods.
 # The button indices / protocol bytes are identical; only UI labels change.
 # ---------------------------------------------------------------------------
-LAYOUT_MODES: List[str] = ["stock", "incedius"]
+LAYOUT_MODES: list[str] = ["stock", "incedius"]
 
-INCEDIUS_DISPLAY_NAMES: Dict[str, str] = {
+INCEDIUS_DISPLAY_NAMES: dict[str, str] = {
     "left": "Left Click",
     "right": "Right Click",
     "middle": "Middle Click",
@@ -114,7 +115,7 @@ INCEDIUS_DISPLAY_NAMES: Dict[str, str] = {
     "side12": "Side 12",
 }
 
-LAYOUT_DISPLAY_NAMES: Dict[str, Dict[str, str]] = {
+LAYOUT_DISPLAY_NAMES: dict[str, dict[str, str]] = {
     "stock": BUTTON_DISPLAY_NAMES,
     "incedius": INCEDIUS_DISPLAY_NAMES,
 }
@@ -132,7 +133,7 @@ INCEDIUS_LABEL_CHOICES = [
 ]
 
 # Default mapping: side button key → IncediusMod label.
-DEFAULT_INCEDIUS_MAP: Dict[str, str] = {
+DEFAULT_INCEDIUS_MAP: dict[str, str] = {
     k: INCEDIUS_DISPLAY_NAMES[k] for k in INCEDIUS_SIDE_KEYS
 }
 
@@ -146,7 +147,7 @@ BUTTON_ORDER = [
 # ---------------------------------------------------------------------------
 # Mouse / special actions (from m913-ctl data.cpp)
 # ---------------------------------------------------------------------------
-MOUSE_ACTIONS: Dict[str, bytes] = {
+MOUSE_ACTIONS: dict[str, bytes] = {
     "left":            bytes([0x01, 0x01, 0x00, 0x53]),
     "right":           bytes([0x01, 0x02, 0x00, 0x52]),
     "middle":          bytes([0x01, 0x04, 0x00, 0x50]),
@@ -186,13 +187,13 @@ MOUSE_ACTIONS: Dict[str, bytes] = {
 # ---------------------------------------------------------------------------
 # Modifier keys and HID keycodes (from m913-ctl data.cpp)
 # ---------------------------------------------------------------------------
-MODIFIER_BITS: Dict[str, int] = {
+MODIFIER_BITS: dict[str, int] = {
     "ctrl_l": 0x01, "shift_l": 0x02, "alt_l": 0x04, "super_l": 0x08,
     "ctrl_r": 0x10, "shift_r": 0x20, "alt_r": 0x40, "super_r": 0x80,
     "ctrl": 0x01, "shift": 0x02, "alt": 0x04, "super": 0x08, "meta": 0x08,
 }
 
-KEY_CODES: Dict[str, int] = {
+KEY_CODES: dict[str, int] = {
     # Letters
     "a": 0x04, "b": 0x05, "c": 0x06, "d": 0x07, "e": 0x08, "f": 0x09,
     "g": 0x0A, "h": 0x0B, "i": 0x0C, "j": 0x0D, "k": 0x0E, "l": 0x0F,
@@ -239,7 +240,7 @@ ALL_KEY_NAMES = sorted(k for k in KEY_CODES if not any(c in k for c in "\\;',./`
 # ---------------------------------------------------------------------------
 # DPI code table (DPI value → 3-byte encoding, from m913-ctl protocol.cpp)
 # ---------------------------------------------------------------------------
-DPI_TABLE: Dict[int, Tuple[int, int, int]] = {
+DPI_TABLE: dict[int, tuple[int, int, int]] = {
     100: (0x00, 0x00, 0x55), 200: (0x02, 0x02, 0x51),
     300: (0x03, 0x03, 0x4F), 400: (0x04, 0x04, 0x4D),
     500: (0x05, 0x05, 0x4B), 600: (0x06, 0x06, 0x49),
@@ -291,7 +292,7 @@ def clamp_dpi(dpi: int) -> int:
 # ---------------------------------------------------------------------------
 
 # Default button-mapping packets (8 × 17 bytes, two buttons per packet)
-_DEFAULT_BUTTON_MAPPING: List[bytes] = [
+_DEFAULT_BUTTON_MAPPING: list[bytes] = [
     bytes([0x08,0x07,0x00,0x00,0x60,0x08, 0x00,0x00,0x00,0x55, 0x05,0x00,0x00,0x50, 0x00,0x00,0x34]),
     bytes([0x08,0x07,0x00,0x00,0x68,0x08, 0x05,0x00,0x00,0x50, 0x01,0x08,0x00,0x4C, 0x00,0x00,0x2C]),
     bytes([0x08,0x07,0x00,0x00,0x70,0x08, 0x05,0x00,0x00,0x50, 0x05,0x00,0x00,0x50, 0x00,0x00,0x24]),
@@ -303,7 +304,7 @@ _DEFAULT_BUTTON_MAPPING: List[bytes] = [
 ]
 
 # Per-button keyboard-key sub-packet address bytes
-_KB_KEY_ADDR: List[Tuple[int, int]] = [
+_KB_KEY_ADDR: list[tuple[int, int]] = [
     (0x01, 0x00), (0x01, 0x20), (0x01, 0x40), (0x01, 0x60),
     (0x01, 0x80), (0x01, 0xA0), (0x01, 0xC0), (0x01, 0xE0),
     (0x02, 0x00), (0x02, 0x20), (0x02, 0x40), (0x02, 0x60),
@@ -321,7 +322,7 @@ _KB_KEY_TEMPLATE = bytes([
 _KB_KEY_ACTION = bytes([0x05, 0x00, 0x00, 0x50])
 
 # DPI config packet templates (4 packets)
-_DPI_TEMPLATE: List[bytes] = [
+_DPI_TEMPLATE: list[bytes] = [
     bytes([0x08,0x07,0x00,0x00,0x0C,0x08, 0x00,0x00,0x00,0x55, 0x02,0x02,0x00,0x51, 0x00,0x00,0x88]),
     bytes([0x08,0x07,0x00,0x00,0x14,0x08, 0x03,0x03,0x00,0x4F, 0x04,0x04,0x00,0x4D, 0x00,0x00,0x80]),
     bytes([0x08,0x07,0x00,0x00,0x1C,0x04, 0x05,0x05,0x00,0x4B, 0x00,0x00,0x00,0x00, 0x00,0x00,0xD1]),
@@ -329,7 +330,7 @@ _DPI_TEMPLATE: List[bytes] = [
 ]
 
 # "Unknown_2" packets sent after DPI config (required)
-_UNKNOWN2: List[bytes] = [
+_UNKNOWN2: list[bytes] = [
     bytes([0x08,0x07,0x00,0x00,0x2C,0x08, 0xFF,0x00,0x00,0x56, 0x00,0x00,0xFF,0x56, 0x00,0x00,0x68]),
     bytes([0x08,0x07,0x00,0x00,0x34,0x08, 0x00,0xFF,0x00,0x56, 0xFF,0xFF,0x00,0x57, 0x00,0x00,0x60]),
     bytes([0x08,0x07,0x00,0x00,0x3C,0x04, 0xFF,0x55,0x7D,0x84, 0x00,0x00,0x00,0x00, 0x00,0x00,0xB1]),
@@ -338,12 +339,12 @@ _UNKNOWN2: List[bytes] = [
 # LED templates
 _LED_OFF = bytes([0x08,0x07,0x00,0x00,0x58,0x02, 0x00,0x55,0x00,0x00, 0x00,0x00,0x00,0x00, 0x00,0x00,0x97])
 
-_LED_BREATHING: List[bytes] = [
+_LED_BREATHING: list[bytes] = [
     bytes([0x08,0x07,0x00,0x00,0x54,0x08, 0xFF,0x00,0x00,0x57, 0x01,0x54,0xFF,0x56, 0x00,0x00,0xEB]),
     bytes([0x08,0x07,0x00,0x00,0x5C,0x02, 0x03,0x52,0x00,0x00, 0x00,0x00,0x00,0x00, 0x00,0x00,0x93]),
 ]
 
-_LED_RAINBOW: List[bytes] = [
+_LED_RAINBOW: list[bytes] = [
     bytes([0x08,0x07,0x00,0x00,0x54,0x08, 0xFF,0x00,0xFF,0x57, 0x03,0x52,0x80,0xD5, 0x00,0x00,0xEB]),
     bytes([0x08,0x07,0x00,0x00,0x5C,0x02, 0x03,0x52,0x00,0x00, 0x00,0x00,0x00,0x00, 0x00,0x00,0x93]),
 ]
@@ -360,7 +361,7 @@ MACRO_EVENT_DOWN = 0x81      # Key press event marker
 MACRO_EVENT_UP = 0x41        # Key release event marker
 
 # Macro button action marker: macro1–macro15
-MACRO_ACTIONS: Dict[str, bytes] = {}
+MACRO_ACTIONS: dict[str, bytes] = {}
 for _mi in range(1, MACRO_SLOT_COUNT + 1):
     _cksum = (0x55 - (0x93 + _mi)) & 0xFF
     MACRO_ACTIONS[f"macro{_mi}"] = bytes([0x93, _mi, 0x00, _cksum])
@@ -390,7 +391,7 @@ def _packet(src: bytes) -> bytearray:
 # Action parsing  (action string → 4-byte action code)
 # ===================================================================
 
-def parse_action(action_str: str) -> Optional[bytes]:
+def parse_action(action_str: str) -> bytes | None:
     """Parse an action string into 4-byte action code.
 
     Supports:
@@ -429,7 +430,7 @@ def parse_action(action_str: str) -> Optional[bytes]:
         return None
 
     mods = 0
-    keys: List[int] = []
+    keys: list[int] = []
     for part in parts:
         if part in MODIFIER_BITS:
             mods |= MODIFIER_BITS[part]
@@ -449,11 +450,11 @@ def parse_action(action_str: str) -> Optional[bytes]:
     return None
 
 
-def _parse_multikey(action_str: str) -> Optional[Tuple[int, List[int]]]:
+def _parse_multikey(action_str: str) -> tuple[int, list[int]] | None:
     """Parse a multi-key combo into (modifier_byte, [scancode, ...])."""
     parts = [p.strip().lower() for p in action_str.split("+") if p.strip()]
     mods = 0
-    keys: List[int] = []
+    keys: list[int] = []
     for part in parts:
         if part in MODIFIER_BITS:
             mods |= MODIFIER_BITS[part]
@@ -468,9 +469,9 @@ def _parse_multikey(action_str: str) -> Optional[Tuple[int, List[int]]]:
 # Packet builders (ported from m913-ctl protocol.cpp)
 # ===================================================================
 
-def build_button_mapping(changes: Dict[int, bytes],
-                         multikey_actions: Optional[Dict[int, str]] = None
-                         ) -> List[bytearray]:
+def build_button_mapping(changes: dict[int, bytes],
+                         multikey_actions: dict[int, str] | None = None
+                         ) -> list[bytearray]:
     """Build the complete button-mapping packet sequence.
 
     ``changes``: button_index → 4-byte action bytes.
@@ -479,7 +480,7 @@ def build_button_mapping(changes: Dict[int, bytes],
     the 8 mapping packets).
     """
     buf = [_packet(t) for t in _DEFAULT_BUTTON_MAPPING]
-    result: List[bytearray] = []
+    result: list[bytearray] = []
 
     for btn_idx, ab in changes.items():
         if btn_idx >= 16:
@@ -516,14 +517,13 @@ def build_button_mapping(changes: Dict[int, bytes],
                 key_count = ab[3]
 
                 # Collect all keys
-                keys: List[int] = []
+                keys: list[int] = []
                 if key_count > 1 and multikey_actions and btn_idx in multikey_actions:
                     parsed = _parse_multikey(multikey_actions[btn_idx])
                     if parsed and len(parsed[1]) >= 2:
                         mods_byte, keys = parsed[0], parsed[1]
-                if not keys:
-                    if scancode != 0:
-                        keys = [scancode]
+                if not keys and scancode != 0:
+                    keys = [scancode]
 
                 if mods_byte != 0 and not keys:
                     # Modifier-only
@@ -553,7 +553,7 @@ def build_button_mapping(changes: Dict[int, bytes],
                 else:
                     # Modifier+key / multi-key
                     MOD_BITS_ORDER = [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80]
-                    evts: List[int] = []
+                    evts: list[int] = []
                     for b in MOD_BITS_ORDER:
                         if mods_byte & b:
                             evts.extend([0x80, b, 0x00])
@@ -620,8 +620,8 @@ def build_button_mapping(changes: Dict[int, bytes],
     return result
 
 
-def build_dpi_packets(values: List[int],
-                      enabled: Optional[List[bool]] = None) -> List[bytearray]:
+def build_dpi_packets(values: list[int],
+                      enabled: list[bool] | None = None) -> list[bytearray]:
     """Build DPI config packets (4 + 3 unknown2 = 7 total).
 
     ``values``: list of 5 DPI values (use 0 to keep template default).
@@ -669,7 +669,7 @@ def build_dpi_packets(values: List[int],
     for p in buf:
         p[16] = compute_checksum(p)
 
-    result: List[bytearray] = list(buf)
+    result: list[bytearray] = list(buf)
     for u in _UNKNOWN2:
         result.append(_packet(u))
     return result
@@ -677,7 +677,7 @@ def build_dpi_packets(values: List[int],
 
 def build_led_packets(mode: str, color: int = 0x00FF00,
                       brightness: int = 0xFF,
-                      speed: int = 3) -> List[bytearray]:
+                      speed: int = 3) -> list[bytearray]:
     """Build LED config packets.
 
     ``mode``: "off", "steady", "respiration", "rainbow", "wave",
@@ -854,22 +854,22 @@ def build_polling_rate_packet(hz: int) -> bytearray:
 @dataclass
 class MacroSlot:
     """One hardware macro: a list of key events."""
-    events: List[Tuple[int, int]] = field(default_factory=list)
+    events: list[tuple[int, int]] = field(default_factory=list)
     # Each event is (event_type, scancode)
     # event_type: MACRO_EVENT_DOWN (0x81) or MACRO_EVENT_UP (0x41)
 
-    def to_list(self) -> List[List[int]]:
+    def to_list(self) -> list[list[int]]:
         return [[t, s] for t, s in self.events]
 
     @classmethod
-    def from_list(cls, data: List[List[int]]) -> "MacroSlot":
+    def from_list(cls, data: list[list[int]]) -> MacroSlot:
         return cls(events=[(e[0], e[1]) for e in data if len(e) == 2])
 
     def is_empty(self) -> bool:
         return len(self.events) == 0
 
 
-def build_macro_packets(slot_num: int, macro: MacroSlot) -> List[bytearray]:
+def build_macro_packets(slot_num: int, macro: MacroSlot) -> list[bytearray]:
     """Build packets to write one macro slot to the device.
 
     ``slot_num``: 1-based macro slot number (1–15).
@@ -893,12 +893,12 @@ def build_macro_packets(slot_num: int, macro: MacroSlot) -> List[bytearray]:
     addr_lo = base_addr & 0xFF
 
     # Pack all events into a byte stream
-    event_bytes: List[int] = []
+    event_bytes: list[int] = []
     for evt_type, scancode in events:
         event_bytes.extend([evt_type, scancode, 0x00])
 
     # Header packet: tells the device how many events
-    result: List[bytearray] = []
+    result: list[bytearray] = []
     hdr = bytearray(PACKET_SIZE)
     hdr[0] = 0x08
     hdr[1] = 0x07
@@ -964,15 +964,15 @@ class M913DeviceInfo:
 class M913Profile:
     """A complete M913 configuration (ready to apply to a device)."""
     name: str = "Default"
-    buttons: Dict[str, str] = field(default_factory=lambda: {
+    buttons: dict[str, str] = field(default_factory=lambda: {
         "left": "left", "right": "right", "middle": "middle",
         "fire": "fire", "side1": "none", "side2": "none",
         "side3": "none", "side4": "none", "side5": "none", "side6": "none",
         "side7": "none", "side8": "none", "side9": "none", "side10": "none",
         "side11": "none", "side12": "none",
     })
-    dpi_values: List[int] = field(default_factory=lambda: [800, 1600, 3200, 6400, 16000])
-    dpi_enabled: List[bool] = field(default_factory=lambda: [True, True, True, True, True])
+    dpi_values: list[int] = field(default_factory=lambda: [800, 1600, 3200, 6400, 16000])
+    dpi_enabled: list[bool] = field(default_factory=lambda: [True, True, True, True, True])
     led_mode: str = "steady"     # off, steady, respiration, rainbow
     led_color: int = 0x00FF00    # 24-bit RGB
     led_brightness: int = 255
@@ -980,10 +980,10 @@ class M913Profile:
     polling_rate: int = 1000     # 125, 250, 500, 1000
 
     # Hardware macros: slot_num (1–15) → MacroSlot
-    macros: Dict[int, MacroSlot] = field(default_factory=dict)
+    macros: dict[int, MacroSlot] = field(default_factory=dict)
 
     # Sister profile linking: which Joy-Con slot this should auto-apply with
-    sister_slot: Optional[int] = None  # 1–4, or None
+    sister_slot: int | None = None  # 1–4, or None
 
     # Layout mode: "stock" (default M913) or "incedius" (IncediusMod)
     layout: str = "stock"
@@ -992,12 +992,12 @@ class M913Profile:
     # Users physically rewire the M913, so the button IDs may not match
     # the default Incedius mapping.  This lets each user match the UI to
     # their specific wiring.
-    incedius_map: Dict[str, str] = field(
+    incedius_map: dict[str, str] = field(
         default_factory=lambda: dict(DEFAULT_INCEDIUS_MAP)
     )
 
     def to_dict(self) -> dict:
-        macros_out: Dict[str, Any] = {}
+        macros_out: dict[str, Any] = {}
         for slot_num, ms in self.macros.items():
             if not ms.is_empty():
                 macros_out[str(slot_num)] = ms.to_list()
@@ -1023,7 +1023,7 @@ class M913Profile:
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> "M913Profile":
+    def from_dict(cls, d: dict) -> M913Profile:
         p = cls()
         p.name = d.get("name", "Default")
         p.buttons = d.get("buttons", p.buttons)
@@ -1050,10 +1050,10 @@ class M913Profile:
                         p.macros[slot_num] = MacroSlot.from_list(v)
                 except (ValueError, TypeError):
                     pass
-        p.sister_slot = d.get("sister_slot", None)
+        p.sister_slot = d.get("sister_slot")
         layout = d.get("layout", "stock")
         p.layout = layout if layout in LAYOUT_MODES else "stock"
-        raw_map = d.get("incedius_map", None)
+        raw_map = d.get("incedius_map")
         if isinstance(raw_map, dict):
             merged = dict(DEFAULT_INCEDIUS_MAP)
             for k, v in raw_map.items():
@@ -1070,8 +1070,8 @@ class M913Profile:
         log.info("Saved M913 profile '%s' → %s", self.name, path)
 
     @classmethod
-    def load(cls, path: str) -> "M913Profile":
-        with open(path, "r", encoding="utf-8") as f:
+    def load(cls, path: str) -> M913Profile:
+        with open(path, encoding="utf-8") as f:
             return cls.from_dict(json.load(f))
 
 
@@ -1084,20 +1084,20 @@ class M913Device:
 
     def __init__(self) -> None:
         self._dev: Any = None
-        self._info: Optional[M913DeviceInfo] = None
+        self._info: M913DeviceInfo | None = None
 
     @property
     def is_open(self) -> bool:
         return self._dev is not None
 
     @property
-    def info(self) -> Optional[M913DeviceInfo]:
+    def info(self) -> M913DeviceInfo | None:
         return self._info
 
     # ── Enumeration ──────────────────────────────────────────────
 
     @staticmethod
-    def enumerate() -> List[M913DeviceInfo]:
+    def enumerate() -> list[M913DeviceInfo]:
         """Find all connected M913 devices.
 
         Returns one entry per physical device (filtered to interface 1,
@@ -1106,7 +1106,7 @@ class M913Device:
         if not HID_AVAILABLE:
             return []
 
-        results: List[M913DeviceInfo] = []
+        results: list[M913DeviceInfo] = []
         for pid in M913_PIDS:
             try:
                 devs = _hid.enumerate(M913_VID, pid)
@@ -1147,10 +1147,8 @@ class M913Device:
 
     def close(self) -> None:
         if self._dev is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._dev.close()
-            except Exception:
-                pass
             self._dev = None
             self._info = None
 
@@ -1167,7 +1165,7 @@ class M913Device:
             log.error("M913 HID write failed: %s", e)
             raise RuntimeError(f"M913 USB write failed (device disconnected?): {e}") from e
 
-    def recv_packet(self, timeout_ms: int = 2000) -> Optional[bytes]:
+    def recv_packet(self, timeout_ms: int = 2000) -> bytes | None:
         """Read a 17-byte response from the interrupt endpoint."""
         if self._dev is None:
             raise RuntimeError("Device not open")
@@ -1176,14 +1174,14 @@ class M913Device:
             return bytes(data)
         return None
 
-    def send_recv(self, packet: bytearray) -> Optional[bytes]:
+    def send_recv(self, packet: bytearray) -> bytes | None:
         """Send a packet and read back the ACK response."""
         self.send_packet(packet)
         return self.recv_packet()
 
     # ── High-level apply methods ─────────────────────────────────
 
-    def apply_profile(self, profile: M913Profile) -> Tuple[int, int]:
+    def apply_profile(self, profile: M913Profile) -> tuple[int, int]:
         """Apply a full profile to the device. Returns (sent, errors)."""
         sent = 0
         errors = 0
@@ -1238,10 +1236,10 @@ class M913Device:
                  profile.name, sent, errors)
         return sent, errors
 
-    def apply_buttons(self, buttons: Dict[str, str]) -> Tuple[int, int]:
+    def apply_buttons(self, buttons: dict[str, str]) -> tuple[int, int]:
         """Apply button mappings. Returns (sent, errors)."""
-        changes: Dict[int, bytes] = {}
-        multikey: Dict[int, str] = {}
+        changes: dict[int, bytes] = {}
+        multikey: dict[int, str] = {}
         for name, action_str in buttons.items():
             idx = BUTTON_NAMES.get(name)
             if idx is None:
@@ -1258,24 +1256,24 @@ class M913Device:
         packets = build_button_mapping(changes, multikey)
         return self._send_packets(packets)
 
-    def apply_dpi(self, values: List[int],
-                  enabled: Optional[List[bool]] = None) -> Tuple[int, int]:
+    def apply_dpi(self, values: list[int],
+                  enabled: list[bool] | None = None) -> tuple[int, int]:
         """Apply DPI configuration. Returns (sent, errors)."""
         packets = build_dpi_packets(values, enabled)
         return self._send_packets(packets)
 
     def apply_led(self, mode: str, color: int = 0x00FF00,
-                  brightness: int = 0xFF, speed: int = 3) -> Tuple[int, int]:
+                  brightness: int = 0xFF, speed: int = 3) -> tuple[int, int]:
         """Apply LED configuration. Returns (sent, errors)."""
         packets = build_led_packets(mode, color, brightness, speed)
         return self._send_packets(packets)
 
-    def apply_polling_rate(self, hz: int) -> Tuple[int, int]:
+    def apply_polling_rate(self, hz: int) -> tuple[int, int]:
         """Apply polling rate. Returns (sent, errors)."""
         pkt = build_polling_rate_packet(hz)
         return self._send_packets([pkt])
 
-    def apply_macros(self, macros: Dict[int, MacroSlot]) -> Tuple[int, int]:
+    def apply_macros(self, macros: dict[int, MacroSlot]) -> tuple[int, int]:
         """Apply hardware macros. Returns (sent, errors)."""
         sent = 0
         errors = 0
@@ -1288,8 +1286,8 @@ class M913Device:
             errors += e
         return sent, errors
 
-    def _send_packets(self, packets: List[bytearray],
-                      retries: int = 2) -> Tuple[int, int]:
+    def _send_packets(self, packets: list[bytearray],
+                      retries: int = 2) -> tuple[int, int]:
         """Send a sequence of packets with retry and ACK verification.
 
         Each packet is retried up to ``retries`` times on failure.
@@ -1338,7 +1336,7 @@ def get_profiles_dir() -> Path:
     return d
 
 
-def list_saved_profiles() -> List[str]:
+def list_saved_profiles() -> list[str]:
     """List saved M913 profile names (without extension)."""
     d = get_profiles_dir()
     return sorted(p.stem for p in d.glob("*.json"))
@@ -1373,19 +1371,19 @@ def _registry_path() -> Path:
     return get_profiles_dir() / "_devices.json"
 
 
-def load_device_registry() -> Dict[str, dict]:
+def load_device_registry() -> dict[str, dict]:
     """Load saved device→profile associations."""
     p = _registry_path()
     if p.exists():
         try:
-            with open(p, "r", encoding="utf-8") as f:
+            with open(p, encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             pass
     return {}
 
 
-def save_device_registry(registry: Dict[str, dict]) -> None:
+def save_device_registry(registry: dict[str, dict]) -> None:
     """Save device→profile associations."""
     p = _registry_path()
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -1399,7 +1397,7 @@ def save_device_registry(registry: Dict[str, dict]) -> None:
 # ===================================================================
 
 # Reverse lookup: 4-byte action → action name
-_ACTION_BYTES_TO_NAME: Dict[bytes, str] = {v: k for k, v in MOUSE_ACTIONS.items()}
+_ACTION_BYTES_TO_NAME: dict[bytes, str] = {v: k for k, v in MOUSE_ACTIONS.items()}
 
 
 def export_ini(profile: M913Profile, path: str) -> None:
@@ -1501,20 +1499,14 @@ def import_ini(path: str) -> M913Profile:
     # LED
     p.led_mode = cp.get(section, "led_mode", fallback=p.led_mode)
     if cp.has_option(section, "led_color"):
-        try:
+        with contextlib.suppress(ValueError):
             p.led_color = int(cp.get(section, "led_color").strip(), 16)
-        except ValueError:
-            pass
     if cp.has_option(section, "led_brightness"):
-        try:
+        with contextlib.suppress(ValueError):
             p.led_brightness = max(0, min(255, int(cp.get(section, "led_brightness"))))
-        except ValueError:
-            pass
     if cp.has_option(section, "led_speed"):
-        try:
+        with contextlib.suppress(ValueError):
             p.led_speed = max(1, min(5, int(cp.get(section, "led_speed"))))
-        except ValueError:
-            pass
 
     # Polling
     if cp.has_option(section, "polling_rate"):

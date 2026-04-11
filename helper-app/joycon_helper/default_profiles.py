@@ -18,7 +18,7 @@ Button names must match the hotspot IDs in ``ui/constants.py``
 from __future__ import annotations
 
 import copy
-from typing import Any, Dict, List
+from typing import Any
 
 # --- HID modifier bits (same as hid_keycodes.py) -------------------------
 _LCTRL = 0x01
@@ -59,14 +59,14 @@ _UP = 0x52
 _RIGHT = 0x4F
 
 # Helpers
-def _k(keycode: int, modifier: int = 0) -> Dict[str, int]:
+def _k(keycode: int, modifier: int = 0) -> dict[str, int]:
     return {"keycode": keycode, "modifier": modifier}
 
-def _mod(modifier: int) -> Dict[str, int]:
+def _mod(modifier: int) -> dict[str, int]:
     return {"keycode": 0, "modifier": modifier}
 
 
-def _stick_defaults() -> Dict[str, Any]:
+def _stick_defaults() -> dict[str, Any]:
     return {
         "deadzone_inner": 0.05,
         "deadzone_outer": 1.0,
@@ -78,7 +78,7 @@ def _stick_defaults() -> Dict[str, Any]:
 # =====================================================================
 # Slot 0 — General / All-Purpose
 # =====================================================================
-_SLOT_0: Dict[str, Any] = {
+_SLOT_0: dict[str, Any] = {
     "name": "General",
     "mappings": {
         # Left stick: WASD
@@ -127,7 +127,7 @@ _SLOT_0: Dict[str, Any] = {
 # =====================================================================
 # Slot 1 — FPS / Shooter
 # =====================================================================
-_SLOT_1: Dict[str, Any] = {
+_SLOT_1: dict[str, Any] = {
     "name": "FPS / Shooter",
     "mappings": {
         # Left stick: WASD movement
@@ -176,7 +176,7 @@ _SLOT_1: Dict[str, Any] = {
 # =====================================================================
 # Slot 2 — Platformer / Action
 # =====================================================================
-_SLOT_2: Dict[str, Any] = {
+_SLOT_2: dict[str, Any] = {
     "name": "Platformer / Action",
     "mappings": {
         # Left stick: WASD
@@ -225,7 +225,7 @@ _SLOT_2: Dict[str, Any] = {
 # =====================================================================
 # Slot 3 — Racing / Driving
 # =====================================================================
-_SLOT_3: Dict[str, Any] = {
+_SLOT_3: dict[str, Any] = {
     "name": "Racing / Driving",
     "mappings": {
         # Triggers: throttle / brake
@@ -277,10 +277,10 @@ _SLOT_3: Dict[str, Any] = {
 # Public API
 # =====================================================================
 
-BUILT_IN_PROFILES: List[Dict[str, Any]] = [_SLOT_0, _SLOT_1, _SLOT_2, _SLOT_3]
+BUILT_IN_PROFILES: list[dict[str, Any]] = [_SLOT_0, _SLOT_1, _SLOT_2, _SLOT_3]
 
 
-def get_default_profile(slot: int = 0) -> Dict[str, Any]:
+def get_default_profile(slot: int = 0) -> dict[str, Any]:
     """Return a deep copy of the built-in profile for *slot* (0-3)."""
     idx = max(0, min(slot, len(BUILT_IN_PROFILES) - 1))
     return copy.deepcopy(BUILT_IN_PROFILES[idx])

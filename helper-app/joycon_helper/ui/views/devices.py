@@ -7,16 +7,33 @@ Tkinter app.py M913 and Razer tabs.
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, List, TYPE_CHECKING
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
 from PyQt6.QtCore import QObject, QSize, Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtWidgets import (
-    QButtonGroup, QCheckBox, QColorDialog, QComboBox, QDialog,
-    QFileDialog, QGroupBox, QHBoxLayout,
-    QInputDialog, QLabel, QLineEdit,
-    QMessageBox, QPlainTextEdit, QPushButton, QRadioButton, QScrollArea,
-    QSlider, QSpinBox, QTabWidget, QVBoxLayout, QWidget,
+    QButtonGroup,
+    QCheckBox,
+    QColorDialog,
+    QComboBox,
+    QDialog,
+    QFileDialog,
+    QGroupBox,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPlainTextEdit,
+    QPushButton,
+    QRadioButton,
+    QScrollArea,
+    QSlider,
+    QSpinBox,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
 )
 
 from ..theme import ThemeEngine
@@ -213,8 +230,8 @@ class DevicesView(QWidget):
         # DPI settings (5 stages with enable checkboxes)
         dpi_group = QGroupBox("DPI Settings (5 stages)")
         dpi_lay = QVBoxLayout(dpi_group)
-        self._m913_dpi_spins: List[QSpinBox] = []
-        self._m913_dpi_checks: List[QCheckBox] = []
+        self._m913_dpi_spins: list[QSpinBox] = []
+        self._m913_dpi_checks: list[QCheckBox] = []
         defaults = [800, 1600, 3200, 6400, 16000]
         for i in range(5):
             row = QHBoxLayout()
@@ -416,8 +433,8 @@ class DevicesView(QWidget):
         # DPI stages (5, X/Y independent)
         dpi_group = QGroupBox("DPI Stages (5 levels)")
         dpi_lay = QVBoxLayout(dpi_group)
-        self._razer_dpi_x_spins: List[QSpinBox] = []
-        self._razer_dpi_y_spins: List[QSpinBox] = []
+        self._razer_dpi_x_spins: list[QSpinBox] = []
+        self._razer_dpi_y_spins: list[QSpinBox] = []
         self._razer_dpi_active_group = QButtonGroup(self)
         for i in range(5):
             row = QHBoxLayout()

@@ -7,7 +7,7 @@ and emits typed signals on the main thread.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, Optional
+from typing import Any
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
 
@@ -26,7 +26,7 @@ class SerialBridge(QObject):
     device_event = pyqtSignal(dict)
     connection_error = pyqtSignal(str)
 
-    def __init__(self, parent: Optional[QObject] = None) -> None:
+    def __init__(self, parent: QObject | None = None) -> None:
         super().__init__(parent)
         self.client = SerialClient()
         self._drain_timer = QTimer(self)
@@ -53,7 +53,7 @@ class SerialBridge(QObject):
         self.disconnected.emit()
         log.info("Serial disconnected")
 
-    def send_cmd(self, obj: Dict[str, Any]) -> None:
+    def send_cmd(self, obj: dict[str, Any]) -> None:
         if not self.is_connected:
             log.warning("send_cmd called while disconnected")
             return

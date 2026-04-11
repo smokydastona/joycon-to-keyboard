@@ -7,21 +7,32 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Dict, List, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QCheckBox, QComboBox, QFileDialog,
-    QGridLayout, QGroupBox, QHBoxLayout, QInputDialog,
-    QLabel, QLineEdit, QMessageBox,
-    QPushButton, QTableWidget, QTableWidgetItem, QTextEdit,
-    QVBoxLayout, QWidget,
+    QCheckBox,
+    QComboBox,
+    QFileDialog,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QTableWidget,
+    QTableWidgetItem,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
 )
 
+from ...app_switcher import _get_foreground_exe, save_rules
+from ...default_profiles import BUILT_IN_PROFILES, get_default_profile
 from ..theme import ThemeEngine
-from ...app_switcher import save_rules, _get_foreground_exe
-from ...default_profiles import get_default_profile, BUILT_IN_PROFILES
 
 if TYPE_CHECKING:
     from ..main_window import MainWindow
@@ -100,7 +111,7 @@ class ProfilesView(QWidget):
         slot_group = QGroupBox("Device Slots")
         slot_lay = QVBoxLayout(slot_group)
 
-        self._slot_cards: List[QPushButton] = []
+        self._slot_cards: list[QPushButton] = []
         for i in range(4):
             builtin = BUILT_IN_PROFILES[i]
             label = builtin.get("name", f"(slot {i})")
@@ -295,7 +306,7 @@ class ProfilesView(QWidget):
         # Tag chips
         tag_group = QGroupBox("Tags")
         tag_lay = QHBoxLayout(tag_group)
-        self._tag_checks: Dict[str, QCheckBox] = {}
+        self._tag_checks: dict[str, QCheckBox] = {}
         for tag in PROFILE_TAGS:
             cb = QCheckBox(tag)
             cb.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -309,7 +320,7 @@ class ProfilesView(QWidget):
         preview_lay = QVBoxLayout(preview_group)
         self._preview_grid = QGridLayout()
         self._preview_grid.setSpacing(4)
-        self._preview_labels: Dict[str, QLabel] = {}
+        self._preview_labels: dict[str, QLabel] = {}
         # Populate a 6-col grid of the common buttons
         common_buttons = [
             "A", "B", "X", "Y", "L", "R",
@@ -424,7 +435,7 @@ class ProfilesView(QWidget):
         if not path:
             return
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 data = json.load(f)
         except Exception as e:
             QMessageBox.critical(self, "Load Failed", str(e))
@@ -670,7 +681,7 @@ class ProfilesView(QWidget):
     def _on_search_changed(self, text: str) -> None:
         """Filter slot card visibility based on search text."""
         query = text.strip().lower()
-        for i, btn in enumerate(self._slot_cards):
+        for _i, btn in enumerate(self._slot_cards):
             label = btn.text().lower()
             btn.setVisible(not query or query in label)
 

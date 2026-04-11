@@ -6,9 +6,9 @@ Enhanced with bubble-style glow effects and customisable placement.
 """
 from __future__ import annotations
 
-from typing import Optional, Set
+from typing import ClassVar
 
-from PyQt6.QtCore import QPoint, QRect, QSettings, QTimer, Qt, QPropertyAnimation, QEasingCurve
+from PyQt6.QtCore import QEasingCurve, QPoint, QPropertyAnimation, QRect, QSettings, Qt, QTimer
 from PyQt6.QtGui import QAction, QColor, QFont, QPainter
 from PyQt6.QtWidgets import QApplication, QGraphicsDropShadowEffect, QMenu, QWidget
 
@@ -31,12 +31,12 @@ class OverlayWindow(QWidget):
     """Semi-transparent always-on-top key-state overlay."""
 
     # Opacity presets available from the context menu
-    _OPACITY_PRESETS = [0.3, 0.5, 0.7, 1.0]
+    _OPACITY_PRESETS: ClassVar[list[float]] = [0.3, 0.5, 0.7, 1.0]
 
-    def __init__(self, theme: ThemeEngine, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, theme: ThemeEngine, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._theme = theme
-        self._active_keys: Set[str] = set()
+        self._active_keys: set[str] = set()
         self._slot_text = "Slot: —"
         self._profile_name = ""
         self._layer_text = ""
@@ -68,7 +68,7 @@ class OverlayWindow(QWidget):
             self.move(self._clamp_to_screen(saved_pos))
 
         # Drag support
-        self._drag_pos: Optional[QPoint] = None
+        self._drag_pos: QPoint | None = None
 
         # Glow/bubble shadow effect
         self._glow = QGraphicsDropShadowEffect(self)

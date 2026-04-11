@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import queue
@@ -7,7 +8,7 @@ import struct
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import serial
 
@@ -51,17 +52,17 @@ def _crc16_ccitt(data: bytes, init: int = 0xFFFF) -> int:
 @dataclass
 class SerialLine:
     raw: str
-    parsed: Optional[dict[str, Any]]
+    parsed: dict[str, Any] | None
 
 
 class SerialClient:
     def __init__(self) -> None:
-        self._ser: Optional[serial.Serial] = None
-        self._rx_thread: Optional[threading.Thread] = None
+        self._ser: serial.Serial | None = None
+        self._rx_thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._connection_lost = threading.Event()
         # Bounded queue: drop oldest events if the consumer can't keep up.
-        self.rx: "queue.Queue[SerialLine]" = queue.Queue(maxsize=512)
+        self.rx: queue.Queue[SerialLine] = queue.Queue(maxsize=512)
 
     @property
     def is_connected(self) -> bool:
@@ -479,14 +480,10 @@ class SerialClient:
                         self.rx.put_nowait(SerialLine(raw=raw, parsed=parsed))
                     except queue.Full:
                         # Drop oldest event to make room
-                        try:
+                        with contextlib.suppress(queue.Empty):
                             self.rx.get_nowait()
-                        except queue.Empty:
-                            pass
-                        try:
+                        with contextlib.suppress(queue.Full):
                             self.rx.put_nowait(SerialLine(raw=raw, parsed=parsed))
-                        except queue.Full:
-                            pass
             else:
                 time.sleep(0.01)
 

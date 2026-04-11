@@ -16,13 +16,14 @@ structure (see SUPPORTED_DEVICES below).
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 log = logging.getLogger("joycon_helper.razer")
 
@@ -42,7 +43,7 @@ RAZER_VID = 0x1532
 REPORT_SIZE = 90
 
 # Supported devices: PID → (display_name, transaction_id, max_dpi, dpi_stages)
-SUPPORTED_DEVICES: Dict[int, Dict[str, Any]] = {
+SUPPORTED_DEVICES: dict[int, dict[str, Any]] = {
     0x0083: {
         "name": "Basilisk X HyperSpeed",
         "txn_id": 0xFF,       # older wireless device
@@ -118,7 +119,7 @@ POLL_RATE_MAP = {1000: 0x01, 500: 0x02, 125: 0x08}
 POLL_RATE_REVERSE = {v: k for k, v in POLL_RATE_MAP.items()}
 
 # Button slot IDs (physical/logical button → slot number)
-BUTTON_SLOTS: Dict[str, int] = {
+BUTTON_SLOTS: dict[str, int] = {
     "left":       0x01,
     "right":      0x02,
     "middle":     0x03,
@@ -131,7 +132,7 @@ BUTTON_SLOTS: Dict[str, int] = {
 BUTTON_SLOT_NAMES = {v: k for k, v in BUTTON_SLOTS.items()}
 
 # Button display names
-BUTTON_DISPLAY_NAMES: Dict[str, str] = {
+BUTTON_DISPLAY_NAMES: dict[str, str] = {
     "left":       "Left Click",
     "right":      "Right Click",
     "middle":     "Middle Click",
@@ -151,7 +152,7 @@ FUNC_KEYBOARD = 0x02
 FUNC_DPI_CYCLE = 0x06
 
 # Default button function blocks (7 bytes each: class, len, data[5])
-DEFAULT_BUTTON_FUNCTIONS: Dict[int, bytes] = {
+DEFAULT_BUTTON_FUNCTIONS: dict[int, bytes] = {
     0x01: bytes([0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00]),  # left click
     0x02: bytes([0x01, 0x01, 0x02, 0x00, 0x00, 0x00, 0x00]),  # right click
     0x03: bytes([0x01, 0x01, 0x03, 0x00, 0x00, 0x00, 0x00]),  # middle click
@@ -162,7 +163,7 @@ DEFAULT_BUTTON_FUNCTIONS: Dict[int, bytes] = {
 }
 
 # HID keyboard keycodes (subset for button remapping actions)
-HID_KEYCODES: Dict[str, int] = {
+HID_KEYCODES: dict[str, int] = {
     "a": 0x04, "b": 0x05, "c": 0x06, "d": 0x07, "e": 0x08, "f": 0x09,
     "g": 0x0A, "h": 0x0B, "i": 0x0C, "j": 0x0D, "k": 0x0E, "l": 0x0F,
     "m": 0x10, "n": 0x11, "o": 0x12, "p": 0x13, "q": 0x14, "r": 0x15,
@@ -184,7 +185,7 @@ HID_KEYCODES: Dict[str, int] = {
 HID_KEYCODE_NAMES = {v: k.upper() for k, v in HID_KEYCODES.items()}
 
 # Mouse button IDs used in function blocks
-MOUSE_BUTTON_IDS: Dict[str, int] = {
+MOUSE_BUTTON_IDS: dict[str, int] = {
     "left": 0x01, "right": 0x02, "middle": 0x03,
     "back": 0x04, "forward": 0x05,
     "scroll_up": 0x09, "scroll_down": 0x0A,
@@ -246,7 +247,7 @@ def _build_report(txn_id: int, cmd_class: int, cmd_id: int,
     return report
 
 
-def _parse_response(report: bytes) -> Optional[Dict[str, Any]]:
+def _parse_response(report: bytes) -> dict[str, Any] | None:
     """Parse a 90-byte response report.
 
     Returns dict with status, class, id, data_size, args on success.
@@ -270,7 +271,7 @@ def _parse_response(report: bytes) -> Optional[Dict[str, Any]]:
 # Action encoding (action name → 7-byte function block for 0x02:0x0C)
 # ===================================================================
 
-def encode_button_action(action: str) -> Optional[bytes]:
+def encode_button_action(action: str) -> bytes | None:
     """Convert a user-facing action string to a 7-byte function block.
 
     Returns None if the action is not recognised.
@@ -350,7 +351,7 @@ class RazerDeviceInfo:
     manufacturer_string: str = ""
 
     @property
-    def device_meta(self) -> Dict[str, Any]:
+    def device_meta(self) -> dict[str, Any]:
         return SUPPORTED_DEVICES.get(self.pid, {})
 
     @property
@@ -380,38 +381,38 @@ class RazerDeviceState:
     battery_charging: bool = False
     dpi_x: int = 0
     dpi_y: int = 0
-    dpi_stages: List[Tuple[int, int]] = field(default_factory=list)
+    dpi_stages: list[tuple[int, int]] = field(default_factory=list)
     active_dpi_stage: int = 0     # 1-indexed
     poll_rate: int = 0            # Hz
     idle_time: int = 0            # seconds
-    button_bindings: Dict[str, str] = field(default_factory=dict)
-    hypershift_bindings: Dict[str, str] = field(default_factory=dict)
+    button_bindings: dict[str, str] = field(default_factory=dict)
+    hypershift_bindings: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
 class RazerProfile:
     """A saveable Razer mouse configuration."""
     name: str = "Default"
-    dpi_stages: List[Tuple[int, int]] = field(
+    dpi_stages: list[tuple[int, int]] = field(
         default_factory=lambda: [(800, 800), (1800, 1800), (4000, 4000),
                                  (9000, 9000), (16000, 16000)]
     )
     active_dpi_stage: int = 1
     poll_rate: int = 1000
     idle_time: int = 300    # seconds
-    button_bindings: Dict[str, str] = field(default_factory=lambda: {
+    button_bindings: dict[str, str] = field(default_factory=lambda: {
         "left": "default", "right": "default", "middle": "default",
         "back": "default", "forward": "default",
         "scroll_up": "default", "scroll_down": "default",
     })
-    hypershift_bindings: Dict[str, str] = field(default_factory=lambda: {
+    hypershift_bindings: dict[str, str] = field(default_factory=lambda: {
         "left": "default", "right": "default", "middle": "default",
         "back": "default", "forward": "default",
         "scroll_up": "default", "scroll_down": "default",
     })
 
     # Sister profile linking: which Joy-Con slot this should auto-apply with
-    sister_slot: Optional[int] = None  # 0–3, or None
+    sister_slot: int | None = None  # 0–3, or None
 
     def to_dict(self) -> dict:
         return {
@@ -427,7 +428,7 @@ class RazerProfile:
         }
 
     @classmethod
-    def from_dict(cls, d: dict) -> "RazerProfile":
+    def from_dict(cls, d: dict) -> RazerProfile:
         p = cls()
         p.name = d.get("name", "Default")
         raw_stages = d.get("dpi_stages", [])
@@ -439,7 +440,7 @@ class RazerProfile:
         p.button_bindings = d.get("button_bindings", p.button_bindings)
         p.hypershift_bindings = d.get("hypershift_bindings",
                                       p.hypershift_bindings)
-        p.sister_slot = d.get("sister_slot", None)
+        p.sister_slot = d.get("sister_slot")
         return p
 
     def save(self, path: str) -> None:
@@ -450,8 +451,8 @@ class RazerProfile:
         log.info("Saved Razer profile '%s' → %s", self.name, path)
 
     @classmethod
-    def load(cls, path: str) -> "RazerProfile":
-        with open(path, "r", encoding="utf-8") as f:
+    def load(cls, path: str) -> RazerProfile:
+        with open(path, encoding="utf-8") as f:
             return cls.from_dict(json.load(f))
 
 
@@ -464,20 +465,20 @@ class RazerDevice:
 
     def __init__(self) -> None:
         self._dev: Any = None
-        self._info: Optional[RazerDeviceInfo] = None
+        self._info: RazerDeviceInfo | None = None
 
     @property
     def is_open(self) -> bool:
         return self._dev is not None
 
     @property
-    def info(self) -> Optional[RazerDeviceInfo]:
+    def info(self) -> RazerDeviceInfo | None:
         return self._info
 
     # ── Enumeration ──────────────────────────────────────────────
 
     @staticmethod
-    def enumerate() -> List[RazerDeviceInfo]:
+    def enumerate() -> list[RazerDeviceInfo]:
         """Find all connected supported Razer devices.
 
         Returns one entry per device (filtered to the control interface).
@@ -485,7 +486,7 @@ class RazerDevice:
         if not HID_AVAILABLE:
             return []
 
-        results: List[RazerDeviceInfo] = []
+        results: list[RazerDeviceInfo] = []
         try:
             devs = _hid.enumerate(RAZER_VID, 0)  # all Razer devices
         except Exception as e:
@@ -535,16 +536,14 @@ class RazerDevice:
 
     def close(self) -> None:
         if self._dev is not None:
-            try:
+            with contextlib.suppress(Exception):
                 self._dev.close()
-            except Exception:
-                pass
             self._dev = None
             self._info = None
 
     # ── Low-level transport ──────────────────────────────────────
 
-    def _send_report(self, report: bytearray) -> Optional[Dict[str, Any]]:
+    def _send_report(self, report: bytearray) -> dict[str, Any] | None:
         """Send a feature report and read the response.
 
         Validates CRC and transaction ID in the response.
@@ -603,7 +602,7 @@ class RazerDevice:
 
     def _command(self, cmd_class: int, cmd_id: int,
                  data_size: int, args: bytes = b"",
-                 retries: int = 2) -> Optional[Dict[str, Any]]:
+                 retries: int = 2) -> dict[str, Any] | None:
         """Send a command and return parsed response. Retries on BUSY."""
         if self._info is None:
             return None
@@ -666,7 +665,7 @@ class RazerDevice:
         resp = self._command(CLASS_STANDARD, 0x05, 0x01, bytes([rate_byte]))
         return resp is not None
 
-    def get_dpi(self) -> Tuple[int, int]:
+    def get_dpi(self) -> tuple[int, int]:
         """Read current DPI XY (Class 0x04, ID 0x85)."""
         resp = self._command(CLASS_DPI, 0x85, 0x07, bytes([NOSTORE]))
         if resp:
@@ -701,7 +700,7 @@ class RazerDevice:
         resp = self._command(CLASS_DPI, 0x05, 0x07, bytes(args))
         return resp is not None
 
-    def get_dpi_stages(self) -> Tuple[int, List[Tuple[int, int]]]:
+    def get_dpi_stages(self) -> tuple[int, list[tuple[int, int]]]:
         """Read DPI stage table (Class 0x04, ID 0x86).
 
         Returns (active_stage_1indexed, [(dpi_x, dpi_y), ...]).
@@ -711,7 +710,7 @@ class RazerDevice:
             args = resp["args"]
             active = args[1]   # 1-indexed stage ID
             count = args[2]
-            stages: List[Tuple[int, int]] = []
+            stages: list[tuple[int, int]] = []
             for i in range(min(count, 5)):
                 off = 3 + i * 7
                 # stage_id = args[off]
@@ -722,7 +721,7 @@ class RazerDevice:
         return (0, [])
 
     def set_dpi_stages(self, active: int,
-                       stages: List[Tuple[int, int]]) -> bool:
+                       stages: list[tuple[int, int]]) -> bool:
         """Write DPI stage table (Class 0x04, ID 0x06).
 
         ``active``: 1-indexed active stage.
@@ -742,7 +741,7 @@ class RazerDevice:
         resp = self._command(CLASS_DPI, 0x06, 0x26, bytes(args))
         return resp is not None
 
-    def get_battery(self) -> Tuple[int, bool]:
+    def get_battery(self) -> tuple[int, bool]:
         """Read battery level (Class 0x07, ID 0x80).
 
         Returns (percent 0-100, is_charging).
@@ -775,7 +774,7 @@ class RazerDevice:
         return resp is not None
 
     def get_button_function(self, slot: int,
-                            hypershift: bool = False) -> Optional[bytes]:
+                            hypershift: bool = False) -> bytes | None:
         """Read a button's function block (Class 0x02, ID 0x8C).
 
         ``hypershift``: if True, reads from the HyperShift layer (0x01)
@@ -865,7 +864,7 @@ class RazerDevice:
 
     # ── Profile application ──────────────────────────────────────
 
-    def apply_profile(self, profile: RazerProfile) -> Tuple[int, int]:
+    def apply_profile(self, profile: RazerProfile) -> tuple[int, int]:
         """Apply a full profile. Returns (success_count, error_count)."""
         ok = 0
         err = 0
@@ -951,7 +950,7 @@ def get_profiles_dir() -> Path:
     return d
 
 
-def list_saved_profiles() -> List[str]:
+def list_saved_profiles() -> list[str]:
     d = get_profiles_dir()
     return sorted(p.stem for p in d.glob("*.json"))
 
@@ -978,18 +977,18 @@ def _registry_path() -> Path:
     return get_profiles_dir() / "_devices.json"
 
 
-def load_device_registry() -> Dict[str, dict]:
+def load_device_registry() -> dict[str, dict]:
     p = _registry_path()
     if p.exists():
         try:
-            with open(p, "r", encoding="utf-8") as f:
+            with open(p, encoding="utf-8") as f:
                 return json.load(f)
         except Exception:
             pass
     return {}
 
 
-def save_device_registry(registry: Dict[str, dict]) -> None:
+def save_device_registry(registry: dict[str, dict]) -> None:
     p = _registry_path()
     p.parent.mkdir(parents=True, exist_ok=True)
     with open(str(p), "w", encoding="utf-8") as f:

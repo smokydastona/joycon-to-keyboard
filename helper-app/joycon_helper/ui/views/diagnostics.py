@@ -12,9 +12,18 @@ from typing import TYPE_CHECKING
 from PyQt6.QtCore import QTimer, pyqtSignal
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QCheckBox, QFileDialog, QGroupBox, QHBoxLayout, QLabel,
-    QMessageBox, QPlainTextEdit, QProgressBar, QPushButton, QScrollArea,
-    QVBoxLayout, QWidget,
+    QCheckBox,
+    QFileDialog,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPlainTextEdit,
+    QProgressBar,
+    QPushButton,
+    QScrollArea,
+    QVBoxLayout,
+    QWidget,
 )
 
 from ..theme import ThemeEngine

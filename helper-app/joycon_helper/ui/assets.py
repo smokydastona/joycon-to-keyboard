@@ -5,10 +5,10 @@ search-path logic as the original Tkinter app, then caches them as QPixmaps.
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional
 
 from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QColor, QImage, QPainter, QPixmap
@@ -20,7 +20,7 @@ log = logging.getLogger("joycon_helper.ui.assets")
 # Search path construction (mirrors app.py logic)
 # ---------------------------------------------------------------------------
 
-def _frozen_bundle_root() -> Optional[Path]:
+def _frozen_bundle_root() -> Path | None:
     base = getattr(sys, "_MEIPASS", None)
     if not isinstance(base, str) or not base:
         return None
@@ -30,7 +30,7 @@ def _frozen_bundle_root() -> Optional[Path]:
         return None
 
 
-def _executable_dir() -> Optional[Path]:
+def _executable_dir() -> Path | None:
     if not getattr(sys, "frozen", False):
         return None
     try:
@@ -39,9 +39,9 @@ def _executable_dir() -> Optional[Path]:
         return None
 
 
-def _dedupe_paths(paths: List[Path]) -> List[Path]:
+def _dedupe_paths(paths: list[Path]) -> list[Path]:
     seen: set[str] = set()
-    unique: List[Path] = []
+    unique: list[Path] = []
     for p in paths:
         key = str(p)
         if key in seen:
@@ -51,12 +51,10 @@ def _dedupe_paths(paths: List[Path]) -> List[Path]:
     return unique
 
 
-def ui_bundle_search_roots() -> List[Path]:
-    roots: List[Path] = []
-    try:
+def ui_bundle_search_roots() -> list[Path]:
+    roots: list[Path] = []
+    with contextlib.suppress(Exception):
         roots.append(Path.cwd() / ".ui-bundle")
-    except Exception:
-        pass
     exe_dir = _executable_dir()
     if exe_dir is not None:
         roots.append(exe_dir / ".ui-bundle")
@@ -71,9 +69,9 @@ def ui_bundle_search_roots() -> List[Path]:
     return _dedupe_paths(roots)
 
 
-def device_image_search_roots(theme: str = "default") -> List[Path]:
+def device_image_search_roots(theme: str = "default") -> list[Path]:
     bundle_name = ".ui-bundle-dark" if theme == "dark" else ".ui-bundle"
-    roots: List[Path] = []
+    roots: list[Path] = []
     try:
         cwd = Path.cwd()
         roots.append(cwd / "docs" / "ui" / theme / "backgrounds")
@@ -125,7 +123,7 @@ class AssetManager:
 
     def __init__(self, theme_name: str = "default") -> None:
         self._theme = theme_name
-        self._cache: Dict[str, QPixmap] = {}
+        self._cache: dict[str, QPixmap] = {}
         self._search_roots = device_image_search_roots(theme_name)
         self._bundle_roots = ui_bundle_search_roots()
 
@@ -134,7 +132,7 @@ class AssetManager:
         self._search_roots = device_image_search_roots(theme_name)
         self._cache.clear()
 
-    def find_file(self, filename: str, extra_roots: Optional[List[Path]] = None) -> Optional[Path]:
+    def find_file(self, filename: str, extra_roots: list[Path] | None = None) -> Path | None:
         roots = list(extra_roots or []) + self._search_roots + self._bundle_roots
         for root in roots:
             candidate = root / filename
@@ -142,8 +140,8 @@ class AssetManager:
                 return candidate
         return None
 
-    def load_pixmap(self, filename: str, size: Optional[QSize] = None,
-                    extra_roots: Optional[List[Path]] = None) -> Optional[QPixmap]:
+    def load_pixmap(self, filename: str, size: QSize | None = None,
+                    extra_roots: list[Path] | None = None) -> QPixmap | None:
         cache_key = f"{filename}|{size.width() if size else 0}x{size.height() if size else 0}"
         if cache_key in self._cache:
             return self._cache[cache_key]
@@ -165,7 +163,7 @@ class AssetManager:
         self._cache[cache_key] = pixmap
         return pixmap
 
-    def load_image(self, filename: str, extra_roots: Optional[List[Path]] = None) -> Optional[QImage]:
+    def load_image(self, filename: str, extra_roots: list[Path] | None = None) -> QImage | None:
         path = self.find_file(filename, extra_roots)
         if path is None:
             return None
@@ -193,26 +191,26 @@ class AssetManager:
 
     # ----- Device image variants -----
 
-    def find_joycons_variants(self) -> Dict[str, Optional[Path]]:
-        variants: Dict[str, Optional[Path]] = {}
+    def find_joycons_variants(self) -> dict[str, Path | None]:
+        variants: dict[str, Path | None] = {}
         for state in ("none", "left", "right", "both"):
             variants[state] = self.find_file(f"joycons_{state}.png")
         return variants
 
-    def find_m913_variants(self, layout: str = "stock") -> Dict[str, Optional[Path]]:
+    def find_m913_variants(self, layout: str = "stock") -> dict[str, Path | None]:
         prefix = "incedius" if layout == "incedius" else "m913"
-        variants: Dict[str, Optional[Path]] = {}
+        variants: dict[str, Path | None] = {}
         for state in ("none", "connected"):
             variants[state] = self.find_file(f"{prefix}_{state}.png")
         return variants
 
-    def find_razer_variants(self) -> Dict[str, Optional[Path]]:
-        variants: Dict[str, Optional[Path]] = {}
+    def find_razer_variants(self) -> dict[str, Path | None]:
+        variants: dict[str, Path | None] = {}
         for state in ("none", "connected"):
             variants[state] = self.find_file(f"razer_{state}.png")
         return variants
 
-    def load_icon(self) -> Optional[QPixmap]:
+    def load_icon(self) -> QPixmap | None:
         here = Path(__file__).resolve()
         repo = here.parents[3]
         icon_roots = [
@@ -227,7 +225,7 @@ class AssetManager:
             return None
         return QPixmap(str(path))
 
-    def find_background(self) -> Optional[Path]:
+    def find_background(self) -> Path | None:
         names = ["background.png", "bg.png"]
         for name in names:
             p = self.find_file(name)
@@ -235,16 +233,16 @@ class AssetManager:
                 return p
         return None
 
-    def find_keyboard_image(self) -> Optional[Path]:
+    def find_keyboard_image(self) -> Path | None:
         for name in ("keyboard.png", "keyboard_preview.png"):
             p = self.find_file(name)
             if p is not None:
                 return p
         return None
 
-    def find_overlay_image(self, device: str, button: str, color: str) -> Optional[Path]:
+    def find_overlay_image(self, device: str, button: str, color: str) -> Path | None:
         filename = f"{button}.png"
-        extra_roots: List[Path] = []
+        extra_roots: list[Path] = []
         try:
             cwd = Path.cwd()
             extra_roots.append(cwd / "docs" / "ui" / "button_overlays" / color / device)
@@ -255,10 +253,10 @@ class AssetManager:
         extra_roots.append(repo / "docs" / "ui" / "button_overlays" / color / device)
         return self.find_file(filename, extra_roots)
 
-    def find_pale_overlay(self, device: str, color: str) -> Optional[Path]:
+    def find_pale_overlay(self, device: str, color: str) -> Path | None:
         """Return path to the pale composite PNG for *device* and *color*."""
         filename = f"pale_{device}.png"
-        extra_roots: List[Path] = []
+        extra_roots: list[Path] = []
         try:
             cwd = Path.cwd()
             extra_roots.append(cwd / "docs" / "ui" / "button_overlays" / color / device)

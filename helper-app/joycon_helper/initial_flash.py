@@ -19,8 +19,9 @@ from __future__ import annotations
 import io
 import logging
 import sys
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 try:
     import esptool  # noqa: F401 — availability check at import time
@@ -31,7 +32,7 @@ except ImportError:
 log = logging.getLogger("joycon_helper.initial_flash")
 
 # Standard ESP-IDF flash offsets.
-_OFFSETS: Dict[str, Dict[str, int]] = {
+_OFFSETS: dict[str, dict[str, int]] = {
     # ESP32-S3: bootloader at 0x0 (v5.x default).
     "esp32s3": {
         "bootloader": 0x0000,
@@ -47,7 +48,7 @@ _OFFSETS: Dict[str, Dict[str, int]] = {
 }
 
 # Maps esptool chip detection strings to our board names.
-_CHIP_MAP: Dict[str, str] = {
+_CHIP_MAP: dict[str, str] = {
     "ESP32-S3": "esp32s3",
     "ESP32-S3(beta2)": "esp32s3",
     "ESP32-S3(beta3)": "esp32s3",
@@ -86,7 +87,7 @@ def _validate_port(port: str) -> None:
         pass  # pyserial may not be installed; esptool will validate itself
 
 
-def detect_chip(port: str) -> Optional[str]:
+def detect_chip(port: str) -> str | None:
     """Connect to the ROM bootloader and return the chip type.
 
     Returns ``"esp32s3"`` or ``"esp32"`` on success, ``None`` on failure.
@@ -130,13 +131,13 @@ def detect_chip(port: str) -> Optional[str]:
 def flash_firmware(
     port: str,
     *,
-    app_bin: Optional[str] = None,
-    bootloader_bin: Optional[str] = None,
-    partition_table_bin: Optional[str] = None,
-    merged_bin: Optional[str] = None,
-    chip: Optional[str] = None,
+    app_bin: str | None = None,
+    bootloader_bin: str | None = None,
+    partition_table_bin: str | None = None,
+    merged_bin: str | None = None,
+    chip: str | None = None,
     erase_all: bool = False,
-    progress_cb: Optional[Callable[[str], None]] = None,
+    progress_cb: Callable[[str], None] | None = None,
 ) -> None:
     """Flash firmware to a board using esptool.
 
@@ -185,15 +186,15 @@ def flash_firmware(
         raise RuntimeError(f"Unknown chip type: {chip}")
 
     # Build esptool argument list.
-    args: List[str] = ["--port", port, "--chip", chip, "--baud", "921600"]
+    args: list[str] = ["--port", port, "--chip", chip, "--baud", "921600"]
 
     if erase_all:
         _status("Erasing flash…")
-        _run_esptool(args + ["erase_flash"])
+        _run_esptool([*args, "erase_flash"])
         _status("Flash erased.")
 
     # Build write_flash command (--verify reads back after writing to confirm).
-    write_args = args + ["write_flash", "--verify", "--flash_mode", "dio", "--flash_size", "detect"]
+    write_args = [*args, "write_flash", "--verify", "--flash_mode", "dio", "--flash_size", "detect"]
 
     if merged_bin:
         # Merged binary: everything at offset 0.
@@ -218,7 +219,7 @@ def flash_firmware(
     _status("Flash complete (verified)! Reset the board to run the new firmware.")
 
 
-def _run_esptool(args: List[str]) -> None:
+def _run_esptool(args: list[str]) -> None:
     """Run esptool.main() with the given args.  Raises RuntimeError on failure."""
     _require_esptool()
     import esptool
@@ -235,10 +236,10 @@ def _run_esptool(args: List[str]) -> None:
     except SystemExit as e:
         if e.code not in (None, 0):
             err_text = captured_err.getvalue() or captured_out.getvalue()
-            raise RuntimeError(_friendly_esptool_error(e.code, err_text.strip()))
+            raise RuntimeError(_friendly_esptool_error(e.code, err_text.strip())) from e
     except Exception as e:
         err_text = captured_err.getvalue()
-        raise RuntimeError(_friendly_esptool_error(None, f"{e}\n{err_text.strip()}"))
+        raise RuntimeError(_friendly_esptool_error(None, f"{e}\n{err_text.strip()}")) from e
     finally:
         output = captured_out.getvalue()
         sys.stdout, sys.stderr = old_stdout, old_stderr
@@ -284,9 +285,9 @@ def backup_firmware(
     port: str,
     output_path: str,
     *,
-    chip: Optional[str] = None,
+    chip: str | None = None,
     size: int = _DEFAULT_FLASH_SIZE,
-    progress_cb: Optional[Callable[[str], None]] = None,
+    progress_cb: Callable[[str], None] | None = None,
 ) -> str:
     """Read the current flash contents and save to *output_path*.
 
@@ -322,7 +323,7 @@ def backup_firmware(
 def download_and_flash_initial(
     port: str,
     *,
-    progress_cb: Optional[Callable[[str], None]] = None,
+    progress_cb: Callable[[str], None] | None = None,
 ) -> None:
     """Download the latest release binaries from GitHub and do a first-time flash.
 
@@ -369,7 +370,7 @@ def download_and_flash_initial(
     try:
         release = fw_updater._fetch_latest_release()
     except Exception as e:
-        raise RuntimeError(f"Could not fetch release info: {e}")
+        raise RuntimeError(f"Could not fetch release info: {e}") from e
 
     tag = release.get("tag_name", "unknown")
     _status(f"Release: {tag}")
@@ -377,8 +378,8 @@ def download_and_flash_initial(
     # Fetch SHA-256 checksums for integrity verification.
     sha256sums = fw_updater._fetch_sha256sums(release)
 
+    import os
     import tempfile
-    import os  # noqa: F811
 
     with tempfile.TemporaryDirectory(prefix="bindbnd_") as tmpdir:
         # Download merged firmware binary.

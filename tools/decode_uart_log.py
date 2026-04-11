@@ -12,6 +12,7 @@ The log file should contain raw bytes.
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 SYNC0 = 0xAA
 SYNC1 = 0x55
@@ -44,7 +45,7 @@ def main() -> int:
         return 2
 
     path = sys.argv[1]
-    data = open(path, "rb").read()
+    data = Path(path).read_bytes()
 
     for payload in iter_frames(data):
         if len(payload) == 1:

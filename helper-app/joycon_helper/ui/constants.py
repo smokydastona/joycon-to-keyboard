@@ -5,8 +5,6 @@ extracted from the original Tkinter ``app.py``.
 """
 from __future__ import annotations
 
-from typing import Dict, List, Tuple
-
 # ---------------------------------------------------------------------------
 # Image dimensions (native resolution of the source PNGs)
 # ---------------------------------------------------------------------------
@@ -28,7 +26,7 @@ MOUSE_IMAGE_H = 1024
 # ---------------------------------------------------------------------------
 # Rainbow overlay colours — matches generate_button_overlays.py output
 # ---------------------------------------------------------------------------
-RAINBOW_COLORS: Dict[str, str] = {
+RAINBOW_COLORS: dict[str, str] = {
     "red":    "#dc3c3c",
     "orange": "#e68c28",
     "yellow": "#d2be28",
@@ -37,13 +35,13 @@ RAINBOW_COLORS: Dict[str, str] = {
     "indigo": "#5a3cb4",
     "violet": "#a03cc8",
 }
-RAINBOW_NAMES: List[str] = list(RAINBOW_COLORS.keys())
+RAINBOW_NAMES: list[str] = list(RAINBOW_COLORS.keys())
 DEFAULT_OVERLAY_COLOR = "violet"
 
 # ---------------------------------------------------------------------------
 # Joy-Con hotspot positions — per-theme (normalised 0.0–1.0 over joycons.png)
 # ---------------------------------------------------------------------------
-KEYMAP_HOTSPOTS: Dict[str, List[Tuple[str, float, float]]] = {
+KEYMAP_HOTSPOTS: dict[str, list[tuple[str, float, float]]] = {
     "dark": [
         ("ZL",      0.212987, 0.158442),
         ("ZR",      0.789610, 0.159740),
@@ -137,7 +135,7 @@ KEYMAP_HOTSPOTS: Dict[str, List[Tuple[str, float, float]]] = {
 # ---------------------------------------------------------------------------
 ShapeSpec = tuple
 
-JOYCON_BUTTON_SHAPES: Dict[str, ShapeSpec] = {
+JOYCON_BUTTON_SHAPES: dict[str, ShapeSpec] = {
     # Triggers — wide rounded bumper shapes
     "ZL":      ("rrect", 80, 30, 10),
     "ZR":      ("rrect", 80, 30, 10),
@@ -192,7 +190,7 @@ JOYCON_BUTTON_SHAPES: Dict[str, ShapeSpec] = {
 # ---------------------------------------------------------------------------
 # Keyboard hotspot positions — per-theme (normalised over keyboard.png)
 # ---------------------------------------------------------------------------
-KBD_HOTSPOTS: Dict[str, List[Tuple[str, float, float]]] = {
+KBD_HOTSPOTS: dict[str, list[tuple[str, float, float]]] = {
     "dark": [
         ("Esc",       0.063151, 0.151367),
         ("F1",        0.134766, 0.151367),
@@ -411,7 +409,7 @@ KBD_HOTSPOTS: Dict[str, List[Tuple[str, float, float]]] = {
 # ---------------------------------------------------------------------------
 # M913 Stock hotspot positions — per-theme (normalised over m913.png)
 # ---------------------------------------------------------------------------
-M913_HOTSPOTS: Dict[str, List[Tuple[str, float, float]]] = {
+M913_HOTSPOTS: dict[str, list[tuple[str, float, float]]] = {
     "dark": [
         ("left",        0.417582, 0.262363),
         ("right",       0.511905, 0.173077),
@@ -457,7 +455,7 @@ M913_HOTSPOTS: Dict[str, List[Tuple[str, float, float]]] = {
 # ---------------------------------------------------------------------------
 # Incedius M913 hotspot positions — per-theme (same side1-12 IDs as stock)
 # ---------------------------------------------------------------------------
-INCEDIUS_HOTSPOTS: Dict[str, List[Tuple[str, float, float]]] = {
+INCEDIUS_HOTSPOTS: dict[str, list[tuple[str, float, float]]] = {
     "dark": [
         ("left",        0.585165, 0.633242),
         ("right",       0.604396, 0.515110),
@@ -503,7 +501,7 @@ INCEDIUS_HOTSPOTS: Dict[str, List[Tuple[str, float, float]]] = {
 # ---------------------------------------------------------------------------
 # Generic Mouse / Razer hotspot positions — per-theme (normalised, 7 buttons)
 # ---------------------------------------------------------------------------
-MOUSE_HOTSPOTS: Dict[str, List[Tuple[str, float, float]]] = {
+MOUSE_HOTSPOTS: dict[str, list[tuple[str, float, float]]] = {
     "dark": [
         ("left",        0.463339, 0.463956),
         ("right",       0.409119, 0.280961),
@@ -538,7 +536,7 @@ KBD_WIDE = {
 # ---------------------------------------------------------------------------
 # Keyboard label → HID keycode (positive = keycode, negative = modifier bit)
 # ---------------------------------------------------------------------------
-KBD_LABEL_TO_KEYCODE: Dict[str, int] = {
+KBD_LABEL_TO_KEYCODE: dict[str, int] = {
     "Esc": 0x29, "F1": 0x3A, "F2": 0x3B, "F3": 0x3C, "F4": 0x3D,
     "F5": 0x3E, "F6": 0x3F, "F7": 0x40, "F8": 0x41,
     "F9": 0x42, "F10": 0x43, "F11": 0x44, "F12": 0x45,
@@ -567,8 +565,8 @@ KBD_LABEL_TO_KEYCODE: Dict[str, int] = {
     "KP0": 0x62, "KPDot": 0x63,
 }
 
-_KEYCODE_TO_KBD_LABEL: Dict[int, str] = {v: k for k, v in KBD_LABEL_TO_KEYCODE.items()}
-_MODBITS_TO_KBD_LABELS: Dict[int, List[str]] = {}
+_KEYCODE_TO_KBD_LABEL: dict[int, str] = {v: k for k, v in KBD_LABEL_TO_KEYCODE.items()}
+_MODBITS_TO_KBD_LABELS: dict[int, list[str]] = {}
 for _lbl, _code in KBD_LABEL_TO_KEYCODE.items():
     if _code < 0:
         _MODBITS_TO_KBD_LABELS.setdefault(-_code, []).append(_lbl)

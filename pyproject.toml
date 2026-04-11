@@ -37,6 +37,9 @@ select = [
 ignore = [
     "E501",   # line length (handled by formatter)
     "SIM108", # ternary — readability preference
+    "RUF001", # ambiguous unicode char in string (intentional: UI emoji/symbols)
+    "RUF002", # ambiguous unicode char in docstring
+    "RUF003", # ambiguous unicode char in comment
 ]
 
 [tool.ruff.lint.isort]

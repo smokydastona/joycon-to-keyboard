@@ -12,6 +12,7 @@ def _run() -> None:
     """Launch the PyQt6 application."""
     from PyQt6.QtCore import QSettings
     from PyQt6.QtWidgets import QApplication
+
     from joycon_helper.ui.main_window import MainWindow
 
     app = QApplication(sys.argv)

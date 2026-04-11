@@ -24,9 +24,9 @@ from pathlib import Path
 
 try:
     from PIL import Image, ImageDraw, ImageFilter  # type: ignore
-except ImportError:
+except ImportError as e:
     print("Pillow is required: pip install Pillow", file=sys.stderr)
-    raise SystemExit(1)
+    raise SystemExit(1) from e
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 UI_DIR = REPO_ROOT / "docs" / "ui"

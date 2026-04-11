@@ -42,25 +42,25 @@ from pathlib import Path
 
 try:
     from PIL import Image, ImageDraw  # type: ignore
-except ImportError:
+except ImportError as e:
     print("Pillow is required: pip install Pillow", file=sys.stderr)
-    raise SystemExit(1)
+    raise SystemExit(1) from e
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # Import shapes + positions from the authoritative constants.py
 sys.path.insert(0, str(REPO_ROOT / "helper-app"))
-from joycon_helper.ui.constants import (  # noqa: E402
+from joycon_helper.ui.constants import (  # noqa: E402  # isort: skip
+    INCEDIUS_HOTSPOTS as _INCEDIUS_NORM,
+    INCEDIUS_WIDE,
     JOYCON_BUTTON_SHAPES,
+    KBD_HOTSPOTS as _KBD_NORM,
+    KBD_WIDE,
     KEYMAP_HOTSPOTS,
     M913_HOTSPOTS as _M913_NORM,
-    INCEDIUS_HOTSPOTS as _INCEDIUS_NORM,
-    MOUSE_HOTSPOTS as _MOUSE_NORM,
-    KBD_HOTSPOTS as _KBD_NORM,
     M913_WIDE,
-    INCEDIUS_WIDE,
+    MOUSE_HOTSPOTS as _MOUSE_NORM,
     MOUSE_WIDE,
-    KBD_WIDE,
 )
 
 UI_DIR = REPO_ROOT / "docs" / "ui"

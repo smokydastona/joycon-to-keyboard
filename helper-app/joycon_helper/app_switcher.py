@@ -18,8 +18,9 @@ import logging
 import os
 import threading
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 log = logging.getLogger("joycon_helper.app_switcher")
 
@@ -31,7 +32,7 @@ _psapi = ctypes.windll.psapi  # type: ignore[attr-defined]
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 
 
-def _get_foreground_exe() -> Optional[str]:
+def _get_foreground_exe() -> str | None:
     """Return the executable name of the foreground window's process, or None."""
     try:
         hwnd = _user32.GetForegroundWindow()
@@ -61,7 +62,7 @@ def _get_foreground_exe() -> Optional[str]:
     return None
 
 
-def _get_foreground_title() -> Optional[str]:
+def _get_foreground_title() -> str | None:
     """Return the window title of the foreground window, or None."""
     try:
         hwnd = _user32.GetForegroundWindow()
@@ -85,7 +86,7 @@ def _rules_path() -> Path:
     return Path.cwd() / "app_profiles.json"
 
 
-def load_rules() -> List[Dict[str, Any]]:
+def load_rules() -> list[dict[str, Any]]:
     """Load app-switching rules from disk."""
     p = _rules_path()
     if not p.exists():
@@ -94,7 +95,7 @@ def load_rules() -> List[Dict[str, Any]]:
         data = json.loads(p.read_text(encoding="utf-8"))
         if isinstance(data, list):
             # Validate each rule: must have "exe" (str) and "slot" (int 0-3)
-            valid: List[Dict[str, Any]] = []
+            valid: list[dict[str, Any]] = []
             for rule in data:
                 if not isinstance(rule, dict):
                     continue
@@ -113,7 +114,7 @@ def load_rules() -> List[Dict[str, Any]]:
     return []
 
 
-def save_rules(rules: List[Dict[str, Any]]) -> None:
+def save_rules(rules: list[dict[str, Any]]) -> None:
     """Save app-switching rules to disk."""
     p = _rules_path()
     p.write_text(json.dumps(rules, indent=2), encoding="utf-8")
@@ -132,11 +133,11 @@ class AppSwitcher:
         self._on_switch = on_switch
         self._poll_interval = poll_interval
         self._lock = threading.Lock()
-        self._rules: List[Dict[str, Any]] = []
+        self._rules: list[dict[str, Any]] = []
         self._running = False
-        self._thread: Optional[threading.Thread] = None
-        self._last_exe: Optional[str] = None
-        self._last_slot: Optional[int] = None
+        self._thread: threading.Thread | None = None
+        self._last_exe: str | None = None
+        self._last_slot: int | None = None
         self._default_slot: int = 0
         self._enabled = False
 
@@ -153,11 +154,11 @@ class AppSwitcher:
             self.stop()
 
     @property
-    def rules(self) -> List[Dict[str, Any]]:
+    def rules(self) -> list[dict[str, Any]]:
         with self._lock:
             return list(self._rules)
 
-    def set_rules(self, rules: List[Dict[str, Any]]) -> None:
+    def set_rules(self, rules: list[dict[str, Any]]) -> None:
         with self._lock:
             self._rules = list(rules)
 
@@ -191,7 +192,7 @@ class AppSwitcher:
             return
 
         # UWP apps report as ApplicationFrameHost.exe — use window title
-        title: Optional[str] = None
+        title: str | None = None
         if exe == "applicationframehost.exe":
             title = _get_foreground_title()
 
@@ -207,15 +208,14 @@ class AppSwitcher:
                 return
 
             # Find matching rule
-            matched_slot: Optional[int] = None
+            matched_slot: int | None = None
             for rule in self._rules:
                 rule_exe = rule.get("exe", "")
                 rule_title = rule.get("title", "")
                 if isinstance(rule_exe, str) and rule_exe.lower() == exe:
                     # For UWP rules that specify a title, require title match
-                    if rule_title and title:
-                        if rule_title.lower() not in title.lower():
-                            continue
+                    if rule_title and title and rule_title.lower() not in title.lower():
+                        continue
                     slot = rule.get("slot")
                     if isinstance(slot, int) and 0 <= slot <= 3:
                         matched_slot = slot

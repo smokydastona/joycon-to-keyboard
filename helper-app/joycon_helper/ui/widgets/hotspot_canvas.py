@@ -6,20 +6,33 @@ indicators, search highlighting, and overlay compositing.
 """
 from __future__ import annotations
 
-import math
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+import math
+from typing import Any
 
 from PyQt6.QtCore import (
-    QRectF, QTimer, Qt, pyqtSignal,
+    QRectF,
+    Qt,
+    QTimer,
+    pyqtSignal,
 )
 from PyQt6.QtGui import (
-    QBrush, QColor, QFont, QPainter, QPainterPath, QPen, QPixmap,
+    QBrush,
+    QColor,
+    QFont,
+    QPainter,
+    QPainterPath,
+    QPen,
+    QPixmap,
     QTransform,
 )
 from PyQt6.QtWidgets import (
-    QGraphicsPathItem, QGraphicsPixmapItem, QGraphicsScene,
-    QGraphicsSimpleTextItem, QGraphicsView, QWidget,
+    QGraphicsPathItem,
+    QGraphicsPixmapItem,
+    QGraphicsScene,
+    QGraphicsSimpleTextItem,
+    QGraphicsView,
+    QWidget,
 )
 
 from ..theme import ThemeEngine
@@ -40,14 +53,14 @@ class HotspotItem:
         self.name = name
         self.norm_x = norm_x
         self.norm_y = norm_y
-        self.key_id: Optional[int] = None
+        self.key_id: int | None = None
         self.mapped = False
         self.conflict = False
         self.search_match = False
         self.disabled = False
         self.locked = False
-        self.dot: Optional[QGraphicsPathItem] = None
-        self.label: Optional[QGraphicsSimpleTextItem] = None
+        self.dot: QGraphicsPathItem | None = None
+        self.label: QGraphicsSimpleTextItem | None = None
 
 
 class HotspotCanvas(QGraphicsView):
@@ -57,7 +70,7 @@ class HotspotCanvas(QGraphicsView):
     hotspot_right_clicked = pyqtSignal(str, object)  # name, QPoint (screen pos)
     hotspot_hovered = pyqtSignal(str)            # name (empty string = no hover)
 
-    def __init__(self, theme: ThemeEngine, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, theme: ThemeEngine, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._theme = theme
         self._scene = QGraphicsScene(self)
@@ -75,29 +88,29 @@ class HotspotCanvas(QGraphicsView):
         self.setStyleSheet("background: transparent;")
 
         # State
-        self._bg_item: Optional[QGraphicsPixmapItem] = None
-        self._hotspots: List[HotspotItem] = []
-        self._selected: Optional[str] = None
-        self._hovered: Optional[str] = None
+        self._bg_item: QGraphicsPixmapItem | None = None
+        self._hotspots: list[HotspotItem] = []
+        self._selected: str | None = None
+        self._hovered: str | None = None
         self._overlay_color = "#a03cc8"  # violet default
-        self._mapping_labels: Dict[str, str] = {}
-        self._shapes: Dict[str, Any] = {}
+        self._mapping_labels: dict[str, str] = {}
+        self._shapes: dict[str, Any] = {}
         self._wide_set: set = set()
 
         # Pale composite (all buttons dimmed) and bright individual overlay
-        self._pale_pixmap: Optional[QPixmap] = None
-        self._pale_item: Optional[QGraphicsPixmapItem] = None
-        self._bright_pixmap: Optional[QPixmap] = None
-        self._bright_item: Optional[QGraphicsPixmapItem] = None
+        self._pale_pixmap: QPixmap | None = None
+        self._pale_item: QGraphicsPixmapItem | None = None
+        self._bright_pixmap: QPixmap | None = None
+        self._bright_item: QGraphicsPixmapItem | None = None
 
         # Per-button overlay textures (sketch-style brush fills)
-        self._overlay_paths: Dict[str, str] = {}
-        self._overlay_full_pixmaps: Dict[str, QPixmap] = {}
-        self._overlay_brushes: Dict[str, QBrush] = {}
+        self._overlay_paths: dict[str, str] = {}
+        self._overlay_full_pixmaps: dict[str, QPixmap] = {}
+        self._overlay_brushes: dict[str, QBrush] = {}
 
         # Drag-edit mode (temporary position tweaking)
         self._edit_mode = False
-        self._dragging: Optional[HotspotItem] = None
+        self._dragging: HotspotItem | None = None
 
         # Pulse animation
         self._pulse_phase = 0.0
@@ -133,11 +146,11 @@ class HotspotCanvas(QGraphicsView):
         self._rebuild_hotspot_items()
         self.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
 
-    def set_hotspots(self, hotspots: List[Tuple[str, float, float]]) -> None:
+    def set_hotspots(self, hotspots: list[tuple[str, float, float]]) -> None:
         self._hotspots = [HotspotItem(name, nx, ny) for name, nx, ny in hotspots]
         self._rebuild_hotspot_items()
 
-    def set_hotspot_shapes(self, shapes: Dict[str, Any]) -> None:
+    def set_hotspot_shapes(self, shapes: dict[str, Any]) -> None:
         """Set per-button shape specs (only affects Joy-Con canvas)."""
         self._shapes = shapes
         self._rebuild_hotspot_items()
@@ -147,7 +160,7 @@ class HotspotCanvas(QGraphicsView):
         self._wide_set = wide
         self._rebuild_hotspot_items()
 
-    def set_overlay_paths(self, paths: Dict[str, str]) -> None:
+    def set_overlay_paths(self, paths: dict[str, str]) -> None:
         """Set file paths for per-button overlay PNGs used as texture fills."""
         self._overlay_paths = paths
         self._overlay_full_pixmaps.clear()
@@ -158,7 +171,7 @@ class HotspotCanvas(QGraphicsView):
         self._build_overlay_brushes()
         self._update_hotspot_visuals()
 
-    def set_selected(self, name: Optional[str]) -> None:
+    def set_selected(self, name: str | None) -> None:
         self._selected = name
         self._update_hotspot_visuals()
 
@@ -166,7 +179,7 @@ class HotspotCanvas(QGraphicsView):
         self._overlay_color = hex_color
         self._update_hotspot_visuals()
 
-    def set_pale_overlay(self, pixmap: Optional[QPixmap]) -> None:
+    def set_pale_overlay(self, pixmap: QPixmap | None) -> None:
         """Set (or clear) the pale composite overlay showing all buttons dimmed."""
         self._pale_pixmap = pixmap
         if self._pale_item and self._pale_item.scene():
@@ -176,7 +189,7 @@ class HotspotCanvas(QGraphicsView):
             self._pale_item = self._scene.addPixmap(pixmap)
             self._pale_item.setZValue(5)
 
-    def set_bright_overlay(self, pixmap: Optional[QPixmap]) -> None:
+    def set_bright_overlay(self, pixmap: QPixmap | None) -> None:
         """Set (or clear) the bright overlay for the currently selected button."""
         self._bright_pixmap = pixmap
         if self._bright_item and self._bright_item.scene():
@@ -187,12 +200,12 @@ class HotspotCanvas(QGraphicsView):
             self._bright_item.setZValue(8)
 
     def update_hotspot_state(self, name: str, *,
-                             key_id: Optional[int] = None,
-                             mapped: Optional[bool] = None,
-                             conflict: Optional[bool] = None,
-                             search_match: Optional[bool] = None,
-                             disabled: Optional[bool] = None,
-                             locked: Optional[bool] = None) -> None:
+                             key_id: int | None = None,
+                             mapped: bool | None = None,
+                             conflict: bool | None = None,
+                             search_match: bool | None = None,
+                             disabled: bool | None = None,
+                             locked: bool | None = None) -> None:
         for hs in self._hotspots:
             if hs.name == name:
                 if key_id is not None:
@@ -210,7 +223,7 @@ class HotspotCanvas(QGraphicsView):
                 break
         self._update_hotspot_visuals()
 
-    def set_mapping_labels(self, labels: Dict[str, str]) -> None:
+    def set_mapping_labels(self, labels: dict[str, str]) -> None:
         self._mapping_labels = labels
         self._update_hotspot_visuals()
 
@@ -219,7 +232,7 @@ class HotspotCanvas(QGraphicsView):
             hs.search_match = False
         self._update_hotspot_visuals()
 
-    def get_hotspot_names(self) -> List[str]:
+    def get_hotspot_names(self) -> list[str]:
         return [hs.name for hs in self._hotspots]
 
     def set_edit_mode(self, enabled: bool) -> None:
@@ -230,7 +243,7 @@ class HotspotCanvas(QGraphicsView):
             else Qt.CursorShape.ArrowCursor
         )
 
-    def export_positions(self) -> List[Tuple[str, float, float]]:
+    def export_positions(self) -> list[tuple[str, float, float]]:
         return [(hs.name, round(hs.norm_x, 6), round(hs.norm_y, 6))
                 for hs in self._hotspots]
 
@@ -300,13 +313,13 @@ class HotspotCanvas(QGraphicsView):
     # Internals
     # -----------------------------------------------------------------
 
-    def _pick_hotspot(self, view_pos: Any) -> Optional[str]:
+    def _pick_hotspot(self, view_pos: Any) -> str | None:
         scene_pos = self.mapToScene(int(view_pos.x()), int(view_pos.y()))
         rect = self._scene.sceneRect()
         if rect.width() <= 0:
             return None
         # Pass 1: exact shape containment
-        best_name: Optional[str] = None
+        best_name: str | None = None
         best_dist = float("inf")
         for hs in self._hotspots:
             hx = hs.norm_x * rect.width()

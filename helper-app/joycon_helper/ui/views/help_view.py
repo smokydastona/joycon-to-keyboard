@@ -6,13 +6,19 @@ Each section is collapsible and all are filtered by a live search bar.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, List, Tuple
+from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QFrame, QHBoxLayout, QLabel, QLineEdit, QScrollArea,
-    QSizePolicy, QVBoxLayout, QWidget,
+    QFrame,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QScrollArea,
+    QSizePolicy,
+    QVBoxLayout,
+    QWidget,
 )
 
 from ..theme import ThemeEngine
@@ -24,10 +30,10 @@ log = logging.getLogger("joycon_helper.ui.views.help_view")
 
 # ── Section data ────────────────────────────────────────────────────
 
-_HELP_SECTIONS: List[Tuple[str, str, bool]] = []  # populated at module level below
+_HELP_SECTIONS: list[tuple[str, str, bool]] = []  # populated at module level below
 
 
-def _sections() -> List[Tuple[str, str, bool]]:
+def _sections() -> list[tuple[str, str, bool]]:
     """Return (title, body_text, initially_expanded) tuples."""
     return [
         (
@@ -558,9 +564,7 @@ class _CollapsibleSection(QWidget):
         q = query.lower()
         if q in self._title_text.lower():
             return True
-        if q in self._body_text.lower():
-            return True
-        return False
+        return q in self._body_text.lower()
 
 
 # ── Help View ───────────────────────────────────────────────────────

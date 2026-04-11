@@ -9,6 +9,7 @@ Releases API for this repository.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
@@ -17,9 +18,10 @@ import ssl
 import sys
 import tempfile
 import threading
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any
 from urllib.request import Request, urlopen
 
 from ._version import __version__
@@ -140,7 +142,7 @@ def _verify_authenticode(path: Path) -> bool:
 # Version comparison
 # ---------------------------------------------------------------------------
 
-def _parse_version(tag: str) -> Tuple[int, ...]:
+def _parse_version(tag: str) -> tuple[int, ...]:
     """Parse a version string like '0.1.42' or 'v0.1.42' into a comparable tuple."""
     tag = tag.strip().lstrip("v")
     parts = []
@@ -166,7 +168,7 @@ def is_frozen() -> bool:
 # GitHub Releases API
 # ---------------------------------------------------------------------------
 
-def _fetch_latest_release() -> Dict[str, Any]:
+def _fetch_latest_release() -> dict[str, Any]:
     """Fetch the latest GitHub Release metadata (unauthenticated)."""
     req = Request(RELEASES_URL, headers={"Accept": "application/vnd.github+json"})
     ctx = ssl.create_default_context()
@@ -174,7 +176,7 @@ def _fetch_latest_release() -> Dict[str, Any]:
         return json.loads(resp.read().decode("utf-8"))
 
 
-def _find_exe_asset(release: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def _find_exe_asset(release: dict[str, Any]) -> dict[str, Any] | None:
     """Return the release asset dict for the helper .exe, or None."""
     for asset in release.get("assets", []):
         if asset.get("name", "") == EXE_ASSET_NAME:
@@ -182,7 +184,7 @@ def _find_exe_asset(release: Dict[str, Any]) -> Optional[Dict[str, Any]]:
     return None
 
 
-def check_for_update() -> Optional[Dict[str, str]]:
+def check_for_update() -> dict[str, str] | None:
     """Check GitHub for a newer release.
 
     Returns a dict with 'tag', 'version', 'download_url', 'html_url',
@@ -224,7 +226,7 @@ def check_for_update() -> Optional[Dict[str, str]]:
         return None
 
     # Collect firmware assets from the same release.
-    fw_assets: Dict[str, Dict[str, Any]] = {}
+    fw_assets: dict[str, dict[str, Any]] = {}
     for rel_asset in release.get("assets", []):
         name = rel_asset.get("name", "")
         if name in (FW_ASSET_S3, FW_ASSET_ESP32):
@@ -264,7 +266,7 @@ def _cleanup_old_exe() -> None:
 def download_and_install(
     download_url: str,
     *,
-    progress_cb: Optional[Callable[[int, int], None]] = None,
+    progress_cb: Callable[[int, int], None] | None = None,
 ) -> Path:
     """Download the new exe and swap it into place.
 
@@ -307,10 +309,8 @@ def download_and_install(
         log.info("Download complete: %d bytes", downloaded)
     except Exception:
         # Clean up partial download.
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(tmp_path_str)
-        except OSError:
-            pass
         raise
 
     tmp_path = Path(tmp_path_str)
@@ -329,20 +329,20 @@ def download_and_install(
             old_exe.unlink()
         current_exe.rename(old_exe)
         log.info("Moved current exe to %s", old_exe)
-    except OSError:
+    except OSError as e:
         log.error("Failed to rename current exe", exc_info=True)
         tmp_path.unlink(missing_ok=True)
-        raise RuntimeError("Could not move the current executable aside. Is another copy running?")
+        raise RuntimeError("Could not move the current executable aside. Is another copy running?") from e
 
     try:
         tmp_path.rename(current_exe)
         log.info("Installed new exe as %s", current_exe)
-    except OSError:
+    except OSError as e:
         # Roll back: restore old exe.
         log.error("Failed to install new exe, rolling back", exc_info=True)
         old_exe.rename(current_exe)
         tmp_path.unlink(missing_ok=True)
-        raise RuntimeError("Could not install the new executable. Rolled back to previous version.")
+        raise RuntimeError("Could not install the new executable. Rolled back to previous version.") from e
 
     return current_exe
 
@@ -354,7 +354,7 @@ def download_and_install(
 def download_bytes(
     url: str,
     *,
-    progress_cb: Optional[Callable[[int, int], None]] = None,
+    progress_cb: Callable[[int, int], None] | None = None,
 ) -> bytes:
     """Download a URL and return raw bytes with optional progress callback."""
     req = Request(url)
@@ -391,12 +391,12 @@ def save_pending_firmware(name: str, data: bytes) -> None:
     log.info("Saved pending firmware: %s (%d bytes)", name, len(data))
 
 
-def load_pending_firmware() -> Dict[str, Path]:
+def load_pending_firmware() -> dict[str, Path]:
     """Return {filename: path} for any saved firmware binaries."""
     d = _pending_fw_dir()
     if not d.is_dir():
         return {}
-    result: Dict[str, Path] = {}
+    result: dict[str, Path] = {}
     for f in d.iterdir():
         if f.suffix == ".bin" and f.is_file():
             result[f.name] = f
@@ -436,10 +436,8 @@ def install_exe(exe_bytes: bytes) -> Path:
         with os.fdopen(tmp_fd, "wb") as out:
             out.write(exe_bytes)
     except Exception:
-        try:
+        with contextlib.suppress(OSError):
             os.unlink(tmp_path_str)
-        except OSError:
-            pass
         raise
 
     tmp_path = Path(tmp_path_str)
@@ -456,16 +454,16 @@ def install_exe(exe_bytes: bytes) -> Path:
         if old_exe.exists():
             old_exe.unlink()
         current_exe.rename(old_exe)
-    except OSError:
+    except OSError as e:
         tmp_path.unlink(missing_ok=True)
-        raise RuntimeError("Could not move the current executable aside.")
+        raise RuntimeError("Could not move the current executable aside.") from e
 
     try:
         tmp_path.rename(current_exe)
-    except OSError:
+    except OSError as e:
         old_exe.rename(current_exe)
         tmp_path.unlink(missing_ok=True)
-        raise RuntimeError("Could not install the new executable. Rolled back.")
+        raise RuntimeError("Could not install the new executable. Rolled back.") from e
 
     log.info("Installed new exe as %s", current_exe)
     return current_exe
@@ -488,7 +486,7 @@ def relaunch() -> None:
 # Background check helper (non-blocking, for UI startup)
 # ---------------------------------------------------------------------------
 
-def check_in_background(callback: Callable[[Optional[Dict[str, str]]], None]) -> None:
+def check_in_background(callback: Callable[[dict[str, str] | None], None]) -> None:
     """Run ``check_for_update()`` on a daemon thread and deliver result via *callback*.
 
     *callback* is called from the background thread — the caller is responsible

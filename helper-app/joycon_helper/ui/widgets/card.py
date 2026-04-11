@@ -1,8 +1,6 @@
 """Reusable Card widget — a rounded, elevated QFrame container."""
 from __future__ import annotations
 
-from typing import Optional
-
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import QFrame, QGraphicsDropShadowEffect, QWidget
 
@@ -12,7 +10,7 @@ from ..theme import ThemeEngine
 class Card(QFrame):
     """A themed rounded-corner container with a subtle drop shadow."""
 
-    def __init__(self, theme: ThemeEngine, parent: Optional[QWidget] = None,
+    def __init__(self, theme: ThemeEngine, parent: QWidget | None = None,
                  padding: int = 16, radius: int = 10) -> None:
         super().__init__(parent)
         self._theme = theme

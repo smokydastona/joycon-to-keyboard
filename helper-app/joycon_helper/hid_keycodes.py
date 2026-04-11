@@ -7,8 +7,6 @@ type on the ESP32-S3 firmware.
 
 from __future__ import annotations
 
-from typing import Dict, Optional, Tuple
-
 # ---------------------------------------------------------------------------
 # USB HID modifier bits  (report byte-0 bitmask)
 # ---------------------------------------------------------------------------
@@ -28,7 +26,7 @@ MOD_RGUI = 0x80
 # For modifier-only keys the keycode is 0 and the modifier byte is set.
 # ---------------------------------------------------------------------------
 
-_KEYSYM_MAP: Dict[str, Tuple[int, int]] = {
+_KEYSYM_MAP: dict[str, tuple[int, int]] = {
     # Letters -----------------------------------------------------------------
     "a": (0, 0x04), "b": (0, 0x05), "c": (0, 0x06), "d": (0, 0x07),
     "e": (0, 0x08), "f": (0, 0x09), "g": (0, 0x0A), "h": (0, 0x0B),
@@ -109,7 +107,7 @@ _KEYSYM_MAP: Dict[str, Tuple[int, int]] = {
 }
 
 
-def keysym_to_hid(keysym: str) -> Optional[Tuple[int, int]]:
+def keysym_to_hid(keysym: str) -> tuple[int, int] | None:
     """Convert a tkinter keysym string to ``(modifier, keycode)``.
 
     Returns *None* if the keysym is unrecognised.
@@ -121,7 +119,7 @@ def keysym_to_hid(keysym: str) -> Optional[Tuple[int, int]]:
 # Reverse: (mod, keycode) → human-readable name
 # ---------------------------------------------------------------------------
 
-_MOD_NAMES: list[Tuple[int, str]] = [
+_MOD_NAMES: list[tuple[int, str]] = [
     (MOD_LCTRL, "Ctrl"),
     (MOD_LSHIFT, "Shift"),
     (MOD_LALT, "Alt"),
@@ -132,7 +130,7 @@ _MOD_NAMES: list[Tuple[int, str]] = [
     (MOD_RGUI, "RWin"),
 ]
 
-_KEYCODE_NAMES: Dict[int, str] = {
+_KEYCODE_NAMES: dict[int, str] = {
     0x04: "A", 0x05: "B", 0x06: "C", 0x07: "D", 0x08: "E", 0x09: "F",
     0x0A: "G", 0x0B: "H", 0x0C: "I", 0x0D: "J", 0x0E: "K", 0x0F: "L",
     0x10: "M", 0x11: "N", 0x12: "O", 0x13: "P", 0x14: "Q", 0x15: "R",
@@ -162,7 +160,7 @@ _KEYCODE_NAMES: Dict[int, str] = {
 }
 
 # The built-in default keymap (matches keymap.c on the firmware).
-DEFAULT_KEYMAP: Dict[int, Tuple[int, int]] = {
+DEFAULT_KEYMAP: dict[int, tuple[int, int]] = {
     1: (0, 0x1A),            # W
     2: (0, 0x16),            # S
     3: (0, 0x04),            # A

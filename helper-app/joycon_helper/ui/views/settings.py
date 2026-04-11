@@ -12,9 +12,18 @@ from typing import TYPE_CHECKING
 from PyQt6.QtCore import QSettings, Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QCheckBox, QComboBox, QFormLayout, QHBoxLayout, QLabel,
-    QMessageBox, QPushButton, QScrollArea, QSlider, QSpinBox,
-    QVBoxLayout, QWidget,
+    QCheckBox,
+    QComboBox,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QSlider,
+    QSpinBox,
+    QVBoxLayout,
+    QWidget,
 )
 
 from ..theme import ThemeEngine
@@ -422,8 +431,9 @@ class SettingsView(QScrollArea):
         logging.getLogger().setLevel(getattr(logging, level, logging.INFO))
 
     def _export_all_profiles(self) -> None:
-        from PyQt6.QtWidgets import QFileDialog
         import json
+
+        from PyQt6.QtWidgets import QFileDialog
         path, _ = QFileDialog.getSaveFileName(
             self, "Export All Profiles", "bind_bandit_profiles.json",
             "JSON (*.json)")
@@ -441,20 +451,21 @@ class SettingsView(QScrollArea):
             QMessageBox.critical(self, "Export Error", str(exc))
 
     def _import_all_profiles(self) -> None:
-        from PyQt6.QtWidgets import QFileDialog
         import json
+
+        from PyQt6.QtWidgets import QFileDialog
         path, _ = QFileDialog.getOpenFileName(
             self, "Import All Profiles", "",
             "JSON (*.json)")
         if not path:
             return
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 data = json.load(f)
             profiles = data.get("profiles", {})
             if profiles:
                 # Load the first available profile
-                for slot_str, profile in profiles.items():
+                for _slot_str, profile in profiles.items():
                     self._main.set_profile(profile)
                     break
             from ..widgets.toast import Toast
@@ -463,9 +474,10 @@ class SettingsView(QScrollArea):
             QMessageBox.critical(self, "Import Error", str(exc))
 
     def _export_debug_bundle(self) -> None:
-        from PyQt6.QtWidgets import QFileDialog
         import json
         import zipfile
+
+        from PyQt6.QtWidgets import QFileDialog
         path, _ = QFileDialog.getSaveFileName(
             self, "Export Debug Bundle", "bind_bandit_debug.zip",
             "ZIP (*.zip)")

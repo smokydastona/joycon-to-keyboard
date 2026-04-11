@@ -9,26 +9,47 @@ from __future__ import annotations
 
 import copy
 import logging
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtCore import QSize, Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QFormLayout, QFrame,
-    QGridLayout, QGroupBox, QHBoxLayout,
-    QLabel, QLineEdit, QMessageBox, QPushButton, QScrollArea,
-    QSpinBox, QStackedWidget, QTabWidget, QVBoxLayout, QWidget,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QFormLayout,
+    QFrame,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QSpinBox,
+    QStackedWidget,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
 )
 
 if TYPE_CHECKING:
     from ..main_window import MainWindow
 
-from ..theme import ThemeEngine
 from ...hid_keycodes import (
-    MOD_LCTRL, MOD_LSHIFT, MOD_LALT, MOD_LGUI,
-    MOD_RCTRL, MOD_RSHIFT, MOD_RALT, MOD_RGUI,
-    _KEYCODE_NAMES, hid_to_name,
+    _KEYCODE_NAMES,
+    MOD_LALT,
+    MOD_LCTRL,
+    MOD_LGUI,
+    MOD_LSHIFT,
+    MOD_RALT,
+    MOD_RCTRL,
+    MOD_RGUI,
+    MOD_RSHIFT,
+    hid_to_name,
 )
+from ..theme import ThemeEngine
 
 log = logging.getLogger("joycon_helper.ui.views.mapping_popup")
 
@@ -37,7 +58,7 @@ log = logging.getLogger("joycon_helper.ui.views.mapping_popup")
 # ---------------------------------------------------------------------------
 
 # Keyboard rows for the visual picker (HID keycodes)
-_KBD_ROWS: List[List[tuple]] = [
+_KBD_ROWS: list[list[tuple]] = [
     # Row 0 — Esc, F-keys
     [("Esc", 0x29), ("F1", 0x3A), ("F2", 0x3B), ("F3", 0x3C), ("F4", 0x3D),
      ("F5", 0x3E), ("F6", 0x3F), ("F7", 0x40), ("F8", 0x41),
@@ -63,7 +84,7 @@ _KBD_ROWS: List[List[tuple]] = [
      ("\u2190", 0x50), ("\u2191", 0x52), ("\u2193", 0x51), ("\u2192", 0x4F)],
 ]
 
-_MODIFIER_DEFS: List[tuple] = [
+_MODIFIER_DEFS: list[tuple] = [
     ("LCtrl", MOD_LCTRL),
     ("LShift", MOD_LSHIFT),
     ("LAlt", MOD_LALT),
@@ -75,7 +96,7 @@ _MODIFIER_DEFS: List[tuple] = [
 ]
 
 # Mouse buttons — stored as negative keycodes to signal firmware
-MOUSE_BUTTONS: List[tuple] = [
+MOUSE_BUTTONS: list[tuple] = [
     ("Left Click", 1),
     ("Right Click", 2),
     ("Middle Click", 3),
@@ -86,7 +107,7 @@ MOUSE_BUTTONS: List[tuple] = [
 ]
 
 # Advanced binding types
-ADVANCED_TYPES: List[tuple] = [
+ADVANCED_TYPES: list[tuple] = [
     ("turbo", "Turbo", "Repeat the key at a set interval while held"),
     ("toggle", "Toggle", "Press once to hold, press again to release"),
     ("sticky", "Sticky", "Key stays down until another key is pressed"),
@@ -104,14 +125,14 @@ ADVANCED_TYPES: List[tuple] = [
 class MappingPopup(QDialog):
     """Per-button binding popup with categorised output selection."""
 
-    def __init__(self, main: "MainWindow", button_name: str,
-                 current_entry: Optional[Dict[str, Any]] = None,
-                 parent: Optional[QWidget] = None) -> None:
+    def __init__(self, main: MainWindow, button_name: str,
+                 current_entry: dict[str, Any] | None = None,
+                 parent: QWidget | None = None) -> None:
         super().__init__(parent or main)
         self._main = main
         self._button_name = button_name
         self._entry = copy.deepcopy(current_entry) if current_entry else {}
-        self._result_entry: Optional[Dict[str, Any]] = None
+        self._result_entry: dict[str, Any] | None = None
 
         self.setWindowTitle(f"Edit Binding — {button_name}")
         self.setMinimumSize(680, 560)
@@ -253,7 +274,7 @@ class MappingPopup(QDialog):
         # Modifier checkboxes
         mod_group = QGroupBox("Modifiers")
         mod_lay = QHBoxLayout(mod_group)
-        self._mod_checks: Dict[int, QCheckBox] = {}
+        self._mod_checks: dict[int, QCheckBox] = {}
         for label, bit in _MODIFIER_DEFS:
             cb = QCheckBox(label)
             cb.setToolTip(f"Toggle {label} modifier (bit 0x{bit:02X})")
@@ -270,7 +291,7 @@ class MappingPopup(QDialog):
         kbd_main_lay = QVBoxLayout(kbd_container)
         kbd_main_lay.setSpacing(4)
 
-        self._kbd_buttons: Dict[int, QPushButton] = {}
+        self._kbd_buttons: dict[int, QPushButton] = {}
         for row in _KBD_ROWS:
             row_lay = QHBoxLayout()
             row_lay.setSpacing(3)
@@ -309,7 +330,7 @@ class MappingPopup(QDialog):
         self._selected_key_label.setStyleSheet("font-size: 13px; font-weight: bold;")
         lay.addWidget(self._selected_key_label)
 
-        self._selected_keycode: Optional[int] = None
+        self._selected_keycode: int | None = None
         self._tabs.addTab(page, "\u2328  Keyboard")
 
     def _select_keycode(self, keycode: int, label: str) -> None:
@@ -353,8 +374,8 @@ class MappingPopup(QDialog):
         info.setStyleSheet("color: grey; font-size: 12px;")
         lay.addWidget(info)
 
-        self._mouse_selected: Optional[int] = None
-        self._mouse_btns: Dict[int, QPushButton] = {}
+        self._mouse_selected: int | None = None
+        self._mouse_btns: dict[int, QPushButton] = {}
 
         grid = QGridLayout()
         grid.setSpacing(8)
@@ -443,7 +464,7 @@ class MappingPopup(QDialog):
 
         # Stacked config per advanced type
         self._adv_stack = QStackedWidget()
-        self._adv_configs: Dict[str, Dict[str, Any]] = {}
+        self._adv_configs: dict[str, dict[str, Any]] = {}
 
         # 0: turbo
         self._adv_stack.addWidget(self._build_turbo_config())
@@ -542,7 +563,7 @@ class MappingPopup(QDialog):
         lbl.setStyleSheet("color: grey; font-size: 12px;")
         lay.addWidget(lbl)
 
-        self._seq_inputs: List[QLineEdit] = []
+        self._seq_inputs: list[QLineEdit] = []
         grid = QGridLayout()
         grid.setSpacing(4)
         for i in range(8):
@@ -645,7 +666,7 @@ class MappingPopup(QDialog):
         else:
             self._summary_label.setText("Configure a binding above")
 
-    def _check_conflicts(self, entry: Dict[str, Any]) -> None:
+    def _check_conflicts(self, entry: dict[str, Any]) -> None:
         keycode = entry.get("keycode")
         if keycode is None:
             self._conflict_label.hide()
@@ -674,7 +695,7 @@ class MappingPopup(QDialog):
     # Build entry from UI
     # =================================================================
 
-    def _build_entry_from_ui(self) -> Optional[Dict[str, Any]]:
+    def _build_entry_from_ui(self) -> dict[str, Any] | None:
         tab = self._tabs.currentIndex()
 
         if tab == 0:  # Keyboard
@@ -701,7 +722,7 @@ class MappingPopup(QDialog):
         elif tab == 3:  # Advanced
             adv_idx = self._adv_type_combo.currentIndex()
             type_id = self._adv_type_combo.itemData(adv_idx)
-            entry: Dict[str, Any] = {"type": type_id}
+            entry: dict[str, Any] = {"type": type_id}
 
             if type_id == "turbo":
                 if self._selected_keycode is not None:
@@ -854,7 +875,7 @@ class MappingPopup(QDialog):
         self._result_entry = None  # sentinel: caller should remove the binding
         self.done(2)  # custom result code — "unbind"
 
-    def get_result(self) -> Optional[Dict[str, Any]]:
+    def get_result(self) -> dict[str, Any] | None:
         """Return the configured entry, or *None* if the user chose Unbind."""
         return self._result_entry
 
@@ -863,7 +884,7 @@ class MappingPopup(QDialog):
     # =================================================================
 
     @staticmethod
-    def _parse_keycode(text: str) -> Optional[int]:
+    def _parse_keycode(text: str) -> int | None:
         text = text.strip()
         if not text:
             return None
@@ -873,7 +894,7 @@ class MappingPopup(QDialog):
             return None
 
     @staticmethod
-    def _describe_entry(entry: Dict[str, Any]) -> str:
+    def _describe_entry(entry: dict[str, Any]) -> str:
         if not entry:
             return "Not mapped"
         t = entry.get("type")
@@ -903,10 +924,10 @@ class MappingPopup(QDialog):
 
 
 # Convenience launcher
-def open_mapping_popup(main: "MainWindow", button_name: str,
-                       current_entry: Optional[Dict[str, Any]] = None,
-                       parent: Optional[QWidget] = None,
-                       ) -> Optional[Dict[str, Any]]:
+def open_mapping_popup(main: MainWindow, button_name: str,
+                       current_entry: dict[str, Any] | None = None,
+                       parent: QWidget | None = None,
+                       ) -> dict[str, Any] | None:
     """Open the mapping popup and return the new entry dict, or *None*.
 
     Returns:

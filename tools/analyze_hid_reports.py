@@ -41,7 +41,8 @@ import collections
 import dataclasses
 import re
 import sys
-from typing import Iterable, Iterator
+from collections.abc import Iterable, Iterator
+from pathlib import Path
 
 SYNC0 = 0xAA
 SYNC1 = 0x55
@@ -130,7 +131,7 @@ def per_offset_change_counts(reports: list[bytes], length: int) -> tuple[list[in
 
     prev = selected[0]
     for cur in selected[1:]:
-        for i, (a, b) in enumerate(zip(prev, cur)):
+        for i, (a, b) in enumerate(zip(prev, cur, strict=False)):
             if a != b:
                 byte_changes[i] += 1
                 bit_flips[i] += (a ^ b).bit_count()
@@ -159,10 +160,10 @@ def main(argv: list[str]) -> int:
     args = ap.parse_args(argv)
 
     if args.from_text:
-        text = open(args.path, "r", encoding="utf-8", errors="replace").read().splitlines()
+        text = Path(args.path).read_text(encoding="utf-8", errors="replace").splitlines()
         reports = list(iter_reports_from_text(text))
     else:
-        data = open(args.path, "rb").read()
+        data = Path(args.path).read_bytes()
         reports = list(iter_reports_from_uart_bin(data))
 
     if not reports:
@@ -198,7 +199,7 @@ def main(argv: list[str]) -> int:
             if prev != cur:
                 # Print a compact diff line: show bytes that changed.
                 changes = []
-                for i, (a, b) in enumerate(zip(prev, cur)):
+                for i, (a, b) in enumerate(zip(prev, cur, strict=False)):
                     if a != b:
                         changes.append(f"{i}:{a:02X}->{b:02X}")
                 print("  " + " ".join(changes[:80]))

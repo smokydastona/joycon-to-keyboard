@@ -5,13 +5,20 @@ connecting their hardware and verifying input.
 """
 from __future__ import annotations
 
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QSettings, Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QCheckBox, QComboBox, QDialog, QHBoxLayout, QLabel,
-    QPushButton, QStackedWidget, QVBoxLayout, QWidget,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
 )
 
 if TYPE_CHECKING:
@@ -29,7 +36,7 @@ def should_show_onboarding() -> bool:
 class OnboardingWizard(QDialog):
     """Modal 5-page setup wizard for first-time users."""
 
-    def __init__(self, main: MainWindow, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, main: MainWindow, parent: QWidget | None = None) -> None:
         super().__init__(parent or main)
         self._main = main
         self.setWindowTitle("Welcome to Bind Bandit")

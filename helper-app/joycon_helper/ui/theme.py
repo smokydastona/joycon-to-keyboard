@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 log = logging.getLogger("joycon_helper.ui.theme")
 
@@ -16,14 +16,14 @@ log = logging.getLogger("joycon_helper.ui.theme")
 # Colour helpers
 # ---------------------------------------------------------------------------
 
-def hex_to_rgb(h: str) -> Tuple[int, int, int]:
+def hex_to_rgb(h: str) -> tuple[int, int, int]:
     h = h.strip().lstrip("#")
     if len(h) != 6:
         raise ValueError(f"bad hex color: {h!r}")
     return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
 
 
-def rgb_to_hex(rgb: Tuple[int, int, int]) -> str:
+def rgb_to_hex(rgb: tuple[int, int, int]) -> str:
     r, g, b = rgb
     return f"#{r:02x}{g:02x}{b:02x}"
 
@@ -59,7 +59,7 @@ def darken(h: str, amount: float = 0.15) -> str:
 # Built-in theme definitions
 # ---------------------------------------------------------------------------
 
-LIGHT_THEME: Dict[str, Any] = {
+LIGHT_THEME: dict[str, Any] = {
     "name": "bind-bandit-light",
     "is_dark": False,
     "colors": {
@@ -123,7 +123,7 @@ LIGHT_THEME: Dict[str, Any] = {
     },
 }
 
-DARK_THEME: Dict[str, Any] = {
+DARK_THEME: dict[str, Any] = {
     "name": "bind-bandit-dark",
     "is_dark": True,
     "colors": {
@@ -195,7 +195,7 @@ DARK_THEME: Dict[str, Any] = {
 class ThemeEngine:
     """Manages the active theme and generates QSS stylesheets."""
 
-    def __init__(self, dark: Optional[bool] = None) -> None:
+    def __init__(self, dark: bool | None = None) -> None:
         if dark is None:
             dark = self._detect_dark_preference()
         self._is_dark = dark
@@ -206,7 +206,7 @@ class ThemeEngine:
         return self._is_dark
 
     @property
-    def theme(self) -> Dict[str, Any]:
+    def theme(self) -> dict[str, Any]:
         return self._theme
 
     def color(self, key: str) -> str:

@@ -7,23 +7,43 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Dict, Optional, Set, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QComboBox, QFileDialog,
-    QGroupBox, QHBoxLayout, QInputDialog, QLabel, QLineEdit,
-    QMenu, QMessageBox, QPushButton, QScrollArea, QSplitter, QTabWidget, QVBoxLayout, QWidget,
+    QComboBox,
+    QFileDialog,
+    QGroupBox,
+    QHBoxLayout,
+    QInputDialog,
+    QLabel,
+    QLineEdit,
+    QMenu,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QSplitter,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
 )
 
 from ..constants import (
-    INCEDIUS_HOTSPOTS, INCEDIUS_WIDE, JOYCON_BUTTON_SHAPES,
-    KBD_HOTSPOTS, KBD_LABEL_TO_KEYCODE, KBD_WIDE,
-    KEYMAP_HOTSPOTS, M913_HOTSPOTS, M913_WIDE,
-    MOUSE_HOTSPOTS, MOUSE_WIDE,
-    RAINBOW_COLORS, RAINBOW_NAMES,
     _KEYCODE_TO_KBD_LABEL,
+    INCEDIUS_HOTSPOTS,
+    INCEDIUS_WIDE,
+    JOYCON_BUTTON_SHAPES,
+    KBD_HOTSPOTS,
+    KBD_LABEL_TO_KEYCODE,
+    KBD_WIDE,
+    KEYMAP_HOTSPOTS,
+    M913_HOTSPOTS,
+    M913_WIDE,
+    MOUSE_HOTSPOTS,
+    MOUSE_WIDE,
+    RAINBOW_COLORS,
+    RAINBOW_NAMES,
 )
 from ..theme import ThemeEngine
 from ..widgets.card import Card
@@ -47,13 +67,13 @@ class MappingView(QWidget):
     def __init__(self, main: MainWindow) -> None:
         super().__init__()
         self._main = main
-        self._selected_hotspot: Optional[str] = None
+        self._selected_hotspot: str | None = None
         self._learn_mode = False
         self._m913_skin = "Stock"
         self._overlay_color = "violet"
         self._search_text = ""
-        self._clipboard_binding: Optional[Dict[str, Any]] = None
-        self._locked_hotspots: Set[str] = set()
+        self._clipboard_binding: dict[str, Any] | None = None
+        self._locked_hotspots: set[str] = set()
 
         # Per-skin editable position caches (survive skin switching)
         tk = "dark" if main.theme.is_dark else "default"
@@ -434,7 +454,7 @@ class MappingView(QWidget):
             if not os.path.isfile(p):
                 continue
             try:
-                with open(p, "r", encoding="utf-8") as fh:
+                with open(p, encoding="utf-8") as fh:
                     data = json.load(fh)
             except (json.JSONDecodeError, OSError):
                 continue
@@ -452,7 +472,7 @@ class MappingView(QWidget):
     # -----------------------------------------------------------------
 
     # Maps canvas object-id → (device_name_for_overlays, overlay_prefix)
-    _CANVAS_DEVICE_INFO = {
+    _CANVAS_DEVICE_INFO: ClassVar[dict[str, tuple[str, str]]] = {
         "_jc_canvas":    ("joycon",   "jc"),
         "_m913_canvas":  ("m913",     "m913"),
         "_mouse_canvas": ("mouse",    "mouse"),
@@ -512,7 +532,7 @@ class MappingView(QWidget):
             if attr == "_m913_canvas" and getattr(self, "_m913_skin", "Stock") == "Incedius":
                 actual_device = "incedius"
                 actual_prefix = "inc"
-            paths: Dict[str, str] = {}
+            paths: dict[str, str] = {}
             for name in canvas.get_hotspot_names():
                 safe_name = name.replace("/", "_").replace("\\", "_").replace(".", "_dot_")
                 overlay_name = f"{actual_prefix}_{safe_name}"
@@ -584,7 +604,7 @@ class MappingView(QWidget):
         mappings = profile.get("mappings", {})
 
         for canvas, hotspots in self._device_list():
-            labels: Dict[str, str] = {}
+            labels: dict[str, str] = {}
             for hs_name, _, _ in hotspots:
                 key_id = mappings.get(hs_name, {}).get("keycode")
                 is_mapped = key_id is not None
@@ -883,7 +903,7 @@ class MappingView(QWidget):
         else:
             self._m913_incedius_pos = self._m913_canvas.export_positions()
 
-        data: Dict[str, list] = {
+        data: dict[str, list] = {
             "joycon":   [[n, x, y] for n, x, y in self._jc_canvas.export_positions()],
             "m913":     [[n, x, y] for n, x, y in self._m913_stock_pos],
             "incedius": [[n, x, y] for n, x, y in self._m913_incedius_pos],
@@ -909,7 +929,7 @@ class MappingView(QWidget):
         if not path:
             return
         try:
-            with open(path, "r", encoding="utf-8") as fh:
+            with open(path, encoding="utf-8") as fh:
                 data = json.load(fh)
         except (json.JSONDecodeError, OSError) as exc:
             QMessageBox.warning(self, "Import Error", str(exc))
@@ -1056,7 +1076,7 @@ class MappingView(QWidget):
         if not path:
             return
         try:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 data = json.load(f)
         except Exception as e:
             QMessageBox.critical(self, "Load Failed", str(e))

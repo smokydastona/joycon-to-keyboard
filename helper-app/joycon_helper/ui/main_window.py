@@ -5,21 +5,39 @@ dock, status bar, and device event dispatch.
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
-import time
-from typing import Any, Dict, List, Optional
-
 import sys
+import time
+from typing import Any
 
-from PyQt6.QtCore import QSettings, QSize, QTimer, Qt
+from PyQt6.QtCore import QSettings, QSize, Qt, QTimer
 from PyQt6.QtGui import QAction, QFont, QIcon, QKeySequence, QShortcut
 from PyQt6.QtWidgets import (
-    QApplication, QCheckBox, QComboBox, QDialog, QDialogButtonBox,
-    QFormLayout, QHBoxLayout, QLabel, QLineEdit,
-    QMainWindow, QMenu, QMessageBox, QPlainTextEdit, QPushButton,
-    QSizePolicy, QSlider, QSpinBox, QStackedWidget,
-    QSystemTrayIcon, QTabWidget, QToolBar, QVBoxLayout, QWidget,
+    QApplication,
+    QCheckBox,
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMainWindow,
+    QMenu,
+    QMessageBox,
+    QPlainTextEdit,
+    QPushButton,
+    QSizePolicy,
+    QSlider,
+    QSpinBox,
+    QStackedWidget,
+    QSystemTrayIcon,
+    QTabWidget,
+    QToolBar,
+    QVBoxLayout,
+    QWidget,
 )
 
 from .._version import __version__
@@ -29,8 +47,8 @@ from .assets import AssetManager
 from .constants import KEYMAP_HOTSPOTS
 from .serial_bridge import SerialBridge
 from .theme import ThemeEngine
-from .widgets.overlay_window import OverlayWindow
 from .widgets.onboarding import OnboardingWizard, should_show_onboarding
+from .widgets.overlay_window import OverlayWindow
 from .widgets.sidebar import SidebarWidget
 from .widgets.status_bar import AppStatusBar
 from .widgets.toast import Toast
@@ -74,20 +92,20 @@ class MainWindow(QMainWindow):
         self.bridge = SerialBridge(self)
 
         # Application state
-        self._profile: Dict[str, Any] = get_default_profile(0)
+        self._profile: dict[str, Any] = get_default_profile(0)
         self._slot = 0
         self._bt_status = ""
-        self._battery_level: Optional[int] = None
-        self._latency_ms: Optional[float] = None
-        self._ping_sent_time: Optional[float] = None
-        self._overlay: Optional[OverlayWindow] = None
+        self._battery_level: int | None = None
+        self._latency_ms: float | None = None
+        self._ping_sent_time: float | None = None
+        self._overlay: OverlayWindow | None = None
         self._active_key_ids: set = set()
         self._bt_connected_left = False
         self._bt_connected_right = False
 
         # Undo / redo (centralized for all profile changes)
-        self._undo_stack: List[str] = []
-        self._redo_stack: List[str] = []
+        self._undo_stack: list[str] = []
+        self._redo_stack: list[str] = []
         self._undo_max = 50
         self._skip_undo = False  # prevents recursion during undo/redo
 
@@ -275,8 +293,8 @@ class MainWindow(QMainWindow):
         layout.addWidget(self._view_stack)
 
         # Lazy-load views
-        self._views: List[Optional[QWidget]] = [None] * len(NAV_ITEMS)
-        self._views_built: List[bool] = [False] * len(NAV_ITEMS)
+        self._views: list[QWidget | None] = [None] * len(NAV_ITEMS)
+        self._views_built: list[bool] = [False] * len(NAV_ITEMS)
 
         # Build dashboard eagerly
         self._ensure_view(NAV_DASHBOARD)
@@ -417,12 +435,11 @@ class MainWindow(QMainWindow):
         rsp = obj.get("rsp")
 
         # Pong → latency
-        if rsp == "pong":
-            if self._ping_sent_time is not None:
-                rtt = (time.monotonic() - self._ping_sent_time) * 1000
-                self._latency_ms = rtt
-                self._ping_sent_time = None
-                self._status_bar.set_latency(rtt)
+        if rsp == "pong" and self._ping_sent_time is not None:
+            rtt = (time.monotonic() - self._ping_sent_time) * 1000
+            self._latency_ms = rtt
+            self._ping_sent_time = None
+            self._status_bar.set_latency(rtt)
 
         # Read profile response
         if rsp == "read_profile":
@@ -499,7 +516,7 @@ class MainWindow(QMainWindow):
                                 method, type(view).__name__, exc_info=True)
 
     def _get_hotspot_name(self, key_id: int) -> str:
-        for name, _, _ in KEYMAP_HOTSPOTS["dark"]:
+        for _name, _, _ in KEYMAP_HOTSPOTS["dark"]:
             from .constants import KBD_LABEL_TO_KEYCODE
             for lbl, code in KBD_LABEL_TO_KEYCODE.items():
                 if code == key_id:
@@ -564,10 +581,10 @@ class MainWindow(QMainWindow):
     # Profile access (for views)
     # -----------------------------------------------------------------
 
-    def get_profile(self) -> Dict[str, Any]:
+    def get_profile(self) -> dict[str, Any]:
         return self._profile
 
-    def set_profile(self, profile: Dict[str, Any]) -> None:
+    def set_profile(self, profile: dict[str, Any]) -> None:
         if not self._skip_undo and self._profile:
             self._push_undo()
         self._profile = profile
@@ -1102,10 +1119,7 @@ class MainWindow(QMainWindow):
                 with winreg.OpenKey(winreg.HKEY_CURRENT_USER, self._AUTOSTART_REG_KEY, 0, winreg.KEY_SET_VALUE) as key:
                     winreg.SetValueEx(key, self._AUTOSTART_VALUE_NAME, 0, winreg.REG_SZ, exe)
             else:
-                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, self._AUTOSTART_REG_KEY, 0, winreg.KEY_SET_VALUE) as key:
-                    try:
-                        winreg.DeleteValue(key, self._AUTOSTART_VALUE_NAME)
-                    except FileNotFoundError:
-                        pass
+                with winreg.OpenKey(winreg.HKEY_CURRENT_USER, self._AUTOSTART_REG_KEY, 0, winreg.KEY_SET_VALUE) as key, contextlib.suppress(FileNotFoundError):
+                    winreg.DeleteValue(key, self._AUTOSTART_VALUE_NAME)
         except OSError:
             log.warning("Failed to update auto-start registry", exc_info=True)

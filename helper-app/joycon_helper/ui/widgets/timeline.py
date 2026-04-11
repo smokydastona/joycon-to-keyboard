@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import time
 from collections import deque
-from typing import Deque, Optional
 
 from PyQt6.QtCore import QRectF, Qt, QTimer
 from PyQt6.QtGui import QColor, QFont, QPainter, QPen
@@ -17,7 +16,7 @@ from ..theme import ThemeEngine
 
 
 class TimelineEvent:
-    __slots__ = ("name", "color", "time")
+    __slots__ = ("color", "name", "time")
 
     def __init__(self, name: str, color: str, t: float) -> None:
         self.name = name
@@ -31,10 +30,10 @@ class TimelineWidget(QWidget):
     MAX_EVENTS = 200
     WINDOW_SECONDS = 10.0
 
-    def __init__(self, theme: ThemeEngine, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, theme: ThemeEngine, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._theme = theme
-        self._events: Deque[TimelineEvent] = deque(maxlen=self.MAX_EVENTS)
+        self._events: deque[TimelineEvent] = deque(maxlen=self.MAX_EVENTS)
         self._start_time = time.monotonic()
         self._dirty = True  # True when a repaint is needed
         self.setMinimumHeight(60)

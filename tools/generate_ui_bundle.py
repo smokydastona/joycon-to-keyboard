@@ -18,8 +18,6 @@ import argparse
 import json
 from pathlib import Path
 
-
-
 DEFAULT_THEME = {
     "name": "sketchbook-ink",
     "version": 2,

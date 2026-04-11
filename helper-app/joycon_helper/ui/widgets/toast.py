@@ -9,15 +9,14 @@ Usage:
 """
 from __future__ import annotations
 
-
-from PyQt6.QtCore import QPoint, QPropertyAnimation, QTimer, Qt
+from PyQt6.QtCore import QPoint, QPropertyAnimation, Qt, QTimer
 from PyQt6.QtGui import QColor, QFont, QPainter
 from PyQt6.QtWidgets import QWidget
 
 # Maximum visible toasts stacked at once
 _MAX_VISIBLE = 3
 # Global list of active toasts (most recent last)
-_active_toasts: list["Toast"] = []
+_active_toasts: list[Toast] = []
 
 # Type presets: (icon, bg_color)
 _PRESETS = {
@@ -83,19 +82,19 @@ class Toast(QWidget):
 
     # -- class-level convenience methods --
     @classmethod
-    def info(cls, parent: QWidget, msg: str, **kw: object) -> "Toast":
+    def info(cls, parent: QWidget, msg: str, **kw: object) -> Toast:
         return cls(parent, msg, "info", **kw)
 
     @classmethod
-    def success(cls, parent: QWidget, msg: str, **kw: object) -> "Toast":
+    def success(cls, parent: QWidget, msg: str, **kw: object) -> Toast:
         return cls(parent, msg, "success", **kw)
 
     @classmethod
-    def warning(cls, parent: QWidget, msg: str, **kw: object) -> "Toast":
+    def warning(cls, parent: QWidget, msg: str, **kw: object) -> Toast:
         return cls(parent, msg, "warning", **kw)
 
     @classmethod
-    def error(cls, parent: QWidget, msg: str, **kw: object) -> "Toast":
+    def error(cls, parent: QWidget, msg: str, **kw: object) -> Toast:
         return cls(parent, msg, "error", **kw)
 
     # -- internals --

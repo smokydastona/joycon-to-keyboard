@@ -6,7 +6,7 @@ etc.) with configurable deadzone, sensitivity, and max output.
 from __future__ import annotations
 
 import math
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPen
@@ -18,14 +18,14 @@ from ..theme import ThemeEngine
 class CurvePreviewWidget(QWidget):
     """Small widget drawing a response curve graph."""
 
-    def __init__(self, theme: ThemeEngine, parent: Optional[QWidget] = None) -> None:
+    def __init__(self, theme: ThemeEngine, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._theme = theme
         self._deadzone = 0.05
         self._sensitivity = 1.0
         self._max_output = 1.0
         self._curve_type = "linear"  # linear | exponential | s_curve
-        self._custom_fn: Optional[Callable[[float], float]] = None
+        self._custom_fn: Callable[[float], float] | None = None
         self.setMinimumSize(120, 100)
 
     def set_curve(self, curve_type: str = "linear",
@@ -38,7 +38,7 @@ class CurvePreviewWidget(QWidget):
         self._max_output = max(0.0, min(1.0, max_output))
         self.update()
 
-    def set_custom_function(self, fn: Optional[Callable[[float], float]]) -> None:
+    def set_custom_function(self, fn: Callable[[float], float] | None) -> None:
         self._custom_fn = fn
         self.update()
 
