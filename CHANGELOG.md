@@ -7,6 +7,10 @@ Until then, entries are grouped by date.
 
 ## Unreleased
 
+### Added
+
+- **Nintendo 0x30 key emitting enabled**: Enabled `CONFIG_JOYCON_HOST_TRY_NINTENDO_0X30` and `CONFIG_JOYCON_HOST_NINTENDO_0X30_EMIT_KEYS` in `sdkconfig.defaults`. The Joy-Con setup FSM confirms type=1 (Joy-Con L), fw=3.139, and standard 0x30 full-input reports are streaming correctly after four bug-fix iterations. Button presses and stick movements now generate UART key events to the S3.
+
 ### Fixed
 
 - **Joy-Con instantly disconnects after connecting (handle=0xFF race)**: When the Joy-Con completes L2CAP before BTA processes `BTA_HhOpen`, the first OPEN callback has handle=0xFF. Previously, the code tried to disconnect and retry, but this killed the L2CAP link that BTA was about to register. Now the 0xFF OPEN is ignored (the link stays alive), and BTA delivers a second OPEN with a valid handle once it catches up. CLOSE events for handle=0xFF are also ignored as phantom events.
