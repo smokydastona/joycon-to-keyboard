@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "nvs_flash.h"
+#include "nvs.h"
 
 #include "esp_bt.h"
 #include "esp_bt_main.h"
@@ -56,6 +57,46 @@ static uint8_t s_last_device_id = 0;
 static bool s_have_last_bda = false;
 static int s_reconnect_attempt = 0;
 static const int s_reconnect_base_ms = 2000;  // 2s initial backoff
+
+// --- NVS persistence for reconnect across power cycles ---
+#define NVS_NS        "bt_host"
+#define NVS_KEY_BDA   "last_bda"     // blob, 6 bytes
+#define NVS_KEY_NAME  "last_name"    // str
+#define NVS_KEY_DEVID "last_devid"   // u8
+
+static void nvs_save_last_device(void) {
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READWRITE, &h) != ESP_OK) return;
+    nvs_set_blob(h, NVS_KEY_BDA, s_last_bda, sizeof(esp_bd_addr_t));
+    nvs_set_str(h, NVS_KEY_NAME, s_last_name);
+    nvs_set_u8(h, NVS_KEY_DEVID, s_last_device_id);
+    nvs_commit(h);
+    nvs_close(h);
+    char bda_str[18];
+    ESP_LOGI(TAG, "Saved paired device to NVS: %s '%s'",
+             bda_to_str(s_last_bda, bda_str, sizeof(bda_str)), s_last_name);
+}
+
+static bool nvs_load_last_device(void) {
+    nvs_handle_t h;
+    if (nvs_open(NVS_NS, NVS_READONLY, &h) != ESP_OK) return false;
+    size_t bda_len = sizeof(esp_bd_addr_t);
+    esp_err_t err = nvs_get_blob(h, NVS_KEY_BDA, s_last_bda, &bda_len);
+    if (err != ESP_OK || bda_len != sizeof(esp_bd_addr_t)) {
+        nvs_close(h);
+        return false;
+    }
+    size_t name_len = sizeof(s_last_name);
+    if (nvs_get_str(h, NVS_KEY_NAME, s_last_name, &name_len) != ESP_OK) {
+        s_last_name[0] = 0;
+    }
+    uint8_t dev_id = 0;
+    nvs_get_u8(h, NVS_KEY_DEVID, &dev_id);
+    s_last_device_id = dev_id;
+    s_have_last_bda = true;
+    nvs_close(h);
+    return true;
+}
 
 static void reconnect_timer_cb(void *arg) {
     (void)arg;
@@ -228,6 +269,13 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
             if (s_reconnect_timer) {
                 esp_timer_stop(s_reconnect_timer);
             }
+            // Save this device to NVS so we reconnect after power cycle.
+            memcpy(s_last_bda, param->open.bd_addr, sizeof(esp_bd_addr_t));
+            strncpy(s_last_name, s_pending_name, sizeof(s_last_name) - 1);
+            s_last_name[sizeof(s_last_name) - 1] = 0;
+            s_last_device_id = slot;
+            s_have_last_bda = true;
+            nvs_save_last_device();
 #endif
 
             // Start the Joy-Con setup FSM (sends subcommands to switch
@@ -278,6 +326,7 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
                     s_last_name[sizeof(s_last_name) - 1] = 0;
                     s_last_device_id = s_dev[i].device_id;
                     s_have_last_bda = true;
+                    nvs_save_last_device();
 #endif
                     joycon_setup_stop(s_dev[i].device_id);
                     memset(&s_dev[i], 0, sizeof(s_dev[i]));
@@ -571,8 +620,10 @@ esp_err_t bt_hid_host_start(void) {
     ESP_ERROR_CHECK(esp_bt_hid_host_register_callback(hidh_cb));
     ESP_ERROR_CHECK(esp_bt_hid_host_init());
 
-    // Start discovery; Joy-Con should appear as a HID device.
-    ESP_ERROR_CHECK(bt_hid_host_start_discovery());
+    // Enable page scan so the controller can reconnect to us without
+    // going into pairing mode.  Without this the default scan mode is
+    // non-connectable and the Joy-Con's page request goes unanswered.
+    esp_bt_gap_set_scan_mode(ESP_BT_CONNECTABLE, ESP_BT_NON_DISCOVERABLE);
 
     // Start periodic RSSI polling (every 5 seconds).
     esp_timer_create_args_t rssi_args = {
@@ -599,6 +650,27 @@ esp_err_t bt_hid_host_start(void) {
     };
     ESP_ERROR_CHECK(esp_timer_create(&reconn_args, &s_reconnect_timer));
     ESP_LOGI(TAG, "Auto-reconnect enabled (max %d retries)", CONFIG_JOYCON_HOST_AUTO_RECONNECT_MAX_RETRIES);
+
+    // If a device was paired before the last power cycle, try to reconnect
+    // to it directly.  The Joy-Con will also page us (page scan is enabled
+    // above), so the connection may arrive before our first retry fires.
+    if (nvs_load_last_device()) {
+        char bda_str[18];
+        ESP_LOGI(TAG, "Loaded saved device from NVS: %s '%s'; reconnecting...",
+                 bda_to_str(s_last_bda, bda_str, sizeof(bda_str)), s_last_name);
+        // Pre-populate pending fields so an incoming connection from the
+        // Joy-Con fills the correct device slot.
+        s_pending_device_id = s_last_device_id;
+        strncpy(s_pending_name, s_last_name, sizeof(s_pending_name) - 1);
+        s_pending_name[sizeof(s_pending_name) - 1] = 0;
+        schedule_reconnect();  // attempts in 2s, 4s, 8s then falls to discovery
+    } else {
+        // No saved device — start inquiry so user can pair for the first time.
+        ESP_ERROR_CHECK(bt_hid_host_start_discovery());
+    }
+#else
+    // Auto-reconnect disabled; always start discovery.
+    ESP_ERROR_CHECK(bt_hid_host_start_discovery());
 #endif
 
     return ESP_OK;
