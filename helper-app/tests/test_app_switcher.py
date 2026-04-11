@@ -3,10 +3,7 @@
 from __future__ import annotations
 
 import json
-import os
 from unittest.mock import patch
-
-import pytest
 
 from joycon_helper.app_switcher import _MAX_EXE_LEN, _MAX_RULES, load_rules
 

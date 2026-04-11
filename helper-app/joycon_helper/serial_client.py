@@ -8,7 +8,7 @@ import struct
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
 
 import serial
 
@@ -390,10 +390,10 @@ class SerialClient:
 
         self.send_config_block(CFG_BLOCK_CHORD, slot, buf)
 
-    _CURVE_MAP = {"linear": 0, "exponential": 1, "quadratic": 2}
-    _SHAPE_MAP = {"circle": 0, "square": 1, "octagon": 2}
-    _SOCD_MAP = {"neutral": 0, "last_input": 1, "first_input": 2}
-    _RSTICK_MAP = {"keys": 0, "mouse": 1, "scroll": 2}
+    _CURVE_MAP: ClassVar[dict[str, int]] = {"linear": 0, "exponential": 1, "quadratic": 2}
+    _SHAPE_MAP: ClassVar[dict[str, int]] = {"circle": 0, "square": 1, "octagon": 2}
+    _SOCD_MAP: ClassVar[dict[str, int]] = {"neutral": 0, "last_input": 1, "first_input": 2}
+    _RSTICK_MAP: ClassVar[dict[str, int]] = {"keys": 0, "mouse": 1, "scroll": 2}
 
     def _send_stick_block(self, slot: int, stick: dict) -> None:
         """Encode and send stick configuration.

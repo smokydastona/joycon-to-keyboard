@@ -1152,7 +1152,7 @@ class M913Device:
             self._dev = None
             self._info = None
 
-    def __enter__(self) -> "M913Device":
+    def __enter__(self) -> M913Device:
         return self
 
     def __exit__(self, *exc: object) -> None:

@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import struct
+from typing import ClassVar
 
 import pytest
 
 from joycon_helper.serial_client import SerialClient
-
 
 # ── Profile validation ──────────────────────────────────────────────
 
@@ -76,7 +76,7 @@ class TestProfileValidation:
 class TestModeEnum:
     """Verify _mode_to_u8 covers all protocol mapping types."""
 
-    PROTOCOL_MODES = [
+    PROTOCOL_MODES: ClassVar[list[str]] = [
         "passthrough", "disabled", "disable", "remap", "macro",
         "remap_hid", "tap_hold", "double_tap", "turbo",
         "sticky_mod", "sticky", "oneshot_mod", "oneshot",
@@ -117,7 +117,7 @@ class TestStickBlockEncoding:
 
     def test_full_stick_config_encodes_all_fields(self):
         """Build a stick config with all fields and verify binary size."""
-        stick = {
+        _stick = {
             "deadzone": 500,
             "curve": "exponential",
             "shape": "square",
@@ -154,7 +154,7 @@ class TestStickBlockEncoding:
 
     def test_default_stick_values(self):
         """Ensure defaults are sensible when fields are absent."""
-        stick = {}
+        _stick = {}
         expected = struct.pack("<HBBB HHH BBB BB B",
                                400, 0, 0, 100, 100, 0, 100, 0, 30, 20, 0, 10, 0)
         assert len(expected) == 17

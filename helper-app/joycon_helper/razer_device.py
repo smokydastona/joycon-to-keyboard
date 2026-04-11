@@ -541,7 +541,7 @@ class RazerDevice:
             self._dev = None
             self._info = None
 
-    def __enter__(self) -> "RazerDevice":
+    def __enter__(self) -> RazerDevice:
         return self
 
     def __exit__(self, *exc: object) -> None:
