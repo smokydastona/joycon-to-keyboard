@@ -554,6 +554,10 @@ class MainWindow(QMainWindow):
         slot = int(self._slot_combo.currentText())
         self.send_cmd({"cmd": "read_profile", "slot": slot})
 
+    def _cmd_bt_scan(self) -> None:
+        """Tell ESP32-S3 to command the ESP32 BT host to start Joy-Con discovery."""
+        self.send_cmd({"cmd": "bt_connect"})
+
     def _on_slot_changed(self, index: int) -> None:
         self._slot = index
         self._status_bar.set_slot(index)

@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "version": "0.1.243",
-  "file_version": "0.1.243.0",
+  "version": "0.1.244",
+  "file_version": "0.1.244.0",
   "major": 0,
   "minor": 1,
-  "patch": 243,
-  "commit_count": 243,
-  "git_sha": "3b331beda",
-  "updated_at_utc": "2026-04-11T23:47:18Z"
+  "patch": 244,
+  "commit_count": 244,
+  "git_sha": "b17f4c29a",
+  "updated_at_utc": "2026-04-11T23:59:15Z"
 }

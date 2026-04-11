@@ -133,6 +133,12 @@ class DashboardView(QScrollArea):
             btn.clicked.connect(callback)
             lay.addWidget(btn)
 
+        self._scan_btn = QPushButton("🔍 Scan for Joy-Con")
+        self._scan_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._scan_btn.clicked.connect(self._main._cmd_bt_scan)
+        self._scan_btn.setEnabled(self._main.bridge.is_connected)
+        lay.addWidget(self._scan_btn)
+
         lay.addStretch()
         self._layout.addWidget(group)
 
@@ -220,6 +226,7 @@ class DashboardView(QScrollArea):
             self._conn_status.setText("Disconnected")
             self._conn_status.setStyleSheet(f"color: {c['danger']};")
             self._conn_port.setText("No port selected")
+        self._scan_btn.setEnabled(connected)
 
     def apply_theme(self, theme: ThemeEngine) -> None:
         c = theme.theme["colors"]

@@ -143,7 +143,8 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "1. Flash both boards via the Web Flasher (see Firmware Installation).\n"
                 "2. Connect ESP32-S3 to PC via USB.\n"
                 "3. Open Bind Bandit, select the COM port, click Connect.\n"
-                "4. Pair your Joy-Con: hold the sync button until lights blink.\n"
+                "4. Click Scan for Joy-Con in Dashboard → Quick Actions, "
+                "then hold the sync button on your Joy-Con until the lights blink.\n"
                 "5. The ESP32 should discover and connect to the Joy-Con.\n"
                 "6. Press a button on the Joy-Con — you should see the "
                 "corresponding key appear in the Input Test log.\n"
@@ -155,7 +156,8 @@ def _sections() -> list[tuple[str, str, bool]]:
             "💻 Using Bind Bandit",
             (
                 "## Sidebar Navigation\n"
-                "Dashboard — connection status, quick actions\n"
+                "Dashboard — connection status, quick actions (Scan for Joy-Con, Ping, "
+                "Read/Upload Profile, Toggle Overlay)\n"
                 "Mapping — interactive hotspot canvas for key binding\n"
                 "Macros & Stick — macro editor, layers, chords, stick config\n"
                 "Profiles — save/load/share profiles across 4 slots\n"
