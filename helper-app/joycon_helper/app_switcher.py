@@ -12,11 +12,10 @@ absolute path (e.g. "C:\\Games\\game.exe").
 """
 from __future__ import annotations
 
-import ctypes
-import ctypes.wintypes
 import json
 import logging
 import os
+import sys
 import threading
 import time
 from collections.abc import Callable
@@ -25,10 +24,19 @@ from typing import Any
 
 log = logging.getLogger("joycon_helper.app_switcher")
 
-# Win32 API imports via ctypes
-_user32 = ctypes.windll.user32  # type: ignore[attr-defined]
-_kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
-_psapi = ctypes.windll.psapi  # type: ignore[attr-defined]
+# Win32 API imports via ctypes (Windows-only)
+if sys.platform == "win32":
+    import ctypes
+    import ctypes.wintypes
+
+    _user32 = ctypes.windll.user32  # type: ignore[attr-defined]
+    _kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+    _psapi = ctypes.windll.psapi  # type: ignore[attr-defined]
+else:
+    ctypes = None  # type: ignore[assignment]
+    _user32 = None
+    _kernel32 = None
+    _psapi = None
 
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 _MAX_RULES = 100
