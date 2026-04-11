@@ -13,6 +13,8 @@ Until then, entries are grouped by date.
 
 ### Fixed
 
+- **Discovery timer cascade prevents Joy-Con from being found**: `bt_hid_host_start_discovery()` calls `esp_bt_gap_cancel_discovery()` before starting a new scan, which fires `DISC_STATE_CHANGED(0)`. That state-0 event unconditionally started a 2 s restart timer, which fired mid-scan and cancelled it via the next `cancel_discovery()` call, creating an infinite loop of 2 s scans instead of the configured 10 s. Fixed by stopping the restart timer when a scan actually starts (state=1) and only arming a new timer on state=0 when no timer is already pending.
+
 - **Log flooding kills BT connection after ~2 s of reports**: HID report change detection (`CONFIG_JOYCON_HOST_LOG_REPORTS`) compared the full 49-byte report, including 36 bytes of IMU data that changes every frame. At 60 Hz this produced ~33.6 KB/s of log output through a 115200 baud console UART (~11.5 KB/s), blocking every ESP_LOGI call, starving the BT callback task, and killing the connection when the L2CAP supervision timer expired. Fixed by comparing only the first 12 bytes (report ID, timer, buttons, sticks) for the hex-dump gate, and only buttons+sticks for the mapper's parsed-state log.
 
 - **`vTaskDelay` in GAP callback blocks all BT processing**: Discovery auto-restart used `vTaskDelay(pdMS_TO_TICKS(2000))` inside the BTC callback task, preventing any Bluetooth events from being processed for 2 s. Replaced with a one-shot `esp_timer` that fires the restart asynchronously.

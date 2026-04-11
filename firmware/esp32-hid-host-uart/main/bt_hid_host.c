@@ -434,13 +434,15 @@ static void gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t* param) {
         }
         case ESP_BT_GAP_DISC_STATE_CHANGED_EVT:
             ESP_LOGI(TAG, "Discovery state changed: %d", param->disc_st_chg.state);
-            // state 0 = scan ended.  If nothing is connected yet, restart
-            // discovery so the user doesn't have to power-cycle the board
-            // when the Joy-Con wasn't in pairing mode during the first scan.
-            // Use a one-shot timer — blocking with vTaskDelay in the BTC
-            // callback task would starve all Bluetooth event processing.
-            if (param->disc_st_chg.state == 0 &&
-                !s_dev[0].connected && !s_dev[1].connected && !s_connecting) {
+            if (param->disc_st_chg.state == 1) {
+                // Scan started — cancel any pending restart timer so it
+                // doesn't fire mid-scan and cancel the running inquiry.
+                esp_timer_stop(s_disc_restart_timer);
+            } else if (param->disc_st_chg.state == 0 &&
+                       !s_dev[0].connected && !s_dev[1].connected &&
+                       !s_connecting &&
+                       !esp_timer_is_active(s_disc_restart_timer)) {
+                // Scan ended naturally (not cancelled by a pending restart).
                 ESP_LOGI(TAG, "No device connected after scan; restarting discovery in 2 s");
                 esp_timer_start_once(s_disc_restart_timer, 2000000);  // 2 s
             }
