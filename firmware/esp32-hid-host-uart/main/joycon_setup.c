@@ -743,17 +743,18 @@ bool joycon_setup_on_report(uint8_t device_id, const uint8_t *report, uint16_t l
         return false;
     }
 
-    // 0x21 report layout:
-    //   [0] = 0x21
-    //   [1] = timer
-    //   [2] = bat_con (battery + connection info)
-    //   [3..5] = buttons
-    //   [6..8] = left stick
+    // 0x21 report layout (Joy-Con / Pro Controller):
+    //   [0]     = 0x21  (report id)
+    //   [1]     = timer
+    //   [2]     = bat_con (battery + connection info)
+    //   [3..5]  = buttons
+    //   [6..8]  = left stick
     //   [9..11] = right stick
-    //   [12] = ack
-    //   [13] = subcmd_id
-    //   [14..] = subcmd data
-    if (len < 14) {
+    //   [12]    = vibrator input report (unused here)
+    //   [13]    = ACK byte: bit 7 = 1 for ACK, lower bits = subcmd id echo
+    //   [14]    = subcmd id (echo of the command that was sent)
+    //   [15..]  = subcmd reply data
+    if (len < 15) {
         ESP_LOGW(TAG, "[%d] 0x21 report too short: %d", device_id, len);
         return true;  // Consumed, but can't parse
     }
@@ -764,8 +765,8 @@ bool joycon_setup_on_report(uint8_t device_id, const uint8_t *report, uint16_t l
     if (battery > 4) battery = 4;
     inst->battery = battery;
 
-    uint8_t ack = report[12];
-    uint8_t subcmd_id = report[13];
+    uint8_t ack = report[13];
+    uint8_t subcmd_id = report[14];
 
     if ((ack & 0x80) == 0) {
         ESP_LOGW(TAG, "[%d] Subcmd 0x%02X NACK (ack=0x%02X)",
@@ -774,8 +775,8 @@ bool joycon_setup_on_report(uint8_t device_id, const uint8_t *report, uint16_t l
         // but the overall flow should continue.
     }
 
-    const uint8_t *subcmd_data = (len > 14) ? &report[14] : NULL;
-    uint8_t subcmd_len = (len > 14) ? (uint8_t)(len - 14) : 0;
+    const uint8_t *subcmd_data = (len > 15) ? &report[15] : NULL;
+    uint8_t subcmd_len = (len > 15) ? (uint8_t)(len - 15) : 0;
 
     switch (subcmd_id) {
         case SUBCMD_REQ_DEV_INFO:

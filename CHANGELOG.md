@@ -11,6 +11,8 @@ Until then, entries are grouped by date.
 
 - **ESP32 crash on Joy-Con connect (wrong API parameter type)**: `esp_bt_hid_host_send_data()` takes a BDA (Bluetooth Device Address), not a handle. Passing the `uint16_t` handle (0 or 255) was interpreted as a memory address pointer, causing `LoadProhibited` at `EXCVADDR=0x00000000` (handle=0) or `0x000000FC` (handle=0xFF). Fixed `joycon_setup.c` to store and pass the BDA for all `send_data` and rumble calls. Removed failing `esp_bt_hid_host_set_info()` pre-register call (malloc error). Kept handle=0xFF guard as defense-in-depth.
 
+- **Joy-Con setup FSM off-by-one in 0x21 report parsing**: ACK byte was read from `report[12]` (vibrator input report, always 0x00 → false NACK) instead of `report[13]`. Subcmd ID was read from `report[13]` (ACK byte with MSB set, e.g. 0x82) instead of `report[14]`. Reply data started at `report[14]` instead of `report[15]`. This caused every subcmd reply to be misidentified, all data parsing (device info, serial, colors, calibration) to read garbage, and the FSM to only advance via timeouts.
+
 - Capture real controller HID reports and implement evidence-based mapping in the ESP32 host mapper (no guessing report layouts).
 
 ### Fixed (System Audit v2)
