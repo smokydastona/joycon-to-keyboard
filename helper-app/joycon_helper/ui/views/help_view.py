@@ -234,23 +234,18 @@ def _sections() -> list[tuple[str, str, bool]]:
         (
             "⌨️ Default Key Mapping",
             (
-                "## Joy-Con (R)\n"
-                "  A → E    B → Q    X → R    Y → F\n"
-                "  R → Enter    ZR → Left Alt\n"
-                "  SL(R) → 7    SR(R) → 8\n"
-                "  Plus → Escape    Home → (unmapped)\n"
-                "  RStick Press → V\n\n"
-                "## Joy-Con (L)\n"
-                "  DUp → W    DDown → S    DLeft → A    DRight → D\n"
-                "  L → Tab    ZL → Right Alt\n"
-                "  SL(L) → 5    SR(L) → 6\n"
-                "  Minus → ` (Grave)    Capture → G\n"
-                "  LStick Press → Left Shift\n\n"
-                "## Dual Joy-Con Mode\n"
-                "When two Joy-Cons are connected, the right controller's "
-                "buttons mirror the left-side defaults by default. Per-profile "
-                "overrides can assign distinct bindings to each controller.\n\n"
-                "These defaults can be fully customized in the Mapping view."
+                "## Joy-Con (L) — Default Layout\n"
+                "  Stick → W / A / S / D    LStick Press → Ctrl\n"
+                "  DUp → E    DLeft → F    DRight → R    DDown → (unmapped)\n"
+                "  L → Shift    ZL → I\n"
+                "  Minus → Tab    Capture → Esc\n\n"
+                "## Mouse — Back Button\n"
+                "  Back → Space (jump)\n"
+                "  Left / Right → default (unchanged)\n\n"
+                "## Gyro\n"
+                "  OFF / unmapped by default.\n\n"
+                "All 4 profile slots start from this layout and can be fully\n"
+                "customized in the Mapping view."
             ),
             False,
         ),

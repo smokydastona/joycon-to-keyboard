@@ -111,15 +111,15 @@ distinct bindings to right-side key_ids for asymmetric dual-controller setups.
 | 9      | B           | `Q`            |
 | 10     | X           | `R`            |
 | 11     | Y           | `F`            |
-| 12     | L           | `Tab`          |
+| 12     | L           | `Left Shift`   |
 | 13     | R           | `Enter`        |
-| 14     | ZL          | `Right Alt`    |
+| 14     | ZL          | `I`            |
 | 15     | ZR          | `Left Alt`     |
 | 16     | Plus        | `Escape`       |
-| 17     | Minus       | `` ` `` (Grave)|
+| 17     | Minus       | `Tab`          |
 | 18     | Home        | *(unmapped)*   |
-| 19     | Capture     | `G`            |
-| 20     | LStick click| `Left Shift`   |
+| 19     | Capture     | `Esc`          |
+| 20     | LStick click| `Left Ctrl`    |
 | 21     | RStick click| `V`            |
 | 22     | RStick Up   | `Arrow Up`     |
 | 23     | RStick Down | `Arrow Down`   |
@@ -135,6 +135,15 @@ distinct bindings to right-side key_ids for asymmetric dual-controller setups.
 | 33     | SR(L)       | `6`            |
 | 34     | SL(R)       | `7`            |
 | 35     | SR(R)       | `8`            |
+
+**D-pad defaults** (profile layer, all slots):
+
+| Button | Default output |
+|--------|----------------|
+| DUp    | `E`            |
+| DLeft  | `F`            |
+| DRight | `R`            |
+| DDown  | *(unmapped)*   |
 
 ## Stick auto-calibration
 

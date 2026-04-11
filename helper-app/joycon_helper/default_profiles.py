@@ -86,7 +86,7 @@ _SLOT_0: dict[str, Any] = {
         "LSDown":  _k(_S),
         "LSLeft":  _k(_A),
         "LSRight": _k(_D),
-        "LStick":  _mod(_LSHIFT),       # sprint / modifier
+        "LStick":  _mod(_LCTRL),        # ctrl
 
         # Right stick: Arrow keys
         "RSUp":    _k(_UP),
@@ -102,20 +102,21 @@ _SLOT_0: dict[str, Any] = {
         "Y":  _k(_R),                   # action / reload
 
         # Shoulders / triggers
-        "ZL": _mod(_LSHIFT),            # run
+        "ZL": _k(_I),                   # I
         "ZR": _mod(_LCTRL),             # crouch
-        "L":  _k(_TAB),                 # cycle / menu
+        "L":  _mod(_LSHIFT),            # shift
         "R":  _k(_ENTER),               # confirm
 
         # D-pad
-        "DUp":    _k(_UP),
-        "DDown":  _k(_DOWN),
-        "DLeft":  _k(_LEFT),
-        "DRight": _k(_RIGHT),
+        "DUp":    _k(_E),               # interact
+        "DDown":  _k(0),                # unmapped
+        "DLeft":  _k(_F),               # ability
+        "DRight": _k(_R),               # ability
 
         # System
         "Plus":    _k(_ENTER),
-        "Minus":   _k(_ESC),
+        "Minus":   _k(_TAB),
+        "Capture": _k(_ESC),
     },
     "macros": [],
     "layers": [],
@@ -135,7 +136,7 @@ _SLOT_1: dict[str, Any] = {
         "LSDown":  _k(_S),
         "LSLeft":  _k(_A),
         "LSRight": _k(_D),
-        "LStick":  _mod(_LSHIFT),       # sprint
+        "LStick":  _mod(_LCTRL),        # ctrl
 
         # Right stick: arrow keys (camera / look)
         "RSUp":    _k(_UP),
@@ -151,20 +152,21 @@ _SLOT_1: dict[str, Any] = {
         "Y":  _k(_G),                   # grenade
 
         # Shoulders
-        "ZL": _mod(_LSHIFT),            # sprint
+        "ZL": _k(_I),                   # I
         "ZR": _mod(_LCTRL),             # crouch / ADS
-        "L":  _k(_Q),                   # lean left / ability
+        "L":  _mod(_LSHIFT),            # shift
         "R":  _k(_F),                   # melee / ability
 
-        # D-pad: weapon slots
-        "DUp":    _k(_1),
-        "DDown":  _k(_3),
-        "DLeft":  _k(_2),
-        "DRight": _k(_4),
+        # D-pad
+        "DUp":    _k(_E),               # interact
+        "DDown":  _k(0),                # unmapped
+        "DLeft":  _k(_F),               # ability
+        "DRight": _k(_R),               # ability
 
         # System
         "Plus":  _k(_ESC),              # pause
         "Minus": _k(_TAB),              # scoreboard
+        "Capture": _k(_ESC),
     },
     "macros": [],
     "layers": [],
@@ -184,7 +186,7 @@ _SLOT_2: dict[str, Any] = {
         "LSDown":  _k(_S),
         "LSLeft":  _k(_A),
         "LSRight": _k(_D),
-        "LStick":  _k(_C),              # grab / interact
+        "LStick":  _mod(_LCTRL),        # ctrl
 
         # Right stick: arrow keys
         "RSUp":    _k(_UP),
@@ -200,20 +202,21 @@ _SLOT_2: dict[str, Any] = {
         "Y":  _k(_C),                   # interact / grab
 
         # Shoulders
-        "ZL": _mod(_LSHIFT),            # dash / roll
+        "ZL": _k(_I),                   # I
         "ZR": _mod(_LCTRL),             # crouch / slide
-        "L":  _k(_Q),                   # L ability
+        "L":  _mod(_LSHIFT),            # shift
         "R":  _k(_E),                   # R ability
 
         # D-pad
-        "DUp":    _k(_UP),
-        "DDown":  _k(_DOWN),
-        "DLeft":  _k(_LEFT),
-        "DRight": _k(_RIGHT),
+        "DUp":    _k(_E),               # interact
+        "DDown":  _k(0),                # unmapped
+        "DLeft":  _k(_F),               # ability
+        "DRight": _k(_R),               # ability
 
         # System
         "Plus":  _k(_ESC),
         "Minus": _k(_TAB),
+        "Capture": _k(_ESC),
     },
     "macros": [],
     "layers": [],
@@ -230,14 +233,14 @@ _SLOT_3: dict[str, Any] = {
     "mappings": {
         # Triggers: throttle / brake
         "ZR": _k(_W),                   # accelerate
-        "ZL": _k(_S),                   # brake / reverse
+        "ZL": _k(_I),                   # I
 
         # Left stick: steering
         "LSUp":    _k(_W),
         "LSDown":  _k(_S),
         "LSLeft":  _k(_A),
         "LSRight": _k(_D),
-        "LStick":  _k(_H),              # horn
+        "LStick":  _mod(_LCTRL),        # ctrl
 
         # Right stick: camera
         "RSUp":    _k(_UP),
@@ -253,18 +256,19 @@ _SLOT_3: dict[str, Any] = {
         "Y":  _k(_ENTER),               # reset / respawn
 
         # Shoulders
-        "L":  _k(_Q),                   # shift down
+        "L":  _mod(_LSHIFT),            # shift
         "R":  _k(_E),                   # shift up
 
         # D-pad
-        "DUp":    _k(_1),
-        "DDown":  _k(_3),
-        "DLeft":  _k(_2),
-        "DRight": _k(_4),
+        "DUp":    _k(_E),               # interact
+        "DDown":  _k(0),                # unmapped
+        "DLeft":  _k(_F),               # ability
+        "DRight": _k(_R),               # ability
 
         # System
         "Plus":  _k(_ESC),
         "Minus": _k(_TAB),
+        "Capture": _k(_ESC),
     },
     "macros": [],
     "layers": [],

@@ -402,7 +402,7 @@ class RazerProfile:
     idle_time: int = 300    # seconds
     button_bindings: dict[str, str] = field(default_factory=lambda: {
         "left": "default", "right": "default", "middle": "default",
-        "back": "default", "forward": "default",
+        "back": "key_space", "forward": "default",
         "scroll_up": "default", "scroll_down": "default",
     })
     hypershift_bindings: dict[str, str] = field(default_factory=lambda: {
