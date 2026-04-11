@@ -13,8 +13,12 @@ Until then, entries are grouped by date.
 
 ### Fixed
 
+- **QoS call kills connection after ~3 s**: Even deferred to `fsm_ready()`, `esp_bt_gap_set_qos(TPOLL_MIN)` still triggers `ASSERT_WARN(1 8)` in `lc_task.c` and corrupts the BT controller state, killing HID reports ~3 seconds later. Removed the QoS call entirely — the Joy-Con already streams at 60 Hz on the default poll interval, so the call is unnecessary.
+
+- **Discovery never restarts when Joy-Con isn't paired during first scan**: After the initial 10 s inquiry scan ends without finding a device, discovery was not restarted, requiring a manual board reset. Now the scan automatically restarts (with a 2 s cooldown) if no device is connected when discovery ends.
+
 - **Setup FSM times out on reconnect (sniff-mode race)**: When the Joy-Con enters BT sniff mode immediately after connection, the premature `esp_bt_gap_set_qos(TPOLL_MIN)` call in the OPEN handler races with the power-mode negotiation. The `ASSERT_WARN(1 8)` in `lc_task.c` (ROM code) corrupts internal BT controller state, silencing all further HID reports. Fixed by:
-  1. **Deferring QoS** — moved the `set_qos` call from the OPEN callback to `fsm_ready()`, after setup is complete and the BT link is known-stable.
+  1. **Removed QoS call entirely** — `esp_bt_gap_set_qos()` triggers ROM-level ASSERT_WARN even when deferred; the default poll interval is sufficient for 60 Hz Joy-Con input.
   2. **Post-connection delay** — new `SETUP_CONNECT_DELAY` FSM state waits `JOYCON_HOST_SETUP_CONNECT_DELAY_MS` (default 500 ms) before sending the first subcmd, letting sniff-mode negotiation finish cleanly.
   3. **Retry logic** — each FSM step now retries up to `JOYCON_HOST_SETUP_MAX_RETRIES` (default 2) times on timeout before advancing, instead of immediately skipping to the next step.
   4. **Faster timeout polling** — main loop reduced from 500 ms to 50 ms for quicker retry cycles.

@@ -84,6 +84,7 @@ Set in `main/config.h`.
 - **Player LED control**: sets Player 1 LEDs on the Joy-Con after setup completes.
 - **BT RSSI polling**: periodically reads Bluetooth RSSI (every 5 s) for connected devices and forwards to the ESP32-S3 via UART marker `0xF8`.
 - **BT auto-reconnect**: on disconnect, automatically attempts to reconnect with exponential backoff (2 s → 4 s → 8 s). Configurable via Kconfig (`JOYCON_HOST_AUTO_RECONNECT`, `JOYCON_HOST_AUTO_RECONNECT_MAX_RETRIES`). Falls back to discovery after max retries.
+- **Discovery auto-restart**: if the initial inquiry scan ends without finding a device, discovery automatically restarts after a 2 s cooldown (no manual board reset needed).
 - **Nintendo 0x30 button + stick parsing** (when enabled via menuconfig): fully parses all Joy-Con buttons (A/B/X/Y, L/R, ZL/ZR, Plus/Minus, Home, Capture, stick clicks) and both sticks.
 - **Configurable motion thresholds**: shake, tilt, and flick gesture sensitivity are tunable via Kconfig (`JOYCON_HOST_MOTION_SHAKE_THRESHOLD`, `JOYCON_HOST_MOTION_TILT_THRESHOLD`, `JOYCON_HOST_MOTION_FLICK_THRESHOLD`, `JOYCON_HOST_MOTION_COOLDOWN_MS`).
 - **Configurable setup FSM timeout**: `JOYCON_HOST_SETUP_TIMEOUT_MS` controls how long each Joy-Con handshake step waits before retrying (default 1500 ms).

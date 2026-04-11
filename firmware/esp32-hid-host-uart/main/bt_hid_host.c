@@ -15,6 +15,9 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
 #include "joycon_mapper.h"
 #include "uart_framing.h"
 #include "joycon_setup.h"
@@ -426,6 +429,16 @@ static void gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t* param) {
         }
         case ESP_BT_GAP_DISC_STATE_CHANGED_EVT:
             ESP_LOGI(TAG, "Discovery state changed: %d", param->disc_st_chg.state);
+            // state 0 = scan ended.  If nothing is connected yet, restart
+            // discovery so the user doesn't have to power-cycle the board
+            // when the Joy-Con wasn't in pairing mode during the first scan.
+            if (param->disc_st_chg.state == 0 &&
+                !s_dev[0].connected && !s_dev[1].connected && !s_connecting) {
+                ESP_LOGI(TAG, "No device connected after scan; restarting discovery in 2 s");
+                // Small delay to avoid hammering the radio.
+                vTaskDelay(pdMS_TO_TICKS(2000));
+                bt_hid_host_start_discovery();
+            }
             break;
         case ESP_BT_GAP_AUTH_CMPL_EVT:
             ESP_LOGI(TAG, "Auth complete: success=%d", param->auth_cmpl.stat == ESP_BT_STATUS_SUCCESS);

@@ -22,7 +22,6 @@
 #include <string.h>
 #include <math.h>
 #include "esp_log.h"
-#include "esp_gap_bt_api.h"
 #include "esp_hidh_api.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -390,11 +389,11 @@ static void fsm_retry_current(setup_instance_t *inst) {
 static void fsm_ready(setup_instance_t *inst) {
     inst->state = SETUP_READY;
 
-    // Now that setup is finished and the link is stable, request the
-    // fastest QoS poll interval for low-latency gaming input.
-    // Doing this at OPEN time conflicts with the Joy-Con's immediate
-    // sniff-mode negotiation and can break the data path.
-    (void)esp_bt_gap_set_qos(inst->bda, ESP_BT_GAP_TPOLL_MIN);
+    // Do NOT call esp_bt_gap_set_qos() here (or anywhere).
+    // The Joy-Con negotiates sniff mode immediately after connection;
+    // any QoS request triggers ASSERT_WARN(1 8) in lc_task.c and
+    // corrupts the BT controller state, killing the data path ~3 s
+    // later.  The default poll interval is sufficient for 60 Hz input.
 
     ESP_LOGI(TAG, "[%d] Setup complete! type=%d fw=%d.%d battery=%d serial=%s",
              inst->device_id, inst->controller_type,
