@@ -15,6 +15,7 @@
 #endif
 
 #if CONFIG_JOYCON_HOST_NINTENDO_0X30_EMIT_KEYS
+#include "freertos/FreeRTOS.h"
 #include "nvs.h"
 #include "nvs_flash.h"
 #endif
