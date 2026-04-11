@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "driver/uart.h"
+#include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 
@@ -58,6 +59,13 @@ void uart_proto_init(void) {
                                         UART_EVENT_QUEUE_DEPTH,
                                         &s_uart_queue, 0));
     ESP_ERROR_CHECK(uart_param_config(port, &cfg));
+
+    // On ESP32-S3, GPIO43/44 are the I/O MUX default pins for UART0 (console).
+    // Reset them to plain GPIO function before routing bridge UART through
+    // the GPIO matrix, so the I/O MUX assignment doesn't shadow our signal.
+    gpio_reset_pin((gpio_num_t)CONFIG_BRIDGE_UART_TX_GPIO);
+    gpio_reset_pin((gpio_num_t)CONFIG_BRIDGE_UART_RX_GPIO);
+
     ESP_ERROR_CHECK(uart_set_pin(port, CONFIG_BRIDGE_UART_TX_GPIO, CONFIG_BRIDGE_UART_RX_GPIO,
                                  UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
