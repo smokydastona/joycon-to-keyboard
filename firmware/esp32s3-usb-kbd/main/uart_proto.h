@@ -40,3 +40,18 @@ void uart_proto_init(void);
 // Returns true if UART data woke the task, false on timeout.
 // Use instead of vTaskDelay() in the main loop for immediate wake-up.
 bool uart_proto_wait(uint32_t timeout_ticks);
+
+// Diagnostic snapshot of the bridge UART state.
+typedef struct {
+    int rx_gpio;            // RX GPIO number configured
+    int tx_gpio;            // TX GPIO number configured
+    int baud;               // configured baud rate
+    int port;               // UART port number
+    int rx_pin_level;       // current logic level on RX pin (0 or 1)
+    size_t buffered_bytes;  // bytes waiting in RX FIFO
+    uint8_t sample[16];     // first few raw bytes read (100 ms timeout)
+    int sample_len;         // how many bytes were actually read
+} uart_diag_t;
+
+// Fill *diag with a snapshot of the bridge UART state.
+void uart_proto_get_diag(uart_diag_t *diag);

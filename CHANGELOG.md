@@ -9,6 +9,8 @@ Until then, entries are grouped by date.
 
 ### Added
 
+- **UART diagnostic CDC command (`uart_diag`)**: Added a `{"cmd":"uart_diag"}` command to the ESP32-S3 CDC protocol. Reports bridge UART port, baud, configured GPIO pins, RX pin logic level, buffered byte count, and up to 16 sample bytes read with a 100 ms timeout. Used to diagnose why zero UART frames arrive despite correct software configuration.
+
 - **Nintendo 0x30 key emitting enabled**: Enabled `CONFIG_JOYCON_HOST_TRY_NINTENDO_0X30` and `CONFIG_JOYCON_HOST_NINTENDO_0X30_EMIT_KEYS` in `sdkconfig.defaults`. The Joy-Con setup FSM confirms type=1 (Joy-Con L), fw=3.139, and standard 0x30 full-input reports are streaming correctly after four bug-fix iterations. Button presses and stick movements now generate UART key events to the S3.
 
 ### Fixed

@@ -208,3 +208,25 @@ bool uart_proto_wait(uint32_t timeout_ticks) {
     }
     return false;  // timeout
 }
+
+void uart_proto_get_diag(uart_diag_t *diag) {
+    if (!diag) return;
+    memset(diag, 0, sizeof(*diag));
+
+    diag->rx_gpio = CONFIG_BRIDGE_UART_RX_GPIO;
+    diag->tx_gpio = CONFIG_BRIDGE_UART_TX_GPIO;
+    diag->baud    = CONFIG_BRIDGE_UART_BAUD;
+    diag->port    = CONFIG_BRIDGE_UART_PORT;
+
+    // Current logic level on the RX pin (idle UART should be HIGH = 1)
+    diag->rx_pin_level = gpio_get_level((gpio_num_t)CONFIG_BRIDGE_UART_RX_GPIO);
+
+    // Bytes already sitting in the driver RX ring buffer
+    uart_port_t port = (uart_port_t)CONFIG_BRIDGE_UART_PORT;
+    uart_get_buffered_data_len(port, &diag->buffered_bytes);
+
+    // Try to grab a few raw bytes with a short timeout (100 ms)
+    int n = uart_read_bytes(port, diag->sample, sizeof(diag->sample),
+                            pdMS_TO_TICKS(100));
+    diag->sample_len = (n > 0) ? n : 0;
+}

@@ -788,6 +788,33 @@ static void handle_line(const char *line) {
         uint16_t speed = cJSON_IsNumber(spd_j) ? (uint16_t)spd_j->valueint : 500;
         profile_runtime_set_led(pat, r, g, b, speed);
         respond_ok_simple("set_led");
+    } else if (strcmp(cmd->valuestring, "uart_diag") == 0) {
+        uart_diag_t diag;
+        uart_proto_get_diag(&diag);
+        cJSON *rsp = cJSON_CreateObject();
+        if (rsp) {
+            cJSON_AddStringToObject(rsp, "rsp", "uart_diag");
+            cJSON_AddNumberToObject(rsp, "port", diag.port);
+            cJSON_AddNumberToObject(rsp, "baud", diag.baud);
+            cJSON_AddNumberToObject(rsp, "rx_gpio", diag.rx_gpio);
+            cJSON_AddNumberToObject(rsp, "tx_gpio", diag.tx_gpio);
+            cJSON_AddNumberToObject(rsp, "rx_pin_level", diag.rx_pin_level);
+            cJSON_AddNumberToObject(rsp, "buffered_bytes", (double)diag.buffered_bytes);
+            cJSON_AddNumberToObject(rsp, "sample_len", diag.sample_len);
+            if (diag.sample_len > 0) {
+                char hex[sizeof(diag.sample) * 3 + 1];
+                hex[0] = '\0';
+                for (int i = 0; i < diag.sample_len; i++) {
+                    char tmp[4];
+                    snprintf(tmp, sizeof(tmp), "%s%02X",
+                             (i > 0) ? " " : "", diag.sample[i]);
+                    strcat(hex, tmp);
+                }
+                cJSON_AddStringToObject(rsp, "sample_hex", hex);
+            }
+            cdc_write_json(rsp);
+            cJSON_Delete(rsp);
+        }
     } else {
         respond_error(cmd->valuestring, "unknown_cmd");
     }
