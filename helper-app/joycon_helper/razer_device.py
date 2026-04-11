@@ -541,6 +541,12 @@ class RazerDevice:
             self._dev = None
             self._info = None
 
+    def __enter__(self) -> "RazerDevice":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
+
     # ── Low-level transport ──────────────────────────────────────
 
     def _send_report(self, report: bytearray) -> dict[str, Any] | None:

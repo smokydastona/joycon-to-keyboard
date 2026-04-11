@@ -7,7 +7,8 @@ Rules are stored as a list of dicts:
     [{"exe": "game.exe", "slot": 0}, {"exe": "notepad.exe", "slot": 1}, ...]
 
 The "exe" field is matched case-insensitively against the foreground
-process name.
+process name.  It can be a bare executable name (e.g. "game.exe") or an
+absolute path (e.g. "C:\\Games\\game.exe").
 """
 from __future__ import annotations
 
@@ -30,36 +31,38 @@ _kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
 _psapi = ctypes.windll.psapi  # type: ignore[attr-defined]
 
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+_MAX_RULES = 100
+_MAX_EXE_LEN = 256
 
 
-def _get_foreground_exe() -> str | None:
-    """Return the executable name of the foreground window's process, or None."""
+def _get_foreground_exe() -> tuple[str | None, str | None]:
+    """Return (basename, full_path) of the foreground window's process, or (None, None)."""
     try:
         hwnd = _user32.GetForegroundWindow()
         if not hwnd:
-            return None
+            return None, None
 
         pid = ctypes.wintypes.DWORD()
         _user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
         if pid.value == 0:
-            return None
+            return None, None
 
         handle = _kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid.value)
         if not handle:
-            return None
+            return None, None
 
         try:
             buf = (ctypes.c_wchar * 260)()
             size = ctypes.wintypes.DWORD(260)
             if _kernel32.QueryFullProcessImageNameW(handle, 0, buf, ctypes.byref(size)):
                 full_path = buf.value
-                return os.path.basename(full_path).lower()
+                return os.path.basename(full_path).lower(), full_path.lower()
         finally:
             _kernel32.CloseHandle(handle)
     except OSError:
         log.debug("ctypes call failed in _get_foreground_exe", exc_info=True)
 
-    return None
+    return None, None
 
 
 def _get_foreground_title() -> str | None:
@@ -104,10 +107,16 @@ def load_rules() -> list[dict[str, Any]]:
                 if not isinstance(exe, str) or not exe:
                     log.warning("Skipping app-switcher rule with missing/invalid 'exe': %r", rule)
                     continue
+                if len(exe) > _MAX_EXE_LEN:
+                    log.warning("Skipping app-switcher rule — exe name too long (%d chars): %r", len(exe), rule)
+                    continue
                 if not isinstance(slot, int) or not (0 <= slot <= 3):
                     log.warning("Skipping app-switcher rule with invalid 'slot': %r", rule)
                     continue
                 valid.append(rule)
+                if len(valid) >= _MAX_RULES:
+                    log.warning("App-switcher rules capped at %d", _MAX_RULES)
+                    break
             return valid
     except Exception:
         log.warning("Failed to load app_profiles.json", exc_info=True)
@@ -187,7 +196,7 @@ class AppSwitcher:
 
     def _check_foreground(self) -> None:
         try:
-            exe = _get_foreground_exe()
+            exe, full_path = _get_foreground_exe()
         except Exception:
             return
 
@@ -212,14 +221,29 @@ class AppSwitcher:
             for rule in self._rules:
                 rule_exe = rule.get("exe", "")
                 rule_title = rule.get("title", "")
-                if isinstance(rule_exe, str) and rule_exe.lower() == exe:
-                    # For UWP rules that specify a title, require title match
-                    if rule_title and title and rule_title.lower() not in title.lower():
+                if not isinstance(rule_exe, str):
+                    continue
+                rule_lower = rule_exe.lower()
+
+                # Support both basename and absolute path matching
+                if os.sep in rule_exe or "/" in rule_exe:
+                    # Absolute path rule — compare against full process path
+                    if full_path and rule_lower == full_path:
+                        pass  # match
+                    else:
                         continue
-                    slot = rule.get("slot")
-                    if isinstance(slot, int) and 0 <= slot <= 3:
-                        matched_slot = slot
-                        break
+                elif rule_lower == exe:
+                    pass  # basename match
+                else:
+                    continue
+
+                # For UWP rules that specify a title, require title match
+                if rule_title and title and rule_title.lower() not in title.lower():
+                    continue
+                slot = rule.get("slot")
+                if isinstance(slot, int) and 0 <= slot <= 3:
+                    matched_slot = slot
+                    break
 
             target_slot = matched_slot if matched_slot is not None else self._default_slot
 

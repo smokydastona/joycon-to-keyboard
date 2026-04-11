@@ -85,6 +85,8 @@ Set in `main/config.h`.
 - **BT RSSI polling**: periodically reads Bluetooth RSSI (every 5 s) for connected devices and forwards to the ESP32-S3 via UART marker `0xF8`.
 - **BT auto-reconnect**: on disconnect, automatically attempts to reconnect with exponential backoff (2 s → 4 s → 8 s). Configurable via Kconfig (`JOYCON_HOST_AUTO_RECONNECT`, `JOYCON_HOST_AUTO_RECONNECT_MAX_RETRIES`). Falls back to discovery after max retries.
 - **Nintendo 0x30 button + stick parsing** (when enabled via menuconfig): fully parses all Joy-Con buttons (A/B/X/Y, L/R, ZL/ZR, Plus/Minus, Home, Capture, stick clicks) and both sticks.
+- **Configurable motion thresholds**: shake, tilt, and flick gesture sensitivity are tunable via Kconfig (`JOYCON_HOST_MOTION_SHAKE_THRESHOLD`, `JOYCON_HOST_MOTION_TILT_THRESHOLD`, `JOYCON_HOST_MOTION_FLICK_THRESHOLD`, `JOYCON_HOST_MOTION_COOLDOWN_MS`).
+- **Configurable setup FSM timeout**: `JOYCON_HOST_SETUP_TIMEOUT_MS` controls how long each Joy-Con handshake step waits before retrying (default 1500 ms).
 - **Stick auto-calibration**: per-axis min/center/max tracking adapts to individual controller characteristics. SPI flash calibration is preferred when available.
 - **SOCD cleaning**: three modes (neutral / last-input / first-input) for simultaneous opposing cardinal direction handling. Configurable at runtime via UART control command or profile JSON.
 - **Rapid trigger (stick hysteresis)**: separate activation/deactivation thresholds prevent flickering at the deadzone boundary. Configurable at runtime.

@@ -76,4 +76,49 @@ config JOYCON_HOST_AUTO_RECONNECT_MAX_RETRIES
     help
         Number of reconnect attempts before giving up and restarting discovery.
 
+config JOYCON_HOST_SETUP_TIMEOUT_MS
+    int "Setup FSM step timeout (ms)"
+    range 500 10000
+    default 1500
+    help
+        How long each setup FSM step waits for a response before retrying
+        or advancing. Lower values speed up connection but may cause skipped
+        steps on slow controllers.
+
+config JOYCON_HOST_MOTION_SHAKE_THRESHOLD
+    int "Shake gesture accel threshold"
+    range 2000 30000
+    default 12000
+    depends on JOYCON_HOST_NINTENDO_0X30_EMIT_KEYS
+    help
+        Acceleration magnitude (raw int16 units) above which a "shake"
+        gesture is detected. Higher = less sensitive.
+
+config JOYCON_HOST_MOTION_TILT_THRESHOLD
+    int "Tilt gesture accel threshold"
+    range 500 10000
+    default 3000
+    depends on JOYCON_HOST_NINTENDO_0X30_EMIT_KEYS
+    help
+        Per-axis acceleration threshold for sustained tilt detection.
+        Higher = less sensitive.
+
+config JOYCON_HOST_MOTION_FLICK_THRESHOLD
+    int "Flick gesture gyro threshold"
+    range 2000 30000
+    default 10000
+    depends on JOYCON_HOST_NINTENDO_0X30_EMIT_KEYS
+    help
+        Gyro magnitude threshold for quick-twist "flick" gestures.
+        Higher = less sensitive.
+
+config JOYCON_HOST_MOTION_COOLDOWN_MS
+    int "Motion gesture cooldown (ms)"
+    range 50 2000
+    default 250
+    depends on JOYCON_HOST_NINTENDO_0X30_EMIT_KEYS
+    help
+        Minimum milliseconds between repeated gesture triggers.
+        Prevents rapid-fire gesture events.
+
 endmenu

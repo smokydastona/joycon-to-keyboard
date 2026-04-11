@@ -83,7 +83,7 @@ static SemaphoreHandle_t s_bt_send_mux;
 #define SPI_USER_IMU_CAL_SIZE   26   // 2 magic + 12 Int16LE values
 
 // Setup FSM timeout: if we don't get a reply, advance anyway
-#define SETUP_TIMEOUT_MS  1500
+#define SETUP_TIMEOUT_MS  CONFIG_JOYCON_HOST_SETUP_TIMEOUT_MS
 
 // FSM states
 typedef enum {

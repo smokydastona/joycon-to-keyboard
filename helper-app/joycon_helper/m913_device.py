@@ -1152,6 +1152,12 @@ class M913Device:
             self._dev = None
             self._info = None
 
+    def __enter__(self) -> "M913Device":
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self.close()
+
     # ── Low-level send/recv ──────────────────────────────────────
 
     def send_packet(self, packet: bytearray) -> None:

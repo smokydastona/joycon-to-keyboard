@@ -314,10 +314,10 @@ static void cal_restore_from_nvs(void) {
 static bool s_cal_restored = false;
 
 // --- Motion / IMU gesture detection ---
-#define MOTION_SHAKE_THRESHOLD   12000  // accel magnitude for shake
-#define MOTION_TILT_THRESHOLD    3000   // accel tilt per-axis
-#define MOTION_FLICK_THRESHOLD   10000  // gyro magnitude for flick
-#define MOTION_COOLDOWN_MS       250    // minimum ms between gesture triggers
+#define MOTION_SHAKE_THRESHOLD   CONFIG_JOYCON_HOST_MOTION_SHAKE_THRESHOLD
+#define MOTION_TILT_THRESHOLD    CONFIG_JOYCON_HOST_MOTION_TILT_THRESHOLD
+#define MOTION_FLICK_THRESHOLD   CONFIG_JOYCON_HOST_MOTION_FLICK_THRESHOLD
+#define MOTION_COOLDOWN_MS       CONFIG_JOYCON_HOST_MOTION_COOLDOWN_MS
 
 typedef struct {
     int64_t last_shake_ms;

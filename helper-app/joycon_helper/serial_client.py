@@ -102,7 +102,12 @@ class SerialClient:
         line = json.dumps(obj, separators=(",", ":"), ensure_ascii=False) + "\n"
         if self._ser is None:
             raise RuntimeError("Serial port not open")
-        self._ser.write(line.encode("utf-8"))
+        try:
+            self._ser.write(line.encode("utf-8"))
+        except Exception as exc:
+            log.error("Serial write failed: %s", exc, exc_info=True)
+            self._connection_lost.set()
+            raise
 
     def send_text_line(self, text: str) -> None:
         if not self.is_connected:
@@ -111,7 +116,12 @@ class SerialClient:
             text += "\n"
         if self._ser is None:
             raise RuntimeError("Serial port not open")
-        self._ser.write(text.encode("utf-8"))
+        try:
+            self._ser.write(text.encode("utf-8"))
+        except Exception as exc:
+            log.error("Serial write failed: %s", exc, exc_info=True)
+            self._connection_lost.set()
+            raise
 
     # ------------------------------------------------------------------
     # Binary config-block transport
@@ -152,6 +162,8 @@ class SerialClient:
         (mappings, macros, layers, chords, stick, zones, activators, gyro),
         then PROFILE_END to commit atomically.
         """
+        self._validate_profile(profile)
+
         name = profile.get("name", "")[:31]
         name_bytes = name.encode("utf-8")[:31]
         self.send_config_block(CFG_BLOCK_PROFILE_BEGIN, slot, name_bytes)
@@ -208,6 +220,72 @@ class SerialClient:
             raise
 
     # ------------------------------------------------------------------
+    # Profile validation
+    # ------------------------------------------------------------------
+
+    _VALID_MODES = frozenset({
+        "passthrough", "disabled", "disable", "remap", "macro", "remap_hid",
+        "double_tap", "turbo", "sticky_mod", "sticky", "tap_hold",
+        "oneshot_mod", "oneshot", "auto_shift", "mouse_button",
+        "sequential", "leader", "profile_switch",
+    })
+
+    @staticmethod
+    def _validate_profile(profile: dict[str, Any]) -> None:
+        """Validate profile dict structure before binary encoding.
+
+        Raises ValueError with a descriptive message on the first problem found.
+        """
+        if not isinstance(profile, dict):
+            raise ValueError("Profile must be a dict")
+
+        # name
+        name = profile.get("name", "")
+        if not isinstance(name, str):
+            raise ValueError("Profile 'name' must be a string")
+
+        # mappings
+        mappings = profile.get("mappings", [])
+        if not isinstance(mappings, list):
+            raise ValueError("Profile 'mappings' must be a list")
+        for i, m in enumerate(mappings):
+            if not isinstance(m, dict):
+                raise ValueError(f"mappings[{i}] must be a dict")
+            mode = m.get("mode", "passthrough")
+            if mode not in SerialClient._VALID_MODES:
+                log.warning("mappings[%d] has unrecognised mode '%s' — defaulting to passthrough", i, mode)
+
+        # macros
+        macros = profile.get("macros", [])
+        if not isinstance(macros, list):
+            raise ValueError("Profile 'macros' must be a list")
+        for i, mac in enumerate(macros):
+            if not isinstance(mac, dict):
+                raise ValueError(f"macros[{i}] must be a dict")
+            if not mac.get("id"):
+                raise ValueError(f"macros[{i}] missing 'id'")
+            steps = mac.get("steps", [])
+            if not isinstance(steps, list):
+                raise ValueError(f"macros[{i}].steps must be a list")
+            if len(steps) > 128:
+                raise ValueError(f"macros[{i}] has {len(steps)} steps (max 128)")
+
+        # stick
+        stick = profile.get("stick")
+        if stick is not None and not isinstance(stick, dict):
+            raise ValueError("Profile 'stick' must be a dict or absent")
+
+        # layers
+        layers = profile.get("layers", [])
+        if not isinstance(layers, list):
+            raise ValueError("Profile 'layers' must be a list")
+
+        # chords
+        chords = profile.get("chords", [])
+        if not isinstance(chords, list):
+            raise ValueError("Profile 'chords' must be a list")
+
+    # ------------------------------------------------------------------
     # Per-block binary encoders (private)
     # ------------------------------------------------------------------
 
@@ -215,10 +293,14 @@ class SerialClient:
     def _mode_to_u8(mode_str: str) -> int:
         """Convert a mapping mode string to its numeric ID."""
         _MAP = {
-            "passthrough": 0, "disabled": 1, "remap": 2, "macro": 3,
-            "remap_hid": 4, "double_tap": 5, "turbo": 6, "sticky_mod": 7,
-            "tap_hold": 8, "oneshot_mod": 9, "auto_shift": 10,
-            "mouse_button": 11, "sequential": 12, "leader": 13,
+            "passthrough": 0, "disabled": 1, "disable": 1,
+            "remap": 2, "macro": 3, "remap_hid": 4,
+            "double_tap": 5, "turbo": 6,
+            "sticky_mod": 7, "sticky": 7,
+            "tap_hold": 8,
+            "oneshot_mod": 9, "oneshot": 9,
+            "auto_shift": 10, "mouse_button": 11,
+            "sequential": 12, "leader": 13,
             "profile_switch": 14,
         }
         return _MAP.get(mode_str, 0)
@@ -308,19 +390,37 @@ class SerialClient:
 
         self.send_config_block(CFG_BLOCK_CHORD, slot, buf)
 
+    _CURVE_MAP = {"linear": 0, "exponential": 1, "quadratic": 2}
+    _SHAPE_MAP = {"circle": 0, "square": 1, "octagon": 2}
+    _SOCD_MAP = {"neutral": 0, "last_input": 1, "first_input": 2}
+    _RSTICK_MAP = {"keys": 0, "mouse": 1, "scroll": 2}
+
     def _send_stick_block(self, slot: int, stick: dict) -> None:
         """Encode and send stick configuration.
 
         Binary format:
-          deadzone:u16-LE  curve:u8  sensitivity:u16-LE  sprint_threshold:u16-LE
+          deadzone:u16-LE  curve:u8  shape:u8  exp_x100:u8
+          sensitivity:u16-LE  sprint_threshold:u16-LE
           sprint_multiplier:u16-LE (×100)
+          socd_mode:u8  rt_activation:u8  rt_deactivation:u8
+          right_stick_mode:u8  mouse_sensitivity:u8
+          sprint_zone_enabled:u8
         """
-        buf = struct.pack("<HBHHH",
+        rapid = stick.get("rapid_trigger", {})
+        buf = struct.pack("<HBBB HHH BBB BB B",
                           stick.get("deadzone", 400),
-                          stick.get("curve", 0),
+                          self._CURVE_MAP.get(stick.get("curve", "linear"), 0),
+                          self._SHAPE_MAP.get(stick.get("shape", "circle"), 0),
+                          min(int(stick.get("exp", 1.0) * 100), 255),
                           stick.get("sensitivity", 100),
                           stick.get("sprint_threshold", 0),
-                          int(stick.get("sprint_multiplier", 1.0) * 100))
+                          int(stick.get("sprint_multiplier", 1.0) * 100),
+                          self._SOCD_MAP.get(stick.get("socd_mode", "neutral"), 0),
+                          rapid.get("activation", 30),
+                          rapid.get("deactivation", 20),
+                          self._RSTICK_MAP.get(stick.get("right_stick_mode", "keys"), 0),
+                          min(stick.get("mouse_sensitivity", 10), 255),
+                          1 if stick.get("sprint_zone", {}).get("enabled", False) else 0)
 
         self.send_config_block(CFG_BLOCK_STICK, slot, buf)
 
@@ -426,6 +526,7 @@ class SerialClient:
             return
         buffer = bytearray()
         _MAX_BUFFER = 65536  # 64 KB cap to prevent unbounded growth
+        _MAX_LINE = 10240    # 10 KB max per NDJSON line
 
         while not self._stop.is_set():
             try:
@@ -467,6 +568,13 @@ class SerialClient:
                         break
                     raw_line = buffer[:nl + 1]
                     del buffer[:nl + 1]
+
+                    if len(raw_line) > _MAX_LINE:
+                        log.warning(
+                            "Dropping oversized line (%d bytes, max %d)",
+                            len(raw_line), _MAX_LINE,
+                        )
+                        continue
 
                     raw = raw_line.decode("utf-8", errors="replace").rstrip("\r\n")
                     parsed = None
