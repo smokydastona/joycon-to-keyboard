@@ -64,9 +64,11 @@ jobs:
           - artifact_name: esp32-hid-host-uart
             project_dir: firmware/esp32-hid-host-uart
             target: esp32
+            bootloader_offset: "0x1000"
           - artifact_name: esp32s3-usb-kbd
             project_dir: firmware/esp32s3-usb-kbd
             target: esp32s3
+            bootloader_offset: "0x0"
 
     steps:
       - name: Checkout repo
@@ -118,7 +120,7 @@ jobs:
             --flash_mode dio \
             --flash_size 4MB \
             -o "$out/${{ matrix.artifact_name }}-merged.bin" \
-            0x0    "$build_dir/bootloader/bootloader.bin" \
+            ${{ matrix.bootloader_offset }} "$build_dir/bootloader/bootloader.bin" \
             0x8000 "$build_dir/partition_table/partition-table.bin" \
             0x10000 "$APP_BIN"
 
