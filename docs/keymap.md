@@ -143,7 +143,7 @@ distinct bindings to right-side key_ids for asymmetric dual-controller setups.
 | DUp    | `E`            |
 | DLeft  | `F`            |
 | DRight | `R`            |
-| DDown  | *(unmapped)*   |
+| DDown  | `Space`        |
 
 ## Stick auto-calibration
 

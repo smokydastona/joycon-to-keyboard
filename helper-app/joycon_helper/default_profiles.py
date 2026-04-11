@@ -109,7 +109,7 @@ _SLOT_0: dict[str, Any] = {
 
         # D-pad
         "DUp":    _k(_E),               # interact
-        "DDown":  _k(0),                # unmapped
+        "DDown":  _k(_SPACE),           # jump
         "DLeft":  _k(_F),               # ability
         "DRight": _k(_R),               # ability
 
@@ -159,7 +159,7 @@ _SLOT_1: dict[str, Any] = {
 
         # D-pad
         "DUp":    _k(_E),               # interact
-        "DDown":  _k(0),                # unmapped
+        "DDown":  _k(_SPACE),           # jump
         "DLeft":  _k(_F),               # ability
         "DRight": _k(_R),               # ability
 
@@ -209,7 +209,7 @@ _SLOT_2: dict[str, Any] = {
 
         # D-pad
         "DUp":    _k(_E),               # interact
-        "DDown":  _k(0),                # unmapped
+        "DDown":  _k(_SPACE),           # jump
         "DLeft":  _k(_F),               # ability
         "DRight": _k(_R),               # ability
 
@@ -261,7 +261,7 @@ _SLOT_3: dict[str, Any] = {
 
         # D-pad
         "DUp":    _k(_E),               # interact
-        "DDown":  _k(0),                # unmapped
+        "DDown":  _k(_SPACE),           # jump
         "DLeft":  _k(_F),               # ability
         "DRight": _k(_R),               # ability
 
