@@ -175,21 +175,15 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
                      param->open.handle,
                      bda_to_str(param->open.bd_addr, bda_str, sizeof(bda_str)));
 
-            // Handle 0xFF (BTA_HH_INVALID_HANDLE) means the BTA layer
-            // didn't allocate a device slot in time.  Proceeding would
-            // crash in esp_bt_hid_host_send_data.  Disconnect and retry.
+            // Handle 0xFF (BTA_HH_INVALID_HANDLE) means the Joy-Con's
+            // L2CAP connection completed before BTA_HhOpen was processed
+            // by the BTA task queue.  BTA will catch up and fire a second
+            // OPEN event with the real handle shortly.  Do NOT disconnect
+            // here — the L2CAP link is alive and disconnecting would kill
+            // the connection that BTA is about to register.
             if (param->open.handle == 0xFF) {
-                ESP_LOGE(TAG, "Invalid handle (0xFF); disconnecting and retrying");
-                s_connecting = false;
-                esp_bt_hid_host_disconnect(param->open.bd_addr);
-#if CONFIG_JOYCON_HOST_AUTO_RECONNECT
-                s_have_last_bda = true;
-                memcpy(s_last_bda, param->open.bd_addr, sizeof(esp_bd_addr_t));
-                strncpy(s_last_name, s_pending_name, sizeof(s_last_name) - 1);
-                s_last_name[sizeof(s_last_name) - 1] = 0;
-                s_last_device_id = (s_pending_device_id > 1) ? 0 : s_pending_device_id;
-                schedule_reconnect();
-#endif
+                ESP_LOGW(TAG, "Premature OPEN (handle=0xFF); waiting for BTA to assign real handle...");
+                // Keep s_connecting = true so we don't start new scans.
                 break;
             }
 
@@ -244,6 +238,16 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
                      param->close.reason,
                      param->close.conn_status,
                      param->close.handle);
+
+            // Ignore phantom CLOSE for handle 0xFF — this can arrive if
+            // the BTA layer saw a premature L2CAP connection that was
+            // never registered.  The real connection (handle != 0xFF) may
+            // still be setting up.
+            if (param->close.handle == 0xFF) {
+                ESP_LOGW(TAG, "Ignoring CLOSE for phantom handle 0xFF");
+                break;
+            }
+
             s_connecting = false;
 
             // Clear any slot matching this handle.
