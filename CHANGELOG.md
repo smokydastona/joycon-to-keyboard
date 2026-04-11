@@ -13,6 +13,13 @@ Until then, entries are grouped by date.
 
 ### Fixed
 
+- **Setup FSM times out on reconnect (sniff-mode race)**: When the Joy-Con enters BT sniff mode immediately after connection, the premature `esp_bt_gap_set_qos(TPOLL_MIN)` call in the OPEN handler races with the power-mode negotiation. The `ASSERT_WARN(1 8)` in `lc_task.c` (ROM code) corrupts internal BT controller state, silencing all further HID reports. Fixed by:
+  1. **Deferring QoS** — moved the `set_qos` call from the OPEN callback to `fsm_ready()`, after setup is complete and the BT link is known-stable.
+  2. **Post-connection delay** — new `SETUP_CONNECT_DELAY` FSM state waits `JOYCON_HOST_SETUP_CONNECT_DELAY_MS` (default 500 ms) before sending the first subcmd, letting sniff-mode negotiation finish cleanly.
+  3. **Retry logic** — each FSM step now retries up to `JOYCON_HOST_SETUP_MAX_RETRIES` (default 2) times on timeout before advancing, instead of immediately skipping to the next step.
+  4. **Faster timeout polling** — main loop reduced from 500 ms to 50 ms for quicker retry cycles.
+  5. **BT power-mode logging** — `ESP_BT_GAP_MODE_CHG_EVT` is now handled to log active/sniff/hold/park transitions for easier diagnosis.
+
 - **Joy-Con instantly disconnects after connecting (handle=0xFF race)**: When the Joy-Con completes L2CAP before BTA processes `BTA_HhOpen`, the first OPEN callback has handle=0xFF. Previously, the code tried to disconnect and retry, but this killed the L2CAP link that BTA was about to register. Now the 0xFF OPEN is ignored (the link stays alive), and BTA delivers a second OPEN with a valid handle once it catches up. CLOSE events for handle=0xFF are also ignored as phantom events.
 
 - **ESP32 crash on Joy-Con connect (wrong API parameter type)**: `esp_bt_hid_host_send_data()` takes a BDA (Bluetooth Device Address), not a handle. Passing the `uint16_t` handle (0 or 255) was interpreted as a memory address pointer, causing `LoadProhibited` at `EXCVADDR=0x00000000` (handle=0) or `0x000000FC` (handle=0xFF). Fixed `joycon_setup.c` to store and pass the BDA for all `send_data` and rumble calls. Removed failing `esp_bt_hid_host_set_info()` pre-register call (malloc error). Kept handle=0xFF guard as defense-in-depth.

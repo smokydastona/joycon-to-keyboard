@@ -87,6 +87,7 @@ Set in `main/config.h`.
 - **Nintendo 0x30 button + stick parsing** (when enabled via menuconfig): fully parses all Joy-Con buttons (A/B/X/Y, L/R, ZL/ZR, Plus/Minus, Home, Capture, stick clicks) and both sticks.
 - **Configurable motion thresholds**: shake, tilt, and flick gesture sensitivity are tunable via Kconfig (`JOYCON_HOST_MOTION_SHAKE_THRESHOLD`, `JOYCON_HOST_MOTION_TILT_THRESHOLD`, `JOYCON_HOST_MOTION_FLICK_THRESHOLD`, `JOYCON_HOST_MOTION_COOLDOWN_MS`).
 - **Configurable setup FSM timeout**: `JOYCON_HOST_SETUP_TIMEOUT_MS` controls how long each Joy-Con handshake step waits before retrying (default 1500 ms).
+- **Setup FSM retry & connect delay**: each subcmd step retries up to `JOYCON_HOST_SETUP_MAX_RETRIES` (default 2) times on timeout before advancing, and a post-connection delay (`JOYCON_HOST_SETUP_CONNECT_DELAY_MS`, default 500 ms) lets the BT link stabilise before the first subcmd is sent. This fixes intermittent FSM timeouts caused by sniff-mode negotiation racing with subcmd sends.
 - **Stick auto-calibration**: per-axis min/center/max tracking adapts to individual controller characteristics. SPI flash calibration is preferred when available.
 - **SOCD cleaning**: three modes (neutral / last-input / first-input) for simultaneous opposing cardinal direction handling. Configurable at runtime via UART control command or profile JSON.
 - **Rapid trigger (stick hysteresis)**: separate activation/deactivation thresholds prevent flickering at the deadzone boundary. Configurable at runtime.

@@ -45,9 +45,10 @@ void app_main(void) {
 
     bridge_ctrl_init();
 
-    // Idle loop
+    // Idle loop — check FSM timeouts/retries quickly enough for
+    // the new retry logic (timeout=1500 ms, up to 2 retries).
     while (1) {
         joycon_setup_check_timeouts();
-        vTaskDelay(pdMS_TO_TICKS(500));
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }

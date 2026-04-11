@@ -200,14 +200,10 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
 
             s_connecting = false;
 
-            // Request fastest QoS polling for lowest BT latency.
-            // The default poll interval can add several ms of idle time
-            // between master→slave transmissions.  Using the minimum
-            // value keeps the link actively polling every slot, which is
-            // what a gaming controller needs for sub-frame input latency.
-            // Best-effort: the controller may negotiate a higher value.
-            (void)esp_bt_gap_set_qos(param->open.bd_addr,
-                                     ESP_BT_GAP_TPOLL_MIN);
+            // NOTE: QoS (minimum poll interval) is deferred until the
+            // setup FSM finishes.  Requesting it here races with the
+            // Joy-Con's sniff-mode negotiation and can break the data
+            // path (ASSERT_WARN in lc_task.c + no further reports).
 
 #if CONFIG_JOYCON_HOST_AUTO_RECONNECT
             // Connected successfully — reset reconnect state.
@@ -434,6 +430,21 @@ static void gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t* param) {
         case ESP_BT_GAP_AUTH_CMPL_EVT:
             ESP_LOGI(TAG, "Auth complete: success=%d", param->auth_cmpl.stat == ESP_BT_STATUS_SUCCESS);
             break;
+        case ESP_BT_GAP_MODE_CHG_EVT: {
+            const char *mode_str = "???";
+            switch (param->mode_chg.mode) {
+                case ESP_BT_PM_MD_ACTIVE: mode_str = "active"; break;
+                case ESP_BT_PM_MD_HOLD:   mode_str = "hold";   break;
+                case ESP_BT_PM_MD_SNIFF:  mode_str = "sniff";  break;
+                case ESP_BT_PM_MD_PARK:   mode_str = "park";   break;
+                default: break;
+            }
+            char bda_str2[18];
+            ESP_LOGI(TAG, "BT power-mode change: %s -> %s",
+                     bda_to_str(param->mode_chg.bda, bda_str2, sizeof(bda_str2)),
+                     mode_str);
+            break;
+        }
         case ESP_BT_GAP_READ_RSSI_DELTA_EVT: {
             if (param->read_rssi_delta.stat == ESP_BT_STATUS_SUCCESS) {
                 int8_t rssi = param->read_rssi_delta.rssi_delta;

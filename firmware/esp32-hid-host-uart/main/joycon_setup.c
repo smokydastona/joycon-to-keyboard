@@ -22,6 +22,7 @@
 #include <string.h>
 #include <math.h>
 #include "esp_log.h"
+#include "esp_gap_bt_api.h"
 #include "esp_hidh_api.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -85,9 +86,16 @@ static SemaphoreHandle_t s_bt_send_mux;
 // Setup FSM timeout: if we don't get a reply, advance anyway
 #define SETUP_TIMEOUT_MS  CONFIG_JOYCON_HOST_SETUP_TIMEOUT_MS
 
+// Max retries per FSM step before advancing
+#define SETUP_MAX_RETRIES  CONFIG_JOYCON_HOST_SETUP_MAX_RETRIES
+
+// Post-connection delay to let the BT link stabilise
+#define SETUP_CONNECT_DELAY_MS  CONFIG_JOYCON_HOST_SETUP_CONNECT_DELAY_MS
+
 // FSM states
 typedef enum {
     SETUP_IDLE = 0,
+    SETUP_CONNECT_DELAY,
     SETUP_REQ_DEV_INFO,
     SETUP_READ_SERIAL,
     SETUP_READ_COLORS,
@@ -138,6 +146,7 @@ typedef struct {
 
     // Timeout tracking
     int64_t last_send_us;
+    uint8_t retry_count;
 } setup_instance_t;
 
 static setup_instance_t s_inst[2] = {0};
@@ -359,8 +368,34 @@ static void fsm_set_leds(setup_instance_t *inst) {
     send_subcmd(inst, SUBCMD_SET_PLAYER_LEDS, &leds, 1);
 }
 
+// Re-send the current state's subcmd (used by retry logic).
+static void fsm_retry_current(setup_instance_t *inst) {
+    switch (inst->state) {
+        case SETUP_REQ_DEV_INFO:        fsm_req_dev_info(inst);        break;
+        case SETUP_READ_SERIAL:         fsm_read_serial(inst);         break;
+        case SETUP_READ_COLORS:         fsm_read_colors(inst);         break;
+        case SETUP_READ_FACTORY_STICK_CAL: fsm_read_factory_stick_cal(inst); break;
+        case SETUP_READ_USER_STICK_CAL: fsm_read_user_stick_cal(inst); break;
+        case SETUP_READ_STICK_PARAMS:   fsm_read_stick_params(inst);   break;
+        case SETUP_READ_FACTORY_IMU_CAL: fsm_read_factory_imu_cal(inst); break;
+        case SETUP_READ_USER_IMU_CAL:   fsm_read_user_imu_cal(inst);   break;
+        case SETUP_SET_REPORT_MODE:     fsm_set_report_mode(inst);     break;
+        case SETUP_ENABLE_IMU:          fsm_enable_imu(inst);          break;
+        case SETUP_ENABLE_VIBRATION:    fsm_enable_vibration(inst);    break;
+        case SETUP_SET_LEDS:            fsm_set_leds(inst);            break;
+        default: break;
+    }
+}
+
 static void fsm_ready(setup_instance_t *inst) {
     inst->state = SETUP_READY;
+
+    // Now that setup is finished and the link is stable, request the
+    // fastest QoS poll interval for low-latency gaming input.
+    // Doing this at OPEN time conflicts with the Joy-Con's immediate
+    // sniff-mode negotiation and can break the data path.
+    (void)esp_bt_gap_set_qos(inst->bda, ESP_BT_GAP_TPOLL_MIN);
+
     ESP_LOGI(TAG, "[%d] Setup complete! type=%d fw=%d.%d battery=%d serial=%s",
              inst->device_id, inst->controller_type,
              inst->fw_version_hi, inst->fw_version_lo,
@@ -408,8 +443,10 @@ static void fsm_ready(setup_instance_t *inst) {
 
 // Advance the FSM to the next state.
 static void fsm_next(setup_instance_t *inst) {
+    inst->retry_count = 0;
     switch (inst->state) {
         case SETUP_IDLE:
+        case SETUP_CONNECT_DELAY:
             fsm_req_dev_info(inst);
             break;
         case SETUP_REQ_DEV_INFO:
@@ -724,8 +761,14 @@ void joycon_setup_start(uint16_t handle, uint8_t device_id, const uint8_t bda[6]
     inst->battery = -1;
     inst->controller_type = JOYCON_TYPE_PRO;  // Default until we learn otherwise
 
-    ESP_LOGI(TAG, "[%d] Starting setup FSM (handle=%u)", device_id, handle);
-    fsm_next(inst);  // IDLE -> REQ_DEV_INFO
+    ESP_LOGI(TAG, "[%d] Starting setup FSM (handle=%u, delay=%d ms)",
+             device_id, handle, SETUP_CONNECT_DELAY_MS);
+
+    // Enter the connect-delay state.  The timeout handler will advance
+    // to REQ_DEV_INFO after SETUP_CONNECT_DELAY_MS, giving the BT link
+    // time to stabilise and complete power-mode negotiations.
+    inst->state = SETUP_CONNECT_DELAY;
+    inst->last_send_us = esp_timer_get_time();
 }
 
 void joycon_setup_stop(uint8_t device_id) {
@@ -881,10 +924,29 @@ void joycon_setup_check_timeouts(void) {
         if (inst->last_send_us == 0)
             continue;
         int64_t elapsed_ms = (now - inst->last_send_us) / 1000;
+
+        // Post-connection delay: just wait, then advance to first subcmd.
+        if (inst->state == SETUP_CONNECT_DELAY) {
+            if (elapsed_ms >= SETUP_CONNECT_DELAY_MS) {
+                ESP_LOGI(TAG, "[%d] Post-connect delay done, starting subcmds",
+                         inst->device_id);
+                fsm_next(inst);
+            }
+            continue;
+        }
+
         if (elapsed_ms >= SETUP_TIMEOUT_MS) {
-            ESP_LOGW(TAG, "[%d] FSM timeout in state %d after %lld ms, advancing",
-                     inst->device_id, inst->state, (long long)elapsed_ms);
-            fsm_next(inst);
+            if (inst->retry_count < SETUP_MAX_RETRIES) {
+                inst->retry_count++;
+                ESP_LOGW(TAG, "[%d] FSM timeout in state %d after %lld ms, retry %d/%d",
+                         inst->device_id, inst->state, (long long)elapsed_ms,
+                         inst->retry_count, SETUP_MAX_RETRIES);
+                fsm_retry_current(inst);
+            } else {
+                ESP_LOGW(TAG, "[%d] FSM timeout in state %d after %lld ms, advancing",
+                         inst->device_id, inst->state, (long long)elapsed_ms);
+                fsm_next(inst);
+            }
         }
     }
 }

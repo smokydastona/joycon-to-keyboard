@@ -85,6 +85,24 @@ config JOYCON_HOST_SETUP_TIMEOUT_MS
         or advancing. Lower values speed up connection but may cause skipped
         steps on slow controllers.
 
+config JOYCON_HOST_SETUP_MAX_RETRIES
+    int "Setup FSM max retries per step"
+    range 0 10
+    default 2
+    help
+        Number of times to retry each setup FSM step on timeout before
+        advancing to the next step.  0 = no retries (advance immediately).
+
+config JOYCON_HOST_SETUP_CONNECT_DELAY_MS
+    int "Post-connection delay before FSM starts (ms)"
+    range 0 5000
+    default 500
+    help
+        Delay after a BT HID connection opens before the setup FSM sends
+        its first subcommand.  This lets the BT link stabilise and
+        complete power-mode negotiations (e.g. sniff mode).  Set to 0 to
+        disable the delay.
+
 config JOYCON_HOST_MOTION_SHAKE_THRESHOLD
     int "Shake gesture accel threshold"
     range 2000 30000
