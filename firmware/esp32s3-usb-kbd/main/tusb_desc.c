@@ -75,10 +75,10 @@ _Static_assert(sizeof(desc_configuration) == CONFIG_TOTAL_LEN,
 char const* string_desc_arr[] = {
     (const char[]){0x09, 0x04},
     "Bind Bandit",
-    "InputGremlin",
+    "InputGoblin",
     "00000001",
-    "Bind Bandit CDC",
-    "Bind Bandit Mouse",
+    "InputGoblin CDC",
+    "InputGoblin Mouse",
 };
 
 #define STRING_DESC_ARR_SIZE 6
