@@ -374,13 +374,21 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
         static nintendo_0x30_state_t last;
         static bool have_last = false;
 
-        if (!have_last || memcmp(&last, &st, sizeof(st)) != 0) {
+        // Compare only button + stick fields; IMU data changes every frame
+        // and would flood the console UART, blocking the BT callback task.
+        bool btn_stick_changed = !have_last ||
+            last.buttons1 != st.buttons1 || last.buttons2 != st.buttons2 ||
+            last.buttons3 != st.buttons3 ||
+            last.lx != st.lx || last.ly != st.ly ||
+            last.rx != st.rx || last.ry != st.ry;
+
+        if (btn_stick_changed) {
             ESP_LOGI("joycon-mapper", "nintendo 0x30: btn=%02X %02X %02X  LX=%u LY=%u  RX=%u RY=%u",
                      st.buttons1, st.buttons2, st.buttons3,
                      (unsigned)st.lx, (unsigned)st.ly, (unsigned)st.rx, (unsigned)st.ry);
-            last = st;
-            have_last = true;
         }
+        last = st;
+        have_last = true;
 
 #if CONFIG_JOYCON_HOST_NINTENDO_0X30_EMIT_KEYS
         // --- Restore calibration from NVS on first report ---

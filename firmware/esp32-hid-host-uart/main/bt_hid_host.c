@@ -16,7 +16,6 @@
 #include "esp_timer.h"
 
 #include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 
 #include "joycon_mapper.h"
 #include "uart_framing.h"
@@ -290,25 +289,21 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
                 // Evidence-first workflow: only log when report bytes change.
                 // This avoids flooding and makes it easier to identify toggling bits.
                 if (CONFIG_JOYCON_HOST_LOG_REPORTS) {
-                    static uint8_t last[96];
-                    static uint16_t last_len = 0;
+                    // Compare only the first 12 bytes (report_id, timer,
+                    // buttons, sticks) — bytes 13+ are IMU data that changes
+                    // every frame and would flood the console UART, blocking
+                    // the BT callback task and killing the connection.
+                    static uint8_t last[12];
+                    static bool have_last = false;
 
-                    uint16_t now_len = param->data_ind.len;
-                    if (now_len > sizeof(last)) {
-                        now_len = sizeof(last);
-                    }
+                    uint16_t cmp_len = param->data_ind.len;
+                    if (cmp_len > sizeof(last)) cmp_len = sizeof(last);
 
-                    bool changed = false;
-                    if (last_len != now_len) {
-                        changed = true;
-                    } else if (last_len != 0) {
-                        changed = (memcmp(last, param->data_ind.data, now_len) != 0);
-                    } else {
-                        changed = true;
-                    }
+                    bool changed = !have_last ||
+                                   memcmp(last, param->data_ind.data, cmp_len) != 0;
                     if (changed) {
-                        memcpy(last, param->data_ind.data, now_len);
-                        last_len = now_len;
+                        memcpy(last, param->data_ind.data, cmp_len);
+                        have_last = true;
 
                         ESP_LOGI(TAG, "HID report len=%u", (unsigned)param->data_ind.len);
                         ESP_LOG_BUFFER_HEX_LEVEL(TAG, param->data_ind.data,
@@ -356,6 +351,16 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
 }
 
 static esp_timer_handle_t s_rssi_timer = NULL;
+
+// Timer-based discovery restart — avoids blocking the BTC task with vTaskDelay.
+static esp_timer_handle_t s_disc_restart_timer = NULL;
+static void disc_restart_cb(void *arg) {
+    (void)arg;
+    // Re-check conditions in case a connection arrived during the delay.
+    if (!s_dev[0].connected && !s_dev[1].connected && !s_connecting) {
+        bt_hid_host_start_discovery();
+    }
+}
 
 static void rssi_poll_cb(void *arg) {
     (void)arg;
@@ -432,12 +437,12 @@ static void gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t* param) {
             // state 0 = scan ended.  If nothing is connected yet, restart
             // discovery so the user doesn't have to power-cycle the board
             // when the Joy-Con wasn't in pairing mode during the first scan.
+            // Use a one-shot timer — blocking with vTaskDelay in the BTC
+            // callback task would starve all Bluetooth event processing.
             if (param->disc_st_chg.state == 0 &&
                 !s_dev[0].connected && !s_dev[1].connected && !s_connecting) {
                 ESP_LOGI(TAG, "No device connected after scan; restarting discovery in 2 s");
-                // Small delay to avoid hammering the radio.
-                vTaskDelay(pdMS_TO_TICKS(2000));
-                bt_hid_host_start_discovery();
+                esp_timer_start_once(s_disc_restart_timer, 2000000);  // 2 s
             }
             break;
         case ESP_BT_GAP_AUTH_CMPL_EVT:
@@ -555,6 +560,14 @@ esp_err_t bt_hid_host_start(void) {
     };
     ESP_ERROR_CHECK(esp_timer_create(&rssi_args, &s_rssi_timer));
     ESP_ERROR_CHECK(esp_timer_start_periodic(s_rssi_timer, 5000000));  // 5s
+
+    // Discovery restart timer (one-shot, used from GAP callback).
+    esp_timer_create_args_t disc_args = {
+        .callback = disc_restart_cb,
+        .arg = NULL,
+        .name = "disc_restart",
+    };
+    ESP_ERROR_CHECK(esp_timer_create(&disc_args, &s_disc_restart_timer));
 
 #if CONFIG_JOYCON_HOST_AUTO_RECONNECT
     esp_timer_create_args_t reconn_args = {

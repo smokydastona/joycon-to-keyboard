@@ -13,6 +13,10 @@ Until then, entries are grouped by date.
 
 ### Fixed
 
+- **Log flooding kills BT connection after ~2 s of reports**: HID report change detection (`CONFIG_JOYCON_HOST_LOG_REPORTS`) compared the full 49-byte report, including 36 bytes of IMU data that changes every frame. At 60 Hz this produced ~33.6 KB/s of log output through a 115200 baud console UART (~11.5 KB/s), blocking every ESP_LOGI call, starving the BT callback task, and killing the connection when the L2CAP supervision timer expired. Fixed by comparing only the first 12 bytes (report ID, timer, buttons, sticks) for the hex-dump gate, and only buttons+sticks for the mapper's parsed-state log.
+
+- **`vTaskDelay` in GAP callback blocks all BT processing**: Discovery auto-restart used `vTaskDelay(pdMS_TO_TICKS(2000))` inside the BTC callback task, preventing any Bluetooth events from being processed for 2 s. Replaced with a one-shot `esp_timer` that fires the restart asynchronously.
+
 - **QoS call kills connection after ~3 s**: Even deferred to `fsm_ready()`, `esp_bt_gap_set_qos(TPOLL_MIN)` still triggers `ASSERT_WARN(1 8)` in `lc_task.c` and corrupts the BT controller state, killing HID reports ~3 seconds later. Removed the QoS call entirely — the Joy-Con already streams at 60 Hz on the default poll interval, so the call is unnecessary.
 
 - **Discovery never restarts when Joy-Con isn't paired during first scan**: After the initial 10 s inquiry scan ends without finding a device, discovery was not restarted, requiring a manual board reset. Now the scan automatically restarts (with a 2 s cooldown) if no device is connected when discovery ends.
