@@ -23,6 +23,9 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QScrollArea,
+    QSplitter,
+    QTabWidget,
     QTableWidget,
     QTableWidgetItem,
     QTextEdit,
@@ -76,16 +79,33 @@ class ProfilesView(QWidget):
         super().__init__()
         self._main = main
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(16)
+        root = QHBoxLayout(self)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        self._build_left_panel(layout)
-        self._build_right_panel(layout)
+        splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setChildrenCollapsible(False)
+        root.addWidget(splitter)
+
+        self._build_left_panel(splitter)
+        self._build_right_panel(splitter)
+        splitter.setStretchFactor(0, 0)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([320, 560])
 
     # -----------------------------------------------------------------
-    def _build_left_panel(self, parent_layout: QHBoxLayout) -> None:
-        left = QVBoxLayout()
+    def _build_left_panel(self, splitter: QSplitter) -> None:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setMinimumWidth(285)
+        scroll.setMaximumWidth(380)
+
+        container = QWidget()
+        scroll.setWidget(container)
+        outer = QVBoxLayout(container)
+        outer.setContentsMargins(8, 10, 8, 10)
+        outer.setSpacing(8)
 
         # Header
         header = QLabel("Profiles")
@@ -94,91 +114,95 @@ class ProfilesView(QWidget):
             self._main.theme.typo("font_size_title"),
             QFont.Weight.Bold,
         ))
-        left.addWidget(header)
+        outer.addWidget(header)
 
         # Search bar
         search_row = QHBoxLayout()
         search_icon = QLabel("🔍")
         search_row.addWidget(search_icon)
         self._search_input = QLineEdit()
-        self._search_input.setPlaceholderText("Search profiles by name or tag…")
+        self._search_input.setPlaceholderText("Search profiles…")
         self._search_input.setClearButtonEnabled(True)
         self._search_input.textChanged.connect(self._on_search_changed)
         search_row.addWidget(self._search_input)
-        left.addLayout(search_row)
+        outer.addLayout(search_row)
+
+        # ── Tab widget: Profiles | App Switcher ──────────────────────
+        tabs = QTabWidget()
+        tabs.setDocumentMode(True)
+        outer.addWidget(tabs, 1)
+
+        # ── Profiles tab ─────────────────────────────────────────────
+        profiles_tab = QWidget()
+        pt = QVBoxLayout(profiles_tab)
+        pt.setContentsMargins(2, 8, 2, 4)
+        pt.setSpacing(8)
 
         # Slot cards
         slot_group = QGroupBox("Device Slots")
         slot_lay = QVBoxLayout(slot_group)
-
+        slot_lay.setSpacing(4)
         self._slot_cards: list[QPushButton] = []
         for i in range(4):
             builtin = BUILT_IN_PROFILES[i]
             label = builtin.get("name", f"(slot {i})")
             icon = builtin.get("icon", "🎮")
             btn = QPushButton(f"{icon} Slot {i}: {label}")
-            btn.setFixedHeight(48)
+            btn.setFixedHeight(40)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.clicked.connect(lambda checked, s=i: self._select_slot(s))
             slot_lay.addWidget(btn)
             self._slot_cards.append(btn)
+        pt.addWidget(slot_group)
 
-        left.addWidget(slot_group)
-
-        # Profile actions
+        # Profile actions — stacked buttons (no horizontal crowding)
         actions_group = QGroupBox("Actions")
         actions_lay = QVBoxLayout(actions_group)
+        actions_lay.setSpacing(4)
 
-        btn_row1 = QHBoxLayout()
         new_btn = QPushButton("New Profile")
         new_btn.setProperty("accent", True)
         new_btn.clicked.connect(self._new_profile)
-        btn_row1.addWidget(new_btn)
+        actions_lay.addWidget(new_btn)
 
         dup_btn = QPushButton("Duplicate")
         dup_btn.clicked.connect(self._duplicate_profile)
-        btn_row1.addWidget(dup_btn)
-        actions_lay.addLayout(btn_row1)
+        actions_lay.addWidget(dup_btn)
 
-        btn_row2 = QHBoxLayout()
         load_btn = QPushButton("Load from File")
         load_btn.clicked.connect(self._load_from_file)
-        btn_row2.addWidget(load_btn)
+        actions_lay.addWidget(load_btn)
 
         save_btn = QPushButton("Save to File")
         save_btn.clicked.connect(self._save_to_file)
-        btn_row2.addWidget(save_btn)
-        actions_lay.addLayout(btn_row2)
+        actions_lay.addWidget(save_btn)
 
-        btn_row3 = QHBoxLayout()
         upload_btn = QPushButton("Upload to Device")
         upload_btn.setProperty("accent", True)
         upload_btn.clicked.connect(self._upload_profile)
-        btn_row3.addWidget(upload_btn)
+        actions_lay.addWidget(upload_btn)
 
         read_btn = QPushButton("Read from Device")
         read_btn.clicked.connect(self._read_profile)
-        btn_row3.addWidget(read_btn)
-        actions_lay.addLayout(btn_row3)
+        actions_lay.addWidget(read_btn)
 
-        btn_row4 = QHBoxLayout()
+        rr_row = QHBoxLayout()
         rename_btn = QPushButton("Rename")
         rename_btn.clicked.connect(self._rename_profile)
-        btn_row4.addWidget(rename_btn)
-
+        rr_row.addWidget(rename_btn)
         reset_btn = QPushButton("Reset to Default")
         reset_btn.setProperty("danger", True)
         reset_btn.clicked.connect(self._reset_to_default)
-        btn_row4.addWidget(reset_btn)
-        actions_lay.addLayout(btn_row4)
+        rr_row.addWidget(reset_btn)
+        actions_lay.addLayout(rr_row)
 
-        left.addWidget(actions_group)
+        pt.addWidget(actions_group)
 
         # Community presets
         preset_group = QGroupBox("Community Presets")
         preset_lay = QVBoxLayout(preset_group)
 
-        preset_info = QLabel("Load a pre-built profile optimized for a game genre.")
+        preset_info = QLabel("Load a pre-built profile for a game genre.")
         preset_info.setWordWrap(True)
         preset_info.setStyleSheet(f"color: {self._main.theme.color('text_secondary')};")
         preset_lay.addWidget(preset_info)
@@ -197,30 +221,31 @@ class ProfilesView(QWidget):
         load_preset_btn = QPushButton("Load Preset")
         load_preset_btn.clicked.connect(self._load_preset)
         preset_lay.addWidget(load_preset_btn)
-
-        left.addWidget(preset_group)
+        pt.addWidget(preset_group)
 
         # Undo/Redo
         undo_group = QGroupBox("History")
         undo_lay = QHBoxLayout(undo_group)
-
-        self._undo_btn = QPushButton("↩ Undo (Ctrl+Z)")
+        self._undo_btn = QPushButton("↩ Undo")
         self._undo_btn.setEnabled(False)
-        self._undo_btn.setToolTip("Revert the last profile change")
+        self._undo_btn.setToolTip("Revert the last profile change (Ctrl+Z)")
         self._undo_btn.clicked.connect(self._main.undo)
         undo_lay.addWidget(self._undo_btn)
-
-        self._redo_btn = QPushButton("↪ Redo (Ctrl+Y)")
+        self._redo_btn = QPushButton("↪ Redo")
         self._redo_btn.setEnabled(False)
-        self._redo_btn.setToolTip("Re-apply the last undone change")
+        self._redo_btn.setToolTip("Re-apply the last undone change (Ctrl+Y)")
         self._redo_btn.clicked.connect(self._main.redo)
         undo_lay.addWidget(self._redo_btn)
+        pt.addWidget(undo_group)
 
-        left.addWidget(undo_group)
+        pt.addStretch()
+        tabs.addTab(profiles_tab, "Profiles")
 
-        # App Switcher
-        switch_group = QGroupBox("App Switcher")
-        switch_lay = QVBoxLayout(switch_group)
+        # ── App Switcher tab ─────────────────────────────────────────
+        switch_tab = QWidget()
+        st = QVBoxLayout(switch_tab)
+        st.setContentsMargins(2, 8, 2, 4)
+        st.setSpacing(8)
 
         self._switch_enable = QCheckBox("Auto-switch profiles by foreground app")
         self._switch_enable.setToolTip(
@@ -228,44 +253,42 @@ class ProfilesView(QWidget):
             "based on which application is in the foreground."
         )
         self._switch_enable.toggled.connect(self._toggle_app_switcher)
-        switch_lay.addWidget(self._switch_enable)
+        st.addWidget(self._switch_enable)
 
         # Table: App Name | Slot | Remove
         self._switch_table = QTableWidget(0, 3)
         self._switch_table.setHorizontalHeaderLabels(["Application", "Slot", ""])
         self._switch_table.horizontalHeader().setStretchLastSection(False)
-        self._switch_table.setColumnWidth(0, 180)
-        self._switch_table.setColumnWidth(1, 60)
-        self._switch_table.setColumnWidth(2, 60)
-        self._switch_table.setMaximumHeight(160)
+        self._switch_table.setColumnWidth(0, 160)
+        self._switch_table.setColumnWidth(1, 52)
+        self._switch_table.setColumnWidth(2, 44)
+        self._switch_table.setMinimumHeight(140)
         self._switch_table.setToolTip("Rules mapping foreground applications to profile slots")
         self._switch_table.verticalHeader().setVisible(False)
-        switch_lay.addWidget(self._switch_table)
+        st.addWidget(self._switch_table, 1)
 
-        switch_btn_row = QHBoxLayout()
+        # Buttons — 2 rows of 2 so they don't overflow width
+        btn_row_a = QHBoxLayout()
         detect_btn = QPushButton("🔍 Detect App")
-        detect_btn.setToolTip(
-            "Automatically detect the currently active window\n"
-            "and add a rule for its executable."
-        )
+        detect_btn.setToolTip("Add a rule for the currently active foreground window")
         detect_btn.clicked.connect(self._app_switch_detect)
-        switch_btn_row.addWidget(detect_btn)
-
-        browse_btn = QPushButton("📂 Browse...")
+        btn_row_a.addWidget(detect_btn)
+        browse_btn = QPushButton("📂 Browse…")
         browse_btn.setToolTip("Browse for an executable file to add a rule for")
         browse_btn.clicked.connect(self._app_switch_browse)
-        switch_btn_row.addWidget(browse_btn)
+        btn_row_a.addWidget(browse_btn)
+        st.addLayout(btn_row_a)
 
-        add_btn = QPushButton("Add Rule")
+        btn_row_b = QHBoxLayout()
+        add_btn = QPushButton("✏ Add Rule")
         add_btn.setToolTip("Manually type an executable name to add a rule")
         add_btn.clicked.connect(self._app_switch_add)
-        switch_btn_row.addWidget(add_btn)
-
-        proc_btn = QPushButton("🖥 Processes...")
+        btn_row_b.addWidget(add_btn)
+        proc_btn = QPushButton("🖥 Processes…")
         proc_btn.setToolTip("Pick from a live list of all currently running processes")
         proc_btn.clicked.connect(self._app_switch_pick_process)
-        switch_btn_row.addWidget(proc_btn)
-        switch_lay.addLayout(switch_btn_row)
+        btn_row_b.addWidget(proc_btn)
+        st.addLayout(btn_row_b)
 
         # Default slot
         default_row = QHBoxLayout()
@@ -276,57 +299,61 @@ class ProfilesView(QWidget):
         self._default_slot_combo.currentIndexChanged.connect(self._app_switch_default_changed)
         default_row.addWidget(self._default_slot_combo)
         default_row.addStretch()
-        switch_lay.addLayout(default_row)
+        st.addLayout(default_row)
 
-        left.addWidget(switch_group)
+        st.addStretch()
+        tabs.addTab(switch_tab, "App Switcher")
 
         # Populate rules from disk
         self._refresh_switch_table()
 
-        left.addStretch()
-
-        parent_layout.addLayout(left, 1)
+        splitter.addWidget(scroll)
 
     # -----------------------------------------------------------------
-    def _build_right_panel(self, parent_layout: QHBoxLayout) -> None:
-        right = QVBoxLayout()
+    def _build_right_panel(self, splitter: QSplitter) -> None:
+        right_widget = QWidget()
+        right_widget.setMinimumWidth(320)
+        right = QVBoxLayout(right_widget)
+        right.setContentsMargins(12, 12, 12, 12)
+        right.setSpacing(8)
 
-        # Profile name + icon picker
-        name_row = QHBoxLayout()
-        # Icon picker
+        # Profile name + icon — inside a group box so it stays tidy
+        name_group = QGroupBox("Profile")
+        name_lay = QHBoxLayout(name_group)
         self._icon_btn = QPushButton("🎮")
         self._icon_btn.setFixedSize(36, 36)
         self._icon_btn.setToolTip("Change profile icon")
         self._icon_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._icon_btn.clicked.connect(self._pick_icon)
-        name_row.addWidget(self._icon_btn)
-
-        name_row.addWidget(QLabel("Profile Name:"))
+        name_lay.addWidget(self._icon_btn)
+        name_lay.addWidget(QLabel("Name:"))
         self._name_edit = QLineEdit()
         self._name_edit.setPlaceholderText("My Profile")
         self._name_edit.textChanged.connect(self._on_name_changed)
-        name_row.addWidget(self._name_edit)
-        right.addLayout(name_row)
+        name_lay.addWidget(self._name_edit, 1)
+        right.addWidget(name_group)
 
-        # Tag chips
+        # Tag chips — 2×4 grid so they never overflow horizontally
         tag_group = QGroupBox("Tags")
-        tag_lay = QHBoxLayout(tag_group)
+        tag_lay = QGridLayout(tag_group)
+        tag_lay.setSpacing(4)
         self._tag_checks: dict[str, QCheckBox] = {}
-        for tag in PROFILE_TAGS:
+        for i, tag in enumerate(PROFILE_TAGS):
             cb = QCheckBox(tag)
             cb.setCursor(Qt.CursorShape.PointingHandCursor)
             cb.toggled.connect(lambda checked, t=tag: self._on_tag_toggled(t, checked))
-            tag_lay.addWidget(cb)
+            tag_lay.addWidget(cb, i // 4, i % 4)
             self._tag_checks[tag] = cb
         right.addWidget(tag_group)
 
-        # Mapping preview grid (mini summary of what's bound)
+        # Mapping preview grid — capped height so it doesn't crowd the editor
         preview_group = QGroupBox("Mapping Preview")
+        preview_group.setMaximumHeight(118)
         preview_lay = QVBoxLayout(preview_group)
+        preview_lay.setContentsMargins(4, 4, 4, 4)
         self._preview_grid = QGridLayout()
-        self._preview_grid.setSpacing(4)
+        self._preview_grid.setSpacing(3)
         self._preview_labels: dict[str, QLabel] = {}
-        # Populate a 6-col grid of the common buttons
         common_buttons = [
             "A", "B", "X", "Y", "L", "R",
             "ZL", "ZR", "Plus", "Minus", "Home", "Capture",
@@ -334,12 +361,12 @@ class ProfilesView(QWidget):
         ]
         for i, bname in enumerate(common_buttons):
             lbl = QLabel(bname)
-            lbl.setFixedSize(QSize(60, 24))
+            lbl.setFixedSize(QSize(56, 22))
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             lbl.setStyleSheet(
                 f"background: {self._main.theme.theme['colors']['surface']}; "
                 f"border: 1px solid {self._main.theme.theme['colors']['border_light']}; "
-                f"border-radius: 4px; font-size: 10px;"
+                f"border-radius: 4px; font-size: 9px;"
             )
             self._preview_grid.addWidget(lbl, i // 6, i % 6)
             self._preview_labels[bname] = lbl
@@ -357,7 +384,7 @@ class ProfilesView(QWidget):
         layer_row.addStretch()
         right.addLayout(layer_row)
 
-        # Profile JSON editor
+        # Profile JSON editor (takes remaining space)
         right.addWidget(QLabel("Profile JSON:"))
         self._json_editor = QTextEdit()
         self._json_editor.setFont(QFont(
@@ -367,25 +394,22 @@ class ProfilesView(QWidget):
         self._json_editor.setPlaceholderText("Profile JSON will appear here...")
         right.addWidget(self._json_editor, 1)
 
-        # Validation
+        # Validation row
         val_row = QHBoxLayout()
         validate_btn = QPushButton("Validate")
         validate_btn.clicked.connect(self._validate_json)
         val_row.addWidget(validate_btn)
-
         apply_btn = QPushButton("Apply Changes")
         apply_btn.setProperty("accent", True)
         apply_btn.clicked.connect(self._apply_json)
         val_row.addWidget(apply_btn)
-
         self._validation_label = QLabel("")
         val_row.addWidget(self._validation_label, 1)
         right.addLayout(val_row)
 
-        # Share code section
+        # Share codes
         share_group = QGroupBox("Share Codes")
         share_lay = QVBoxLayout(share_group)
-
         export_row = QHBoxLayout()
         self._share_code_out = QLineEdit()
         self._share_code_out.setReadOnly(True)
@@ -410,7 +434,7 @@ class ProfilesView(QWidget):
 
         right.addWidget(share_group)
 
-        parent_layout.addLayout(right, 2)
+        splitter.addWidget(right_widget)
 
     # -----------------------------------------------------------------
     # Operations
