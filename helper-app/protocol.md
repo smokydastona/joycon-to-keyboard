@@ -723,3 +723,46 @@ The helper app can export/import a single-string **profile share code** for offl
 
 - Format: `JCB1:<base64url(zlib(profile_json))>`
 - This is not sent to the device directly; it is just a helper-side encoding.
+
+## Diagnostics (device -> PC)
+
+### UART bridge diagnostics
+
+Reports the status of the UART bridge between ESP32-S3 and ESP32 BT host.
+
+```json
+{"cmd":"uart_diag"}
+```
+
+Response:
+
+```json
+{"rsp":"uart_diag","port":1,"baud":921600,"rx_gpio":5,"tx_gpio":6,
+ "rx_pin_level":1,"buffered_bytes":0,
+ "total_rx_bytes":12345,"total_frames":1234,
+ "sample_len":16,"sample_hex":"AA 55 06 F7 00 00 00 00 00 F1 AA 55 06 F7 80 00"}
+```
+
+- `total_rx_bytes`: cumulative raw bytes received on the bridge UART since boot
+- `total_frames`: cumulative valid framed packets decoded since boot
+- `rx_pin_level`: current logic level on the RX pin (0 = low, 1 = high/idle)
+- `sample_hex`: up to 16 raw bytes from the last UART read (debug context)
+
+### Synthetic key injection (diagnostics / testing only)
+
+Triggers a single press + release of a logical key through the full HID output path.
+Useful for verifying the USB HID keyboard output without a physical controller.
+
+```json
+{"cmd":"test_key","key_id":1}
+```
+
+- `key_id`: logical input key id (0–127, default 1 = W / Forward). See `docs/keymap.md`.
+
+Response:
+
+```json
+{"rsp":"test_key","key_id":1,"status":"ok"}
+```
+
+The device presses the mapped HID key for ~80 ms then releases it.

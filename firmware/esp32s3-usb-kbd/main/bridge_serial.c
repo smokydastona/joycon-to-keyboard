@@ -8,6 +8,9 @@
 #include "esp_log.h"
 #include "esp_system.h"
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
 #include "nvs.h"
 #include "nvs_flash.h"
 
@@ -788,6 +791,22 @@ static void handle_line(const char *line) {
         uint16_t speed = cJSON_IsNumber(spd_j) ? (uint16_t)spd_j->valueint : 500;
         profile_runtime_set_led(pat, r, g, b, speed);
         respond_ok_simple("set_led");
+    } else if (strcmp(cmd->valuestring, "test_key") == 0) {
+        // Synthetic key press for HID path verification.
+        // Usage: {"cmd":"test_key","key_id":1}  (key_id 1 = W / Forward)
+        cJSON *kid_j = cJSON_GetObjectItemCaseSensitive(root, "key_id");
+        uint8_t test_kid = (kid_j && cJSON_IsNumber(kid_j)) ? (uint8_t)kid_j->valueint : 1u;
+        profile_runtime_handle_input(true, test_kid);
+        vTaskDelay(pdMS_TO_TICKS(80));
+        profile_runtime_handle_input(false, test_kid);
+        cJSON *rsp = cJSON_CreateObject();
+        if (rsp) {
+            cJSON_AddStringToObject(rsp, "rsp", "test_key");
+            cJSON_AddNumberToObject(rsp, "key_id", test_kid);
+            cJSON_AddStringToObject(rsp, "status", "ok");
+            cdc_write_json(rsp);
+            cJSON_Delete(rsp);
+        }
     } else if (strcmp(cmd->valuestring, "uart_diag") == 0) {
         uart_diag_t diag;
         uart_proto_get_diag(&diag);
