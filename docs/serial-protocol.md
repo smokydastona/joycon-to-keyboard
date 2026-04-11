@@ -20,6 +20,7 @@ It is also used in the reverse direction (ESP32-S3 → ESP32) for optional helpe
 | `0xF9` | ESP32→S3 | Controller info (type/serial/colors/IMU) |
 | `0xF8` | ESP32→S3 | RSSI (signal strength) |
 | `0xF7` | ESP32→S3 | Analog stick data |
+| `0xF6` | ESP32→S3 | Gyro data (angular velocity) |
 
 ## Frame format
 
@@ -229,6 +230,18 @@ The ESP32-S3 uses these values for:
 - Left stick → sprint zone detection (magnitude vs threshold)
 
 These frames are sent every report cycle alongside the digital key events.
+
+## Gyro frames (ESP32 → ESP32-S3)
+
+The ESP32 sends IMU angular-velocity data using marker `0xF6`:
+
+- `payload[0]`: `0xF6` (gyro marker)
+- `payload[1]`: `device_id` (`0x00` = left, `0x01` = right)
+- `payload[2..3]`: gyro X (int16 LE, raw units from IMU)
+- `payload[4..5]`: gyro Y (int16 LE)
+- `payload[6..7]`: gyro Z (int16 LE)
+
+The ESP32-S3 uses gyro data for gyro-aim mouse mapping (sensitivity, deadzone, and invert configured per profile).
 
 ## Why this design
 

@@ -164,13 +164,13 @@ static void send_subcmd(setup_instance_t *inst, uint8_t subcmd_id,
     inst->packet_num = (inst->packet_num + 1) & 0x0F;
     // bytes 2-9: rumble = 0 (no rumble)
     buf[10] = subcmd_id;
+    uint8_t copy = 0;
     if (data && data_len > 0) {
-        uint8_t copy = (data_len > 53) ? 53 : data_len;
+        copy = (data_len > 53) ? 53 : data_len;
         memcpy(&buf[11], data, copy);
     }
 
-    uint8_t total_len = 11 + (data ? data_len : 0);
-    if (total_len < 11) total_len = 11;
+    uint8_t total_len = 11 + copy;
 
     // Use HID host send_data with type OUTPUT.
     xSemaphoreTake(s_bt_send_mux, portMAX_DELAY);

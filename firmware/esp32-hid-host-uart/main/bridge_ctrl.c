@@ -217,6 +217,7 @@ static void ctrl_task(void *arg) {
                 uint8_t calc = xor_checksum(length, payload);
                 state = 0;
                 if (calc != b) {
+                    ESP_LOGD(TAG, "Checksum mismatch: expected 0x%02X got 0x%02X (len=%u)", calc, b, (unsigned)length);
                     break;
                 }
 

@@ -89,6 +89,6 @@ Set in `main/config.h`.
 - **SOCD cleaning**: three modes (neutral / last-input / first-input) for simultaneous opposing cardinal direction handling. Configurable at runtime via UART control command or profile JSON.
 - **Rapid trigger (stick hysteresis)**: separate activation/deactivation thresholds prevent flickering at the deadzone boundary. Configurable at runtime.
 - **Analog stick data forwarding**: sends raw normalized stick values (±4096) over UART (marker `0xF7`) for mouse/scroll/sprint-zone on the USB side. Left stick = device_id `0x00`, right stick = device_id `0x80`.
-- **25 key_ids**: all Joy-Con inputs (left stick WASD, face buttons, shoulders, triggers, system buttons, stick clicks, right stick directions) are mapped to unique key_ids and emitted over UART.
+- **35 key_ids**: all Joy-Con inputs (left stick WASD, face buttons, shoulders, triggers, system buttons, stick clicks, right stick directions, motion gestures, SL/SR rail buttons) are mapped to unique key_ids (1–35) and emitted over UART.
 
 Next step is to capture real reports and verify the correct mappings in `main/joycon_mapper.c`.
