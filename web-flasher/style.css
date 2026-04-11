@@ -197,3 +197,62 @@ footer a:hover {
   font-weight: 600;
   text-align: center;
 }
+
+/* ── Boot-mode guide ── */
+.boot-guide {
+  max-width: 720px;
+  width: 100%;
+  background: #1c2128;
+  border: 2px solid var(--warning);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  margin: 0.5rem 1rem 0;
+}
+
+.boot-guide h3 {
+  color: var(--warning);
+  font-size: 1.05rem;
+  margin-bottom: 0.75rem;
+}
+
+.boot-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.boot-step {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.95rem;
+  color: var(--text);
+}
+
+.boot-num {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  min-width: 1.6rem;
+  background: var(--warning);
+  color: var(--bg);
+  font-weight: 700;
+  font-size: 0.85rem;
+  border-radius: 50%;
+}
+
+.boot-note {
+  margin-top: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.card-reminder {
+  color: var(--warning) !important;
+  font-weight: 600;
+  font-size: 0.85rem !important;
+  line-height: 1.4;
+}

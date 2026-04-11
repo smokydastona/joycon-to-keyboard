@@ -15,7 +15,7 @@
     <h1>🎮 <span>Bind Bandit</span> Web Flasher</h1>
     <p>
       Flash your ESP32 boards directly from the browser — no drivers, no
-      ESP-IDF install needed. Just plug in, pick a board, and click Install.
+      ESP-IDF install needed.
     </p>
   </header>
 
@@ -23,6 +23,34 @@
     ⚠️ Your browser does not support Web Serial. Please use
     <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong> on desktop.
   </div>
+
+  <!-- ── Boot-mode callout (always visible) ── -->
+  <section class="boot-guide">
+    <h3>⚡ Before you click Install — put your board in download mode</h3>
+    <div class="boot-steps">
+      <div class="boot-step">
+        <span class="boot-num">1</span>
+        <span>Plug the board into your PC via USB.</span>
+      </div>
+      <div class="boot-step">
+        <span class="boot-num">2</span>
+        <span><strong>Hold the BOOT button</strong> (keep holding).</span>
+      </div>
+      <div class="boot-step">
+        <span class="boot-num">3</span>
+        <span>While still holding BOOT, <strong>tap RESET</strong> once, then <strong>release BOOT</strong>.</span>
+      </div>
+      <div class="boot-step">
+        <span class="boot-num">4</span>
+        <span>Now click the Install button below. Pick the serial port in the browser popup.</span>
+      </div>
+    </div>
+    <p class="boot-note">
+      You must do this <strong>every time</strong> you flash via the web.
+      The board stays in download mode until it is reset or power-cycled.
+      After the flash finishes, press RESET (or unplug/re-plug) to run the new firmware.
+    </p>
+  </section>
 
   <section class="boards">
     <!-- ESP32-S3 USB Keyboard -->
@@ -35,6 +63,7 @@
         The board that plugs into your PC. Enumerates as a USB HID keyboard
         + CDC serial COM port for the helper app.
       </p>
+      <p class="card-reminder">⚠️ Hold BOOT → tap RESET → release BOOT, <em>then</em> click below.</p>
       <esp-web-install-button manifest="manifest-esp32s3.json">
         <button slot="activate">Connect &amp; Install ESP32-S3</button>
       </esp-web-install-button>
@@ -51,6 +80,7 @@
         controller) over Bluetooth Classic and sends UART frames to the
         ESP32-S3.
       </p>
+      <p class="card-reminder">⚠️ Hold BOOT → tap RESET → release BOOT, <em>then</em> click below.</p>
       <esp-web-install-button manifest="manifest-esp32.json">
         <button slot="activate">Connect &amp; Install ESP32</button>
       </esp-web-install-button>
