@@ -800,6 +800,8 @@ static void handle_line(const char *line) {
             cJSON_AddNumberToObject(rsp, "tx_gpio", diag.tx_gpio);
             cJSON_AddNumberToObject(rsp, "rx_pin_level", diag.rx_pin_level);
             cJSON_AddNumberToObject(rsp, "buffered_bytes", (double)diag.buffered_bytes);
+            cJSON_AddNumberToObject(rsp, "total_rx_bytes", (double)diag.total_rx_bytes);
+            cJSON_AddNumberToObject(rsp, "total_frames", (double)diag.total_frames);
             cJSON_AddNumberToObject(rsp, "sample_len", diag.sample_len);
             if (diag.sample_len > 0) {
                 char hex[sizeof(diag.sample) * 3 + 1];

@@ -34,6 +34,8 @@ static const char* TAG = "uart-proto";
 #define UART_EVENT_QUEUE_DEPTH 8
 
 static QueueHandle_t s_uart_queue = NULL;
+static volatile uint32_t s_total_rx_bytes = 0;
+static volatile uint32_t s_total_frames = 0;
 
 static inline uint8_t xor_checksum(uint8_t length, const uint8_t* payload) {
     uint8_t x = length;
@@ -122,6 +124,7 @@ bool uart_proto_poll_frame(uart_frame_t* out) {
     int got;
 
     while ((got = uart_read_bytes(port, &b, 1, 0)) == 1) {
+        s_total_rx_bytes++;
         switch (state) {
             case 0:
                 state = (b == SYNC0) ? 1 : 0;
@@ -177,6 +180,7 @@ bool uart_proto_poll_frame(uart_frame_t* out) {
                 } else {
                     out->type = UART_FRAME_UNKNOWN;
                 }
+                s_total_frames++;
                 return true;
             }
             default:
@@ -224,6 +228,10 @@ void uart_proto_get_diag(uart_diag_t *diag) {
     // Bytes already sitting in the driver RX ring buffer
     uart_port_t port = (uart_port_t)CONFIG_BRIDGE_UART_PORT;
     uart_get_buffered_data_len(port, &diag->buffered_bytes);
+
+    // Cumulative counters since boot
+    diag->total_rx_bytes = s_total_rx_bytes;
+    diag->total_frames   = s_total_frames;
 
     // Try to grab a few raw bytes with a short timeout (100 ms)
     int n = uart_read_bytes(port, diag->sample, sizeof(diag->sample),

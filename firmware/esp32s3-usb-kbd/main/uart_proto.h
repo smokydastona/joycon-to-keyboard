@@ -50,6 +50,8 @@ typedef struct {
     int port;               // UART port number
     int rx_pin_level;       // current logic level on RX pin (0 or 1)
     size_t buffered_bytes;  // bytes waiting in RX FIFO
+    uint32_t total_rx_bytes;// cumulative raw bytes received since boot
+    uint32_t total_frames;  // cumulative complete valid frames decoded since boot
     uint8_t sample[16];     // first few raw bytes read (100 ms timeout)
     int sample_len;         // how many bytes were actually read
 } uart_diag_t;
