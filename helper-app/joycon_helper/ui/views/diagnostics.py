@@ -259,36 +259,31 @@ class DiagnosticsView(QWidget):
         group = QGroupBox("Initial Flash (new boards)")
         lay = QVBoxLayout(group)
 
-        self._init_flash_status = QLabel("Use for first-time flashing of blank boards.")
-        self._init_flash_status.setWordWrap(True)
-        lay.addWidget(self._init_flash_status)
-
-        self._init_progress = QProgressBar()
-        self._init_progress.setRange(0, 100)
-        self._init_progress.setVisible(False)
-        lay.addWidget(self._init_progress)
+        info = QLabel(
+            "First-time flashing is done via the <b>Bind Bandit Web Flasher</b> "
+            "in Chrome or Edge. Click the button below to open it.\n\n"
+            "After initial flash, this app handles all firmware updates automatically."
+        )
+        info.setWordWrap(True)
+        lay.addWidget(info)
 
         btn_row = QHBoxLayout()
-        self._init_auto_btn = QPushButton("Download && Flash Latest")
-        self._init_auto_btn.setProperty("accent", True)
-        self._init_auto_btn.setToolTip("Auto-download the latest firmware and flash it to a blank board")
-        self._init_auto_btn.clicked.connect(self._init_flash_auto)
-        btn_row.addWidget(self._init_auto_btn)
-
-        self._init_file_btn = QPushButton("Flash Files…")
-        self._init_file_btn.setToolTip("Flash firmware from pre-downloaded binary files")
-        self._init_file_btn.clicked.connect(self._init_flash_from_files)
-        btn_row.addWidget(self._init_file_btn)
-
-        self._init_backup_btn = QPushButton("Backup Flash…")
-        self._init_backup_btn.setToolTip("Read and save the current flash contents before making changes")
-        self._init_backup_btn.clicked.connect(self._init_flash_backup)
-        btn_row.addWidget(self._init_backup_btn)
-
+        web_flash_btn = QPushButton("Open Web Flasher")
+        web_flash_btn.setProperty("accent", True)
+        web_flash_btn.setToolTip(
+            "Opens the Bind Bandit Web Flasher in your default browser"
+        )
+        web_flash_btn.clicked.connect(self._open_web_flasher)
+        btn_row.addWidget(web_flash_btn)
         btn_row.addStretch()
         lay.addLayout(btn_row)
 
         parent.addWidget(group)
+
+    @staticmethod
+    def _open_web_flasher() -> None:
+        import webbrowser
+        webbrowser.open("https://smokydastona.github.io/joycon-to-keyboard/")
 
     # -----------------------------------------------------------------
     # Event handlers
@@ -399,84 +394,6 @@ class DiagnosticsView(QWidget):
         self._fw_status.setText(msg)
         if not ok:
             QMessageBox.warning(self, "Flash Failed", msg)
-
-    # -----------------------------------------------------------------
-    # Initial flash operations
-    # -----------------------------------------------------------------
-
-    def _init_flash_auto(self) -> None:
-        reply = QMessageBox.question(
-            self, "Initial Flash",
-            "Download and flash latest firmware to a blank board?\n"
-            "This will ERASE the entire flash first.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
-        if reply != QMessageBox.StandardButton.Yes:
-            return
-        self._set_init_buttons(False)
-        self._init_progress.setVisible(True)
-        self._init_flash_status.setText("Downloading…")
-
-        def _go():
-            try:
-                from ... import initial_flash
-                initial_flash.download_and_flash_initial(
-                    progress_cb=lambda s, p: self._flash_progress.emit(s, p),
-                )
-                self._flash_done.emit(True, "Initial flash complete.")
-            except Exception as e:
-                self._flash_done.emit(False, str(e))
-
-        threading.Thread(target=_go, daemon=True).start()
-
-    def _init_flash_from_files(self) -> None:
-        paths, _ = QFileDialog.getOpenFileNames(
-            self, "Select firmware files", "", "Binary files (*.bin);;All files (*)",
-        )
-        if not paths:
-            return
-        self._set_init_buttons(False)
-        self._init_progress.setVisible(True)
-
-        def _go():
-            try:
-                from ... import initial_flash
-                initial_flash.flash_firmware(
-                    paths,
-                    progress_cb=lambda s, p: self._flash_progress.emit(s, p),
-                )
-                self._flash_done.emit(True, "Flash complete.")
-            except Exception as e:
-                self._flash_done.emit(False, str(e))
-
-        threading.Thread(target=_go, daemon=True).start()
-
-    def _init_flash_backup(self) -> None:
-        path, _ = QFileDialog.getSaveFileName(
-            self, "Backup flash", "flash_backup.bin", "Binary files (*.bin)",
-        )
-        if not path:
-            return
-        self._set_init_buttons(False)
-        self._init_progress.setVisible(True)
-
-        def _go():
-            try:
-                from ... import initial_flash
-                initial_flash.backup_firmware(
-                    path,
-                    progress_cb=lambda s, p: self._flash_progress.emit(s, p),
-                )
-                self._flash_done.emit(True, f"Backup saved to {path}")
-            except Exception as e:
-                self._flash_done.emit(False, str(e))
-
-        threading.Thread(target=_go, daemon=True).start()
-
-    def _set_init_buttons(self, enabled: bool) -> None:
-        self._init_auto_btn.setEnabled(enabled)
-        self._init_file_btn.setEnabled(enabled)
-        self._init_backup_btn.setEnabled(enabled)
 
     # -----------------------------------------------------------------
     # Public interface

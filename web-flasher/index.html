@@ -27,28 +27,36 @@
   <!-- ── Boot-mode callout (always visible) ── -->
   <section class="boot-guide">
     <h3>⚡ Before you click Install — put your board in download mode</h3>
-    <div class="boot-steps">
-      <div class="boot-step">
-        <span class="boot-num">1</span>
-        <span>Plug the board into your PC via USB.</span>
-      </div>
-      <div class="boot-step">
-        <span class="boot-num">2</span>
-        <span><strong>Hold the BOOT button</strong> (keep holding).</span>
-      </div>
-      <div class="boot-step">
-        <span class="boot-num">3</span>
-        <span>While still holding BOOT, <strong>tap RESET</strong> once, then <strong>release BOOT</strong>.</span>
-      </div>
-      <div class="boot-step">
-        <span class="boot-num">4</span>
-        <span>Now click the Install button below. Pick the serial port in the browser popup.</span>
+
+    <div class="boot-callout">
+      <h4>ESP32 (Bluetooth Host) — boards with a BOOT button</h4>
+      <p class="board-example">NodeMCU-32S, ESP-WROOM-32, or any board with both BOOT and RESET buttons</p>
+      <div class="boot-steps">
+        <div class="boot-step"><span class="boot-num">1</span><span>Plug the board into your PC via USB.</span></div>
+        <div class="boot-step"><span class="boot-num">2</span><span><strong>Hold the BOOT button</strong> (keep holding).</span></div>
+        <div class="boot-step"><span class="boot-num">3</span><span>While still holding BOOT, <strong>tap RESET</strong> once, then <strong>release BOOT</strong>.</span></div>
+        <div class="boot-step"><span class="boot-num">4</span><span>Click <strong>Install ESP32</strong> below and pick the serial port (usually "CP210x" or "CH340").</span></div>
       </div>
     </div>
+
+    <div class="boot-callout">
+      <h4>ESP32-S3 (USB Keyboard) — Arduino Nano ESP32 &amp; native-USB boards</h4>
+      <p class="board-example">These boards have NO BOOT button — use the double-tap method instead</p>
+      <div class="boot-steps">
+        <div class="boot-step"><span class="boot-num">1</span><span>Plug the board into your PC via the <strong>USB-C</strong> port.</span></div>
+        <div class="boot-step"><span class="boot-num">2</span><span><strong>Double-tap the RESET button</strong> quickly (within ~300 ms).</span></div>
+        <div class="boot-step"><span class="boot-num">3</span><span>A <em>new</em> COM port will appear — this is the ROM bootloader.</span></div>
+        <div class="boot-step"><span class="boot-num">4</span><span>Click <strong>Install ESP32-S3</strong> below and pick that <em>new</em> port.</span></div>
+      </div>
+      <p class="boot-note">
+        💡 <strong>Tip:</strong> Note your existing COM ports <em>before</em> double-tapping RESET.
+        The new port that appears is the one to select. On Windows it usually shows
+        as "USB JTAG/serial debug unit" or "USB Serial Device".
+      </p>
+    </div>
+
     <p class="boot-note">
-      You must do this <strong>every time</strong> you flash via the web.
-      The board stays in download mode until it is reset or power-cycled.
-      After the flash finishes, press RESET (or unplug/re-plug) to run the new firmware.
+      After the flash finishes, press RESET once (or unplug/re-plug) to run the new firmware.
     </p>
   </section>
 
@@ -63,7 +71,7 @@
         The board that plugs into your PC. Enumerates as a USB HID keyboard
         + CDC serial COM port for the helper app.
       </p>
-      <p class="card-reminder">⚠️ Hold BOOT → tap RESET → release BOOT, <em>then</em> click below.</p>
+      <p class="card-reminder">⚠️ Double-tap RESET to enter download mode, <em>then</em> click below.</p>
       <esp-web-install-button manifest="manifest-esp32s3.json">
         <button slot="activate">Connect &amp; Install ESP32-S3</button>
       </esp-web-install-button>
@@ -90,16 +98,18 @@
   <section class="steps">
     <h3>How it works</h3>
     <ol>
-      <li><strong>Pick a board</strong> above and click its Install button.</li>
-      <li><strong>Select the serial port</strong> in the browser dialog (the ESP32 board you plugged in).</li>
+      <li><strong>Put the board in download mode</strong> using the instructions above (different for each board).</li>
+      <li><strong>Click the Install button</strong> for the board you're flashing.</li>
+      <li><strong>Select the serial port</strong> in the browser dialog (the port that appeared after entering download mode).</li>
       <li>ESP Web Tools will <strong>erase flash</strong> (clean NVS) and write the latest firmware.</li>
+      <li><strong>Repeat for the second board.</strong></li>
       <li>After flashing both boards, <strong>wire them together</strong> per
         <a href="https://github.com/smokydastona/joycon-to-keyboard/blob/main/docs/wiring.md"
            target="_blank" rel="noopener">docs/wiring.md</a>.</li>
       <li>Download <strong>Bind Bandit</strong> (the helper app) from the
         <a href="https://github.com/smokydastona/joycon-to-keyboard/releases/latest"
            target="_blank" rel="noopener">latest release</a>
-        to configure key mappings, profiles, and OTA updates.</li>
+        to configure key mappings, profiles, and future OTA firmware updates.</li>
     </ol>
   </section>
 
@@ -110,17 +120,17 @@
         <li><strong>Browser support:</strong> Web Serial requires Chrome 89+ or Edge 89+ on desktop. Safari, Firefox, and mobile browsers are not supported.</li>
         <li><strong>Erase all flash</strong> is enabled by default (recommended for first-time flashing). This clears NVS settings — you'll reconfigure via the helper app.</li>
         <li><strong>ESP32-S3 first:</strong> Flash the S3 board first since it's the front of the dongle (USB to PC).</li>
-        <li><strong>Download mode:</strong> If the board doesn't appear as a serial port, hold the <code>BOOT</code> button while pressing <code>RESET</code>, then try again.</li>
+        <li><strong>ESP32 download mode (BOOT + RESET):</strong> Hold <code>BOOT</code>, tap <code>RESET</code>, release <code>BOOT</code>. The COM port stays the same (CP210x / CH340).</li>
+        <li><strong>ESP32-S3 download mode (double-tap RESET):</strong> Quickly tap the <code>RESET</code> button twice. A <em>new</em> port appears — select that one. If you pick the wrong port, unplug and try again.</li>
         <li><strong>"Reset into boot mode" keeps appearing?</strong>
           <ul>
-            <li>Unplug the board completely, then hold <code>BOOT</code> → plug in the USB cable → wait 2 seconds → release <code>BOOT</code>. Then click Install and pick the port that just appeared.</li>
-            <li>If using an <strong>Arduino Nano ESP32</strong> or other S3 board with native USB: the COM port <em>changes</em> between normal mode and download mode. Make sure you select the port that appeared <strong>after</strong> entering boot mode.</li>
+            <li><strong>ESP32:</strong> Unplug, then hold <code>BOOT</code> → plug in USB → wait 2 seconds → release <code>BOOT</code>.</li>
+            <li><strong>ESP32-S3 (Nano ESP32):</strong> Make sure you double-tap <code>RESET</code> quickly (&lt;300 ms). If it doesn't work, try again — timing can be finicky.</li>
             <li>Try a different USB cable — charge-only cables won't work.</li>
             <li>Try a different USB port on your PC (prefer rear ports on desktops).</li>
           </ul>
         </li>
-        <li><strong>OTA updates:</strong> After initial flash, future firmware updates can be done from within the Bind Bandit helper app (no web flasher needed).</li>
-        <li><strong>Already have the helper app?</strong> You can also flash from the Diagnostics → Initial Flash section inside the app.</li>
+        <li><strong>OTA updates:</strong> After initial flash, future firmware updates are handled automatically by the Bind Bandit helper app — no need to return here.</li>
       </ul>
     </details>
   </section>

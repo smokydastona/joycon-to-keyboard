@@ -46,7 +46,7 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v5
 
-      - name: Download firmware from latest release
+      - name: Download firmware from CI build artifacts
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -54,13 +54,58 @@ jobs:
           set -euo pipefail
           mkdir -p web-flasher/firmware
 
-          # Download firmware binaries from the latest release.
-          # Release assets are merged binaries (bootloader + partition table + app).
-          gh release download --repo "${{ github.repository }}" \
-            --pattern "esp32*.bin" \
-            --dir web-flasher/firmware \
-            --clobber || echo "⚠️ No release found yet — firmware dir will be empty"
+          # Determine which workflow run to pull firmware from.
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            RUN_ID="${{ github.event.workflow_run.id }}"
+            echo "Using triggering workflow run: $RUN_ID"
+          else
+            # Manual dispatch or push — find the latest successful build.
+            RUN_ID=$(gh run list \
+              --repo "${{ github.repository }}" \
+              --workflow "Build Release Bundle" \
+              --status success \
+              --limit 1 \
+              --json databaseId \
+              --jq '.[0].databaseId')
+            echo "Using latest successful build run: $RUN_ID"
+          fi
 
+          if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
+            echo "⚠️ No successful build run found — firmware dir will be empty"
+            exit 0
+          fi
+
+          # Download individual firmware artifacts from the build run.
+          TMPDIR=$(mktemp -d)
+          gh run download "$RUN_ID" \
+            --repo "${{ github.repository }}" \
+            --name firmware-esp32-hid-host-uart \
+            --dir "$TMPDIR/esp32" || true
+          gh run download "$RUN_ID" \
+            --repo "${{ github.repository }}" \
+            --name firmware-esp32s3-usb-kbd \
+            --dir "$TMPDIR/s3" || true
+
+          # Copy merged binaries with manifest-expected names.
+          [ -f "$TMPDIR/esp32/esp32-hid-host-uart-merged.bin" ] && \
+            cp "$TMPDIR/esp32/esp32-hid-host-uart-merged.bin" \
+               web-flasher/firmware/esp32-hid-host-uart.bin
+          [ -f "$TMPDIR/s3/esp32s3-usb-kbd-merged.bin" ] && \
+            cp "$TMPDIR/s3/esp32s3-usb-kbd-merged.bin" \
+               web-flasher/firmware/esp32s3-usb-kbd.bin
+
+          # Also try release assets as fallback.
+          if [ ! -f web-flasher/firmware/esp32-hid-host-uart.bin ] || \
+             [ ! -f web-flasher/firmware/esp32s3-usb-kbd.bin ]; then
+            echo "Trying release assets as fallback…"
+            gh release download --repo "${{ github.repository }}" \
+              --pattern "esp32*.bin" \
+              --dir web-flasher/firmware \
+              --clobber 2>/dev/null || echo "⚠️ No release assets either"
+          fi
+
+          rm -rf "$TMPDIR"
+          echo "--- Firmware files deployed ---"
           ls -lh web-flasher/firmware/ || true
 
       - name: Configure GitHub Pages

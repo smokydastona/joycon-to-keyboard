@@ -4,23 +4,39 @@ This guide covers all the ways to get firmware onto your ESP32 boards.
 
 ---
 
-## One-Click Browser Flash (recommended for first-time setup)
+## Web Flasher — First-Time Setup (recommended)
 
-The fastest way to flash both boards — no installs, no command line.
+The **Bind Bandit Web Flasher** is the primary way to flash both boards for the first time. No installs, no command line, no drivers needed.
 
-1. Open the **Bind Bandit Web Flasher**: <https://smokydastona.github.io/joycon-to-keyboard/>
+1. Open the Web Flasher: <https://smokydastona.github.io/joycon-to-keyboard/>
 2. Use **Google Chrome** or **Microsoft Edge** (Web Serial required).
-3. Plug in your **ESP32-S3** board via USB and click **Connect & Install ESP32-S3**.
-4. Plug in your **ESP32** board via USB and click **Connect & Install ESP32**.
-5. If a board doesn't show up, hold **BOOT** while pressing **RESET** to enter download mode.
 
-The web flasher erases all flash (clean NVS) by default — recommended for new boards. After flashing, wire the boards together per `docs/wiring.md` and use the Bind Bandit helper app for configuration.
+### ESP32-S3 (USB Keyboard) — Arduino Nano ESP32
+
+3. Plug in the board via **USB-C**.
+4. **Double-tap the RESET button** quickly (< 300 ms) — a new COM port appears.
+5. Click **Connect & Install ESP32-S3** and select the *new* port.
+
+### ESP32 (Bluetooth Host) — NodeMCU-32S / WROOM-32
+
+6. Plug in the board via USB.
+7. **Hold BOOT → tap RESET → release BOOT** to enter download mode.
+8. Click **Connect & Install ESP32** and select the port (usually "CP210x" or "CH340").
+
+The web flasher erases all flash (clean NVS) by default — recommended for new boards. After flashing, wire the boards together per `docs/wiring.md`.
 
 ---
 
-## Helper App Flash (alternative)
+## OTA Updates (after initial flash)
 
-The Bind Bandit helper app (Diagnostics → Initial Flash) can also flash new boards. See the **Installing / Updating the Helper App** section in the app's Help tab.
+After the initial flash, all firmware updates are handled by the **Bind Bandit helper app** — no need to revisit the web flasher or enter download mode.
+
+1. Connect the ESP32-S3 to your PC via USB.
+2. Open Bind Bandit and connect to the COM port.
+3. Go to **Diagnostics → Firmware Update → Check Versions**.
+4. If an update is available, click **Update Firmware**.
+
+The app automatically checks if firmware matches the app version and prompts for updates when needed.
 
 ---
 

@@ -104,14 +104,27 @@ def _sections() -> list[tuple[str, str, bool]]:
         (
             "💾 Firmware Installation",
             (
-                "## One-click browser flash (easiest)\n"
+                "## First-time flash — Web Flasher (required)\n"
                 "Open the Bind Bandit Web Flasher in Chrome or Edge:\n"
-                "  https://smokydastona.github.io/joycon-to-keyboard/\n"
-                "Plug in each board, click Connect & Install. No drivers or "
-                "ESP-IDF needed. Erases flash by default (clean NVS).\n\n"
-                "## Helper app flash\n"
-                "Use the Diagnostics → Initial Flash section to download and flash "
-                "the latest firmware automatically, or flash from local .bin files.\n\n"
+                "  https://smokydastona.github.io/joycon-to-keyboard/\n\n"
+                "### ESP32-S3 (USB Keyboard) — Arduino Nano ESP32\n"
+                "  1. Plug the board in via USB-C.\n"
+                "  2. Double-tap the RESET button quickly (<300 ms).\n"
+                "  3. A new COM port appears — this is the bootloader.\n"
+                "  4. Click 'Connect & Install ESP32-S3' and pick that port.\n\n"
+                "### ESP32 (Bluetooth Host) — NodeMCU-32S / WROOM-32\n"
+                "  1. Plug the board in via USB.\n"
+                "  2. Hold BOOT, tap RESET, release BOOT.\n"
+                "  3. Click 'Connect & Install ESP32' and pick the port.\n\n"
+                "No drivers, no ESP-IDF install, no command line needed.\n"
+                "Erases flash by default (clean NVS).\n\n"
+                "You can also open the Web Flasher from:\n"
+                "  Diagnostics → Initial Flash → 'Open Web Flasher'\n\n"
+                "## Firmware updates (after initial flash)\n"
+                "After first-time setup, this app handles all firmware updates.\n"
+                "Go to Diagnostics → Firmware Update → 'Check Versions'.\n"
+                "If an update is available, click 'Update Firmware'.\n"
+                "The device reboots automatically after flashing.\n\n"
                 "## Manual build (advanced)\n"
                 "  cd firmware/esp32-hid-host-uart\n"
                 "  idf.py set-target esp32\n"
@@ -120,17 +133,14 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "  cd firmware/esp32s3-usb-kbd\n"
                 "  idf.py set-target esp32s3\n"
                 "  idf.py build\n"
-                "  idf.py flash monitor\n\n"
-                "## OTA updates\n"
-                "Once firmware is installed, use Diagnostics → Firmware Update "
-                "to update over USB without rebuilding."
+                "  idf.py flash monitor"
             ),
             False,
         ),
         (
             "✅ First End-to-End Test",
             (
-                "1. Flash both boards with the correct firmware.\n"
+                "1. Flash both boards via the Web Flasher (see Firmware Installation).\n"
                 "2. Connect ESP32-S3 to PC via USB.\n"
                 "3. Open Bind Bandit, select the COM port, click Connect.\n"
                 "4. Pair your Joy-Con: hold the sync button until lights blink.\n"
@@ -351,12 +361,17 @@ def _sections() -> list[tuple[str, str, bool]]:
         (
             "🔄 OTA Firmware Updates",
             (
+                "After the initial flash via the Web Flasher, all firmware updates\n"
+                "are handled by Bind Bandit over USB — no need to revisit the\n"
+                "web flasher or enter download mode.\n\n"
                 "1. Connect ESP32-S3 to PC via USB.\n"
                 "2. Open Bind Bandit and connect to the COM port.\n"
                 "3. Go to Diagnostics → Firmware Update.\n"
                 "4. Click 'Check Versions' to see current and available versions.\n"
                 "5. If an update is available, click 'Update Firmware'.\n"
                 "6. The device will reboot after flashing — wait for reconnection.\n\n"
+                "The app automatically checks if firmware matches the app version\n"
+                "and will prompt you to update if needed.\n\n"
                 "You can also flash a local .bin file with 'Flash from File…'."
             ),
             False,
@@ -379,8 +394,10 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "  Close any other serial monitor (only one app can use the port).\n"
                 "  Try a different baud rate (default: 115200).\n\n"
                 "## Firmware flash fails\n"
-                "  Hold BOOT button on the board while clicking flash.\n"
-                "  Check that the correct target is selected (esp32 vs esp32s3)."
+                "  For first-time flash, use the Web Flasher in Chrome/Edge.\n"
+                "  ESP32: Hold BOOT while tapping RESET to enter download mode.\n"
+                "  ESP32-S3 (Nano ESP32): Double-tap RESET for download mode.\n"
+                "  Check that you select the correct COM port for each board."
             ),
             False,
         ),
