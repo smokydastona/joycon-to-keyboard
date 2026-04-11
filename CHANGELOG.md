@@ -9,7 +9,7 @@ Until then, entries are grouped by date.
 
 ### Fixed
 
-- **ESP32 crash on Joy-Con connect (handle=0xFF)**: `bt_hid_host.c` now pre-registers the device via `esp_bt_hid_host_set_info()` before calling `connect()`, preventing a race condition where the Joy-Con's L2CAP response arrives before the BTA layer allocates a device slot. Added guards in the `ESP_HIDH_OPEN_EVT` handler and `send_subcmd()`/rumble to abort gracefully if an invalid handle (0xFF) is still returned, with auto-reconnect scheduling instead of crashing.
+- **ESP32 crash on Joy-Con connect (wrong API parameter type)**: `esp_bt_hid_host_send_data()` takes a BDA (Bluetooth Device Address), not a handle. Passing the `uint16_t` handle (0 or 255) was interpreted as a memory address pointer, causing `LoadProhibited` at `EXCVADDR=0x00000000` (handle=0) or `0x000000FC` (handle=0xFF). Fixed `joycon_setup.c` to store and pass the BDA for all `send_data` and rumble calls. Removed failing `esp_bt_hid_host_set_info()` pre-register call (malloc error). Kept handle=0xFF guard as defense-in-depth.
 
 - Capture real controller HID reports and implement evidence-based mapping in the ESP32 host mapper (no guessing report layouts).
 

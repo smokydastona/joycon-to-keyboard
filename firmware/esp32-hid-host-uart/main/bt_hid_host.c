@@ -154,16 +154,6 @@ static void try_connect(const esp_bd_addr_t bda, uint8_t device_id, const char* 
     ESP_LOGI(TAG, "Connecting to %s", bda_to_str(bda, bda_str, sizeof(bda_str)));
     bridge_send_bt_status(3, bda, NULL);
 
-    // Pre-register the device in BTA's known-device list so that the
-    // handle is already allocated when the OPEN callback fires.  Without
-    // this, aggressive controllers (Joy-Con) can complete the L2CAP
-    // connection before BTA_HhOpen (posted via message queue) runs,
-    // resulting in handle = 0xFF (BTA_HH_INVALID_HANDLE) and a crash.
-    esp_hidh_hid_info_t pre_info = {0};
-    pre_info.vendor_id  = 0x057E;   // Nintendo
-    pre_info.product_id = 0x2006;   // Joy-Con (generic; real PID is learned later)
-    (void)esp_bt_hid_host_set_info((uint8_t *)bda, &pre_info);
-
     esp_err_t err = esp_bt_hid_host_connect((uint8_t *)bda);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "esp_bt_hid_host_connect failed: %s", esp_err_to_name(err));
@@ -236,7 +226,7 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
             // Start the Joy-Con setup FSM (sends subcommands to switch
             // the controller to full 0x30 report mode with IMU, reads
             // SPI flash calibration, sets player LEDs).
-            joycon_setup_start(param->open.handle, slot);
+            joycon_setup_start(param->open.handle, slot, param->open.bd_addr);
 
             // Clear SOCD/stick state from any prior session so stale
             // direction history doesn't contaminate the new connection.

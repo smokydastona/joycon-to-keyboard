@@ -47,9 +47,10 @@ typedef struct {
 } joycon_imu_cal_t;
 
 // Called when a BT HID connection opens. Starts the setup FSM for this slot.
-// handle: the HID host connection handle (used for sending output reports).
+// handle: the HID host connection handle (used for handle-guarding only).
 // device_id: 0=left, 1=right.
-void joycon_setup_start(uint16_t handle, uint8_t device_id);
+// bda: 6-byte Bluetooth Device Address (used for esp_bt_hid_host_send_data).
+void joycon_setup_start(uint16_t handle, uint8_t device_id, const uint8_t bda[6]);
 
 // Called when a BT HID connection closes. Tears down the FSM state.
 void joycon_setup_stop(uint8_t device_id);

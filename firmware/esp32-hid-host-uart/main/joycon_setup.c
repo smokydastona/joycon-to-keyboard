@@ -107,6 +107,7 @@ typedef enum {
 typedef struct {
     setup_state_t state;
     uint16_t handle;
+    uint8_t bda[6];       // BT device address (needed by esp_bt_hid_host_send_data)
     uint8_t device_id;
     uint8_t packet_num;
 
@@ -181,9 +182,9 @@ static void send_subcmd(setup_instance_t *inst, uint8_t subcmd_id,
         return;
     }
 
-    // Use HID host send_data with type OUTPUT.
+    // Use HID host send_data — API takes BDA, not handle.
     xSemaphoreTake(s_bt_send_mux, portMAX_DELAY);
-    esp_err_t err = esp_bt_hid_host_send_data(inst->handle,
+    esp_err_t err = esp_bt_hid_host_send_data(inst->bda,
                                                (uint8_t *)buf, total_len);
     xSemaphoreGive(s_bt_send_mux);
     if (err != ESP_OK) {
@@ -706,7 +707,7 @@ static void process_spi_read(setup_instance_t *inst, const uint8_t *subcmd_data,
 
 // --- Public API ---
 
-void joycon_setup_start(uint16_t handle, uint8_t device_id) {
+void joycon_setup_start(uint16_t handle, uint8_t device_id, const uint8_t bda[6]) {
     // One-time mutex creation (idempotent — safe if called for both slots).
     if (!s_bt_send_mux) {
         s_bt_send_mux = xSemaphoreCreateMutex();
@@ -715,6 +716,7 @@ void joycon_setup_start(uint16_t handle, uint8_t device_id) {
     setup_instance_t *inst = get_inst(device_id);
     memset(inst, 0, sizeof(*inst));
     inst->handle = handle;
+    memcpy(inst->bda, bda, 6);
     inst->device_id = device_id;
     inst->battery = -1;
     inst->controller_type = JOYCON_TYPE_PRO;  // Default until we learn otherwise
@@ -957,7 +959,7 @@ void joycon_setup_send_rumble(uint8_t device_id, uint16_t freq_hz, uint8_t amp_1
         ESP_LOGE(TAG, "[%d] Rumble aborted: invalid handle", inst->device_id);
         return;
     }
-    esp_err_t err = esp_bt_hid_host_send_data(inst->handle, buf, sizeof(buf));
+    esp_err_t err = esp_bt_hid_host_send_data(inst->bda, buf, sizeof(buf));
     xSemaphoreGive(s_bt_send_mux);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "[%d] Rumble send failed: %s", inst->device_id, esp_err_to_name(err));
