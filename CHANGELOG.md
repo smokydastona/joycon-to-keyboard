@@ -7,6 +7,10 @@ Until then, entries are grouped by date.
 
 ## Unreleased
 
+### Fixed
+
+- **ESP32 crash on Joy-Con connect (handle=0xFF)**: `bt_hid_host.c` now pre-registers the device via `esp_bt_hid_host_set_info()` before calling `connect()`, preventing a race condition where the Joy-Con's L2CAP response arrives before the BTA layer allocates a device slot. Added guards in the `ESP_HIDH_OPEN_EVT` handler and `send_subcmd()`/rumble to abort gracefully if an invalid handle (0xFF) is still returned, with auto-reconnect scheduling instead of crashing.
+
 - Capture real controller HID reports and implement evidence-based mapping in the ESP32 host mapper (no guessing report layouts).
 
 ### Fixed (System Audit v2)

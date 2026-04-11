@@ -154,6 +154,16 @@ static void try_connect(const esp_bd_addr_t bda, uint8_t device_id, const char* 
     ESP_LOGI(TAG, "Connecting to %s", bda_to_str(bda, bda_str, sizeof(bda_str)));
     bridge_send_bt_status(3, bda, NULL);
 
+    // Pre-register the device in BTA's known-device list so that the
+    // handle is already allocated when the OPEN callback fires.  Without
+    // this, aggressive controllers (Joy-Con) can complete the L2CAP
+    // connection before BTA_HhOpen (posted via message queue) runs,
+    // resulting in handle = 0xFF (BTA_HH_INVALID_HANDLE) and a crash.
+    esp_hidh_hid_info_t pre_info = {0};
+    pre_info.vendor_id  = 0x057E;   // Nintendo
+    pre_info.product_id = 0x2006;   // Joy-Con (generic; real PID is learned later)
+    (void)esp_bt_hid_host_set_info((uint8_t *)bda, &pre_info);
+
     esp_err_t err = esp_bt_hid_host_connect((uint8_t *)bda);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "esp_bt_hid_host_connect failed: %s", esp_err_to_name(err));
@@ -174,6 +184,24 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
                      (int)param->open.is_orig,
                      param->open.handle,
                      bda_to_str(param->open.bd_addr, bda_str, sizeof(bda_str)));
+
+            // Handle 0xFF (BTA_HH_INVALID_HANDLE) means the BTA layer
+            // didn't allocate a device slot in time.  Proceeding would
+            // crash in esp_bt_hid_host_send_data.  Disconnect and retry.
+            if (param->open.handle == 0xFF) {
+                ESP_LOGE(TAG, "Invalid handle (0xFF); disconnecting and retrying");
+                s_connecting = false;
+                esp_bt_hid_host_disconnect(param->open.bd_addr);
+#if CONFIG_JOYCON_HOST_AUTO_RECONNECT
+                s_have_last_bda = true;
+                memcpy(s_last_bda, param->open.bd_addr, sizeof(esp_bd_addr_t));
+                strncpy(s_last_name, s_pending_name, sizeof(s_last_name) - 1);
+                s_last_name[sizeof(s_last_name) - 1] = 0;
+                s_last_device_id = (s_pending_device_id > 1) ? 0 : s_pending_device_id;
+                schedule_reconnect();
+#endif
+                break;
+            }
 
             bridge_send_bt_status(4, param->open.bd_addr, NULL);
 

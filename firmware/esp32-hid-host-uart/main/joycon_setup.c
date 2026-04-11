@@ -172,6 +172,15 @@ static void send_subcmd(setup_instance_t *inst, uint8_t subcmd_id,
 
     uint8_t total_len = 11 + copy;
 
+    // Guard: handle 0xFF (BTA_HH_INVALID_HANDLE) would crash in the BT
+    // stack.  This can happen if the connection completed before BTA
+    // allocated a device slot.
+    if (inst->handle == 0xFF) {
+        ESP_LOGE(TAG, "[%d] send_subcmd 0x%02X aborted: invalid handle",
+                 inst->device_id, subcmd_id);
+        return;
+    }
+
     // Use HID host send_data with type OUTPUT.
     xSemaphoreTake(s_bt_send_mux, portMAX_DELAY);
     esp_err_t err = esp_bt_hid_host_send_data(inst->handle,
@@ -943,6 +952,11 @@ void joycon_setup_send_rumble(uint8_t device_id, uint16_t freq_hz, uint8_t amp_1
     memcpy(&buf[6], rumble, 4);
 
     xSemaphoreTake(s_bt_send_mux, portMAX_DELAY);
+    if (inst->handle == 0xFF) {
+        xSemaphoreGive(s_bt_send_mux);
+        ESP_LOGE(TAG, "[%d] Rumble aborted: invalid handle", inst->device_id);
+        return;
+    }
     esp_err_t err = esp_bt_hid_host_send_data(inst->handle, buf, sizeof(buf));
     xSemaphoreGive(s_bt_send_mux);
     if (err != ESP_OK) {
