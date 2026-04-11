@@ -7,7 +7,7 @@
   <link rel="stylesheet" href="style.css" />
   <script
     type="module"
-    src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"
+    src="https://unpkg.com/esp-web-tools@10.2.1/dist/web/install-button.js?module"
   ></script>
 </head>
 <body>
@@ -111,8 +111,48 @@
         <li><strong>Erase all flash</strong> is enabled by default (recommended for first-time flashing). This clears NVS settings — you'll reconfigure via the helper app.</li>
         <li><strong>ESP32-S3 first:</strong> Flash the S3 board first since it's the front of the dongle (USB to PC).</li>
         <li><strong>Download mode:</strong> If the board doesn't appear as a serial port, hold the <code>BOOT</code> button while pressing <code>RESET</code>, then try again.</li>
+        <li><strong>"Reset into boot mode" keeps appearing?</strong>
+          <ul>
+            <li>Unplug the board completely, then hold <code>BOOT</code> → plug in the USB cable → wait 2 seconds → release <code>BOOT</code>. Then click Install and pick the port that just appeared.</li>
+            <li>If using an <strong>Arduino Nano ESP32</strong> or other S3 board with native USB: the COM port <em>changes</em> between normal mode and download mode. Make sure you select the port that appeared <strong>after</strong> entering boot mode.</li>
+            <li>Try a different USB cable — charge-only cables won't work.</li>
+            <li>Try a different USB port on your PC (prefer rear ports on desktops).</li>
+          </ul>
+        </li>
         <li><strong>OTA updates:</strong> After initial flash, future firmware updates can be done from within the Bind Bandit helper app (no web flasher needed).</li>
         <li><strong>Already have the helper app?</strong> You can also flash from the Diagnostics → Initial Flash section inside the app.</li>
+      </ul>
+    </details>
+  </section>
+
+  <!-- ── Port-selection help (collapsible) ── -->
+  <section class="notes">
+    <details>
+      <summary>🔌 Which serial port should I pick?</summary>
+      <ul>
+        <li><strong>Arduino Nano ESP32 / ESP32-S3 native USB:</strong>
+          In download mode the chip presents a <em>different</em> USB device
+          than when running firmware. On Windows you should see a new COM port
+          appear after entering boot mode — pick <strong>that</strong> one
+          (often labelled "USB Serial Device" or "USB JTAG/serial debug unit").</li>
+        <li><strong>ESP32 boards with a USB-UART bridge (CP2102 / CH340):</strong>
+          The COM port stays the same in boot mode and normal mode. Pick the
+          one that matches your USB-UART chip (e.g. "Silicon Labs CP210x" or
+          "CH340").</li>
+        <li><strong>No port appears at all?</strong>
+          <ul>
+            <li>Make sure you're using a <em>data</em> USB cable (not charge-only).</li>
+            <li>On Windows, install the
+              <a href="https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers"
+                 target="_blank" rel="noopener">CP210x driver</a> or
+              <a href="https://www.wch-ic.com/downloads/CH341SER_ZIP.html"
+                 target="_blank" rel="noopener">CH340 driver</a> if your board uses one.</li>
+            <li>For ESP32-S3 native USB in download mode, Windows 10/11 should
+              auto-install the CDC driver. If not, try a different USB port.</li>
+          </ul>
+        </li>
+        <li><strong>Tip:</strong> Unplug the board, note which ports are listed,
+          plug the board back in (in download mode), and pick the <em>new</em> port.</li>
       </ul>
     </details>
   </section>
@@ -126,7 +166,7 @@
 
   <section class="notes" id="diag-section" style="display:none">
     <h3>🔎 Diagnostics</h3>
-    <pre id="diag-log" style="background:#161b22;padding:1em;border-radius:8px;overflow-x:auto;font-size:0.85em;max-height:300px;overflow-y:auto;color:#c9d1d9"></pre>
+    <pre id="diag-log" style="background:#161b22;padding:1em;border-radius:8px;overflow-x:auto;font-size:0.85em;max-height:400px;overflow-y:auto;color:#c9d1d9"></pre>
   </section>
 
   <script>
@@ -134,40 +174,56 @@
       document.getElementById("unsupported").style.display = "block";
     }
 
-    /* ── Diagnostics: auto-run on page load ── */
+    /* ── Diagnostics logger ── */
     const diagLog = document.getElementById("diag-log");
     const diagSec = document.getElementById("diag-section");
     function dlog(msg) {
       diagSec.style.display = "block";
-      diagLog.textContent += msg + "\n";
+      const ts = new Date().toLocaleTimeString();
+      diagLog.textContent += `[${ts}] ${msg}\n`;
+      diagLog.scrollTop = diagLog.scrollHeight;
     }
 
+    /* ── Pre-flight: manifest + firmware download check ── */
     async function runDiag() {
+      dlog("Pre-flight checks starting…");
+
+      /* Check script loaded */
+      if (customElements.get("esp-web-install-button")) {
+        dlog("✅ ESP Web Tools component registered");
+      } else {
+        dlog("❌ ESP Web Tools component NOT registered — script may have failed to load");
+      }
+
+      dlog(`Secure context: ${window.isSecureContext}  |  Web Serial API: ${"serial" in navigator}`);
+      dlog(`User-Agent: ${navigator.userAgent.slice(0, 120)}`);
+
       const manifests = [
-        "manifest-esp32s3.json",
-        "manifest-esp32.json"
+        { url: "manifest-esp32s3.json", label: "ESP32-S3" },
+        { url: "manifest-esp32.json",   label: "ESP32" }
       ];
-      for (const mUrl of manifests) {
+
+      for (const m of manifests) {
         try {
-          dlog(`Fetching manifest: ${mUrl}`);
-          const mResp = await fetch(mUrl);
-          dlog(`  Status: ${mResp.status} ${mResp.statusText}  Type: ${mResp.headers.get("content-type")}`);
+          dlog(`Fetching manifest: ${m.url}`);
+          const mResp = await fetch(m.url);
+          dlog(`  HTTP ${mResp.status} ${mResp.statusText}  Content-Type: ${mResp.headers.get("content-type")}`);
           if (!mResp.ok) { dlog("  ❌ Manifest fetch failed"); continue; }
           const mJson = await mResp.json();
-          dlog(`  ✅ Manifest parsed — name: ${mJson.name}`);
+          dlog(`  ✅ Manifest OK — name: "${mJson.name}"  chipFamily: ${mJson.builds?.[0]?.chipFamily}`);
+
           for (const build of mJson.builds || []) {
             for (const part of build.parts || []) {
-              const fwUrl = new URL(part.path, new URL(mUrl, location.href)).href;
+              const fwUrl = new URL(part.path, new URL(m.url, location.href)).href;
               dlog(`  Fetching firmware: ${fwUrl}`);
               try {
                 const fwResp = await fetch(fwUrl);
-                dlog(`    Status: ${fwResp.status} ${fwResp.statusText}  Type: ${fwResp.headers.get("content-type")}  Size: ${fwResp.headers.get("content-length")} bytes`);
-                if (fwResp.ok) {
-                  const blob = await fwResp.blob();
-                  dlog(`    ✅ Firmware downloaded — ${blob.size} bytes`);
-                } else {
-                  dlog(`    ❌ Firmware fetch failed`);
-                }
+                if (!fwResp.ok) { dlog(`    ❌ HTTP ${fwResp.status}`); continue; }
+                const buf = await fwResp.arrayBuffer();
+                const bytes = new Uint8Array(buf);
+                const magic = bytes[0];
+                const sizeKB = (bytes.length / 1024).toFixed(1);
+                dlog(`    ✅ ${sizeKB} KB downloaded  |  offset: 0x${part.offset.toString(16)}  |  first byte: 0x${magic.toString(16).toUpperCase().padStart(2,'0')} ${magic === 0xE9 ? "(valid bootloader ✓)" : magic === 0xFF ? "(padding — bootloader further in ✓)" : "(unexpected!)"}`);
               } catch (fwErr) {
                 dlog(`    ❌ Firmware fetch error: ${fwErr.message}`);
               }
@@ -177,18 +233,39 @@
           dlog(`  ❌ Manifest error: ${mErr.message}`);
         }
       }
-      dlog("Done.");
+      dlog("Pre-flight done.\n");
     }
     runDiag();
 
-    /* ── Listen for ESP Web Tools errors ── */
+    /* ── Intercept install button clicks + capture dialog events ── */
     document.querySelectorAll("esp-web-install-button").forEach(btn => {
-      btn.addEventListener("state-changed", e => {
-        dlog(`[ESP] state-changed: ${JSON.stringify(e.detail)}`);
+      const label = btn.closest(".card")?.querySelector("h2")?.textContent || "unknown";
+
+      /* Watch for the install dialog being created in the DOM */
+      const observer = new MutationObserver(mutations => {
+        for (const mut of mutations) {
+          for (const node of mut.addedNodes) {
+            if (node.tagName && node.tagName.toLowerCase() === "ew-install-dialog") {
+              dlog(`[${label}] Install dialog opened`);
+              node.addEventListener("state-changed", e => {
+                dlog(`[${label}] state: ${e.detail?.state || JSON.stringify(e.detail)}`);
+              });
+              node.addEventListener("closed", () => {
+                dlog(`[${label}] Dialog closed`);
+              });
+              node.addEventListener("error", e => {
+                dlog(`[${label}] ❌ ERROR: ${e.detail?.message || e.detail || e}`);
+              });
+            }
+          }
+        }
       });
-      btn.addEventListener("error", e => {
-        dlog(`[ESP] error event: ${e.detail?.message || e.detail || e}`);
-      });
+      observer.observe(document.body, { childList: true });
+
+      /* Log button clicks */
+      btn.addEventListener("click", () => {
+        dlog(`[${label}] Install button clicked — waiting for port picker…`);
+      }, true);
     });
   </script>
 </body>
