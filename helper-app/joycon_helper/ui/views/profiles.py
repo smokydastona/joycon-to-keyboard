@@ -30,7 +30,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from ...app_switcher import _get_foreground_exe, save_rules
+from ...app_switcher import _get_foreground_exe, list_running_processes, save_rules
 from ...default_profiles import BUILT_IN_PROFILES, get_default_profile
 from ..theme import ThemeEngine
 
@@ -260,6 +260,11 @@ class ProfilesView(QWidget):
         add_btn.setToolTip("Manually type an executable name to add a rule")
         add_btn.clicked.connect(self._app_switch_add)
         switch_btn_row.addWidget(add_btn)
+
+        proc_btn = QPushButton("🖥 Processes...")
+        proc_btn.setToolTip("Pick from a live list of all currently running processes")
+        proc_btn.clicked.connect(self._app_switch_pick_process)
+        switch_btn_row.addWidget(proc_btn)
         switch_lay.addLayout(switch_btn_row)
 
         # Default slot
@@ -657,6 +662,73 @@ class ProfilesView(QWidget):
         for r in rules:
             if r.get("exe", "").lower() == exe:
                 QMessageBox.information(self, "Add Rule", f"'{exe}' is already mapped.")
+                return
+        rules.append({"exe": exe, "slot": slot})
+        self._main._app_switcher.set_rules(rules)
+        save_rules(rules)
+        self._refresh_switch_table()
+
+    def _app_switch_pick_process(self) -> None:
+        """Show a searchable dialog of all currently running processes to add a rule."""
+        from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QListWidget, QListWidgetItem
+
+        procs = list_running_processes()
+        if not procs:
+            QMessageBox.information(
+                self, "Running Processes",
+                "Could not enumerate running processes (Windows-only feature)."
+            )
+            return
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Pick a Running Process")
+        dlg.setMinimumWidth(420)
+        dlg.setMinimumHeight(420)
+        lay = QVBoxLayout(dlg)
+
+        search = QLineEdit()
+        search.setPlaceholderText("Filter by name…")
+        search.setClearButtonEnabled(True)
+        lay.addWidget(search)
+
+        lst = QListWidget()
+        for basename, full_path in procs:
+            item = QListWidgetItem(f"{basename}  —  {full_path}")
+            item.setData(Qt.ItemDataRole.UserRole, basename)
+            lst.addItem(item)
+        lay.addWidget(lst, 1)
+
+        def _filter(text: str) -> None:
+            q = text.strip().lower()
+            for i in range(lst.count()):
+                item = lst.item(i)
+                if item is not None:
+                    item.setHidden(bool(q) and q not in item.text().lower())
+
+        search.textChanged.connect(_filter)
+
+        btns = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        lay.addWidget(btns)
+
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        sel = lst.currentItem()
+        if sel is None:
+            return
+        exe = sel.data(Qt.ItemDataRole.UserRole)  # lowercased basename
+        if not exe:
+            return
+
+        slot = self._main._slot
+        rules = self._main._app_switcher.rules
+        for r in rules:
+            if r.get("exe", "").lower() == exe:
+                QMessageBox.information(self, "Processes", f"'{exe}' is already mapped.")
                 return
         rules.append({"exe": exe, "slot": slot})
         self._main._app_switcher.set_rules(rules)

@@ -97,6 +97,61 @@ def _rules_path() -> Path:
     return Path.cwd() / "app_profiles.json"
 
 
+def list_running_processes() -> list[tuple[str, str]]:
+    """Return a sorted, deduplicated list of (basename, full_path) for all running processes.
+
+    Returns an empty list on non-Windows platforms or if enumeration fails.
+    Each basename is lowercased; full_path preserves original casing.
+    """
+    if sys.platform != "win32" or _kernel32 is None or _psapi is None:
+        return []
+
+    try:
+        # EnumProcesses — fill an array of PIDs; double size on overflow
+        arr_size = 1024
+        while True:
+            pids = (ctypes.wintypes.DWORD * arr_size)()
+            bytes_returned = ctypes.wintypes.DWORD()
+            if not _psapi.EnumProcesses(
+                ctypes.byref(pids),
+                ctypes.sizeof(pids),
+                ctypes.byref(bytes_returned),
+            ):
+                return []
+            count = bytes_returned.value // ctypes.sizeof(ctypes.wintypes.DWORD)
+            if count < arr_size:
+                break
+            arr_size *= 2  # buffer was too small, retry
+
+        seen: set[str] = set()
+        results: list[tuple[str, str]] = []
+        for i in range(count):
+            pid = pids[i]
+            if pid == 0:
+                continue
+            handle = _kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+            if not handle:
+                continue
+            try:
+                buf = (ctypes.c_wchar * 260)()
+                size = ctypes.wintypes.DWORD(260)
+                if _kernel32.QueryFullProcessImageNameW(handle, 0, buf, ctypes.byref(size)):
+                    full_path = buf.value
+                    basename = os.path.basename(full_path).lower()
+                    if basename and basename not in seen:
+                        seen.add(basename)
+                        results.append((basename, full_path))
+            finally:
+                _kernel32.CloseHandle(handle)
+
+        results.sort(key=lambda t: t[0])
+        return results
+
+    except OSError:
+        log.debug("list_running_processes failed", exc_info=True)
+        return []
+
+
 def load_rules() -> list[dict[str, Any]]:
     """Load app-switching rules from disk."""
     p = _rules_path()
