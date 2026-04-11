@@ -289,23 +289,23 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
                 // Evidence-first workflow: only log when report bytes change.
                 // This avoids flooding and makes it easier to identify toggling bits.
                 if (CONFIG_JOYCON_HOST_LOG_REPORTS) {
-                    // Compare bytes 2..11 (connection_info, buttons, sticks).
-                    // Skip byte 0 (report_id, constant) and byte 1 (timer,
-                    // increments every frame).  Bytes 12+ are IMU data that
-                    // changes every frame.  Without this gating the console
-                    // UART floods at 60 Hz, blocking the BT callback task.
-                    static uint8_t last[10];  // bytes 2..11
+                    // Gate the full hex dump on the 3 button bytes only
+                    // (bytes 3-5 of the 0x30 report).  Stick movement
+                    // changes bytes 6-8 every frame at 60 Hz; logging the
+                    // 5-line hex dump for each stick change floods the
+                    // 115200 baud console and triggers the task watchdog.
+                    // The mapper already provides a compact one-line log
+                    // for stick and button changes.
+                    static uint8_t last_btn[3];
                     static bool have_last = false;
 
                     bool changed = true;
-                    if (param->data_ind.len > 2) {
-                        const uint8_t *cmp_start = param->data_ind.data + 2;
-                        uint16_t avail = param->data_ind.len - 2;
-                        uint16_t cmp_len = (avail > sizeof(last)) ? sizeof(last) : avail;
+                    if (param->data_ind.len > 5) {
+                        const uint8_t *btn = param->data_ind.data + 3;
                         changed = !have_last ||
-                                  memcmp(last, cmp_start, cmp_len) != 0;
+                                  memcmp(last_btn, btn, 3) != 0;
                         if (changed) {
-                            memcpy(last, cmp_start, cmp_len);
+                            memcpy(last_btn, btn, 3);
                             have_last = true;
                         }
                     }
