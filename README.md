@@ -2,6 +2,8 @@
 
 # Joy-Con → Hardware Keyboard (anti-cheat safe)
 
+![Bind Bandit Dashboard](docs/ui/misc/previews/dashboard.png)
+
 This workspace contains firmware for a **two-chip adapter**:
 
 - **ESP32 (Classic BT capable)** connects wirelessly to a Joy-Con and outputs a small, fixed **UART protocol**.
