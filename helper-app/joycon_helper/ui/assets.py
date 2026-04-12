@@ -70,8 +70,7 @@ def ui_bundle_search_roots() -> list[Path]:
 
 
 def device_image_search_roots(theme: str = "default") -> list[Path]:
-    # The heist theme shares the dark device images (same navy/dark tone).
-    _asset_theme = "dark" if theme in ("dark", "heist") else "default"
+    _asset_theme = "dark" if theme == "dark" else "default"
     bundle_name = ".ui-bundle-dark" if _asset_theme == "dark" else ".ui-bundle"
     roots: list[Path] = []
     try:

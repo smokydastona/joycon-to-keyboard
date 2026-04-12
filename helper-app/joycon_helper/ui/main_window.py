@@ -745,13 +745,11 @@ class MainWindow(QMainWindow):
     # -----------------------------------------------------------------
 
     def _set_theme_mode(self, mode: str) -> None:
-        """Switch to a named theme ("light", "dark", or "heist") and refresh the UI."""
+        """Switch to a named theme ("light" or "dark") and refresh the UI."""
         self.theme.set_mode(mode)
-        # Heist uses the same dark-style device images as the dark theme.
-        asset_variant = "dark" if self.theme.is_dark or mode == "heist" else "default"
+        asset_variant = "dark" if self.theme.is_dark else "default"
         self.assets.set_theme(asset_variant)
-        icons = {"dark": "🌙", "heist": "🔦", "light": "☀"}
-        self._theme_btn.setText(icons.get(mode, "🌙"))
+        self._theme_btn.setText("🌙" if self.theme.is_dark else "☀")
         self._apply_theme()
 
     def _toggle_theme(self) -> None:

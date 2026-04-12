@@ -127,75 +127,7 @@ DARK_THEME: dict[str, Any] = {
     "name": "bind-bandit-dark",
     "is_dark": True,
     "colors": {
-        "bg":           "#0e1118",
-        "surface":      "#161a24",
-        "surface2":     "#1e2430",
-        "panel":        "#181e2a",
-        "text":         "#c8d4e4",
-        "text_secondary": "#7890aa",
-        "muted":        "#5a7090",
-        "border":       "#2a3648",
-        "border_light": "#222e3e",
-        "accent":       "#5a8ac0",
-        "accent_hover": "#6a9ad0",
-        "accent2":      "#4a9070",
-        "danger":       "#c05050",
-        "danger_hover": "#d06060",
-        "warning":      "#c09840",
-        "success":      "#4aa060",
-        "active":       "#4a9070",
-        "conflict":     "#c05050",
-        "modified":     "#c09840",
-        "selected":     "#5a8ac0",
-        "selected_bg":  "#1e2e44",
-        "pulse_bright": "#60d0a0",
-        "sidebar_bg":   "#0a0e14",
-        "sidebar_text": "#7890aa",
-        "sidebar_active": "#5a8ac0",
-        "sidebar_hover":  "#141a24",
-        "card_shadow":  "rgba(0, 0, 0, 0.25)",
-        "overlay_bg":   "rgba(0, 0, 0, 0.65)",
-        "scrollbar_bg": "#161a24",
-        "scrollbar_handle": "#2a3648",
-        "tooltip_bg":   "#1e2430",
-        "tooltip_text": "#c8d4e4",
-        "input_bg":     "#121620",
-        "input_border": "#2a3648",
-        "button_bg":    "#1e2430",
-        "button_hover": "#283040",
-        "button_pressed": "#303848",
-        "tab_active_bg":   "#161a24",
-        "tab_inactive_bg": "#0e1118",
-    },
-    "typography": {
-        "font_family": "Segoe UI",
-        "font_family_decorative": "Segoe Print",
-        "font_size": 10,
-        "font_size_sm": 9,
-        "font_size_lg": 12,
-        "font_size_xl": 16,
-        "font_size_title": 20,
-        "mono_family": "Cascadia Code, Consolas",
-        "mono_size": 10,
-    },
-    "spacing": {"xs": 4, "sm": 8, "md": 12, "lg": 16, "xl": 24, "xxl": 32},
-    "radii": {"sm": 6, "md": 10, "lg": 14, "xl": 20},
-    "shadows": {
-        "card": "0px 2px 8px rgba(0,0,0,0.20)",
-        "popup": "0px 8px 24px rgba(0,0,0,0.35)",
-        "sidebar": "2px 0px 8px rgba(0,0,0,0.25)",
-    },
-}
-
-# Heist-plan theme — nautical blueprint-board aesthetic from the style guide.
-# Colors derived from the Bind Bandit Heist-Plan UI Style Guide:
-#   Blueprint Navy #0A1A2F, Graphite Black #0B0B0C, Chalk White #F2F2F2,
-#   Red String Crimson #C62828, Tape Beige #C9B89A, Sepia Ink #6A4A2C,
-#   Blueprint Cyan Lines #4AA8FF, Pencil-Crayon Navy #1C2E4A
-HEIST_THEME: dict[str, Any] = {
-    "name": "heist-plan",
-    "is_dark": True,
-    "colors": {
+        # Blueprint Navy heist palette
         "bg":              "#0A1A2F",
         "surface":         "#0d2040",
         "surface2":        "#1C2E4A",
@@ -237,22 +169,22 @@ HEIST_THEME: dict[str, Any] = {
         "tab_inactive_bg": "#0A1A2F",
     },
     "typography": {
-        "font_family":           "IBM Plex Mono, Cascadia Code, Consolas",
-        "font_family_decorative": "Special Elite, Segoe Print",
-        "font_size":             10,
-        "font_size_sm":          9,
-        "font_size_lg":          12,
-        "font_size_xl":          16,
-        "font_size_title":       20,
-        "mono_family":           "IBM Plex Mono, Cascadia Code, Consolas",
-        "mono_size":             10,
+        "font_family": "Segoe UI",
+        "font_family_decorative": "Segoe Print",
+        "font_size": 10,
+        "font_size_sm": 9,
+        "font_size_lg": 12,
+        "font_size_xl": 16,
+        "font_size_title": 20,
+        "mono_family": "Cascadia Code, Consolas",
+        "mono_size": 10,
     },
     "spacing": {"xs": 4, "sm": 8, "md": 12, "lg": 16, "xl": 24, "xxl": 32},
-    "radii": {"sm": 4, "md": 8, "lg": 12, "xl": 16},
+    "radii": {"sm": 6, "md": 10, "lg": 14, "xl": 20},
     "shadows": {
-        "card":    "0px 4px 16px rgba(0,0,0,0.50)",
-        "popup":   "0px 10px 32px rgba(0,0,0,0.60)",
-        "sidebar": "2px 0px 12px rgba(0,0,0,0.50)",
+        "card": "0px 2px 8px rgba(0,0,0,0.20)",
+        "popup": "0px 8px 24px rgba(0,0,0,0.35)",
+        "sidebar": "2px 0px 8px rgba(0,0,0,0.25)",
     },
 }
 
@@ -260,7 +192,6 @@ HEIST_THEME: dict[str, Any] = {
 _THEMES: dict[str, Any] = {
     "light": LIGHT_THEME,
     "dark":  DARK_THEME,
-    "heist": HEIST_THEME,
 }
 
 
@@ -274,10 +205,9 @@ class ThemeEngine:
     def __init__(self, dark: bool | None = None, mode: str | None = None) -> None:
         """Initialise the theme engine.
 
-        *mode* (``"light"``, ``"dark"``, or ``"heist"``) takes priority over
-        the legacy *dark* boolean when both are supplied.  When neither is
-        given the system dark-mode preference is used (maps to ``"dark"`` or
-        ``"light"``).
+        *mode* (``"light"`` or ``"dark"``) takes priority over the legacy
+        *dark* boolean when both are supplied.  When neither is given the
+        system dark-mode preference is used.
         """
         if mode is not None:
             resolved = _THEMES.get(mode.lower(), DARK_THEME)
@@ -296,7 +226,7 @@ class ThemeEngine:
 
     @property
     def mode_name(self) -> str:
-        """Return the current mode name: ``"light"``, ``"dark"``, or ``"heist"``."""
+        """Return the current mode name: ``"light"`` or ``"dark"``."""
         return self._mode
 
     @property
@@ -316,7 +246,7 @@ class ThemeEngine:
         return self._theme["radii"].get(key, 6)
 
     def set_mode(self, mode: str) -> None:
-        """Switch to a named theme mode (``"light"``, ``"dark"``, ``"heist"``)."""
+        """Switch to a named theme mode (``"light"`` or ``"dark"``)."""
         resolved = _THEMES.get(mode.lower())
         if resolved is None:
             log.warning("Unknown theme mode %r, ignoring", mode)
@@ -325,10 +255,8 @@ class ThemeEngine:
         self._theme = resolved
 
     def toggle(self) -> None:
-        """Cycle: light → dark → heist → light …"""
-        order = ["light", "dark", "heist"]
-        next_idx = (order.index(self._mode) + 1) % len(order)
-        self.set_mode(order[next_idx])
+        """Toggle between light and dark."""
+        self.set_mode("light" if self._mode == "dark" else "dark")
 
     def generate_qss(self) -> str:
         c = self._theme["colors"]

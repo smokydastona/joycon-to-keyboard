@@ -87,13 +87,14 @@ class SettingsView(QScrollArea):
 
         # Theme selector
         self._theme_combo = QComboBox()
-        self._theme_combo.addItems(["Dark", "Light", "Heist"])
-        _mode_to_idx = {"dark": 0, "light": 1, "heist": 2}
+        self._theme_combo.addItems(["Dark", "Light"])
+        _mode_to_idx = {"dark": 0, "light": 1}
         self._theme_combo.setCurrentIndex(
             _mode_to_idx.get(self._main.theme.mode_name, 0))
         self._theme_combo.setToolTip(
             "Application colour scheme\n"
-            "Heist: blueprint-navy tactical board aesthetic")
+            "Dark: blueprint-navy heist board\n"
+            "Light: warm parchment board")
         self._theme_combo.currentTextChanged.connect(self._on_theme_changed)
         form.addRow("Theme:", self._theme_combo)
 
@@ -418,7 +419,7 @@ class SettingsView(QScrollArea):
     def _on_theme_changed(self, value: str | int) -> None:
         # Accept both text (new) and legacy index (belt-and-suspenders).
         if isinstance(value, int):
-            value = ["dark", "light", "heist"][value] if value < 3 else "dark"
+            value = ["dark", "light"][value] if value < 2 else "dark"
         mode = value.lower()
         if mode != self._main.theme.mode_name:
             self._main._set_theme_mode(mode)
