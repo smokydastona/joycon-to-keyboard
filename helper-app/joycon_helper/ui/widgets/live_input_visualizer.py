@@ -90,6 +90,8 @@ _BASE_KEY_TO_HOTSPOT: dict[int, str] = {
     35: "SR(R)",
 }
 
+_ACTIVITY_CATEGORY_ORDER = ("input", "layer", "macro")
+
 
 def label_for_key_id(key_id: int) -> str:
     base_key_id = key_id % 128
@@ -160,6 +162,30 @@ def activity_decay_amount(age_index: int) -> float:
     if age_index <= 0:
         return 0.0
     return min(0.12 * age_index, 0.60)
+
+
+def activity_category_title(category: str) -> str:
+    return {
+        "input": "Inputs",
+        "layer": "Layers",
+        "macro": "Macros",
+    }.get(category, category.title())
+
+
+def group_recent_activity(entries: list[tuple[str, str]]) -> list[tuple[str, list[str]]]:
+    grouped: dict[str, list[str]] = {category: [] for category in _ACTIVITY_CATEGORY_ORDER}
+    extras: dict[str, list[str]] = {}
+    for category, label in entries:
+        if category in grouped:
+            grouped[category].append(label)
+        else:
+            extras.setdefault(category, []).append(label)
+
+    sections: list[tuple[str, list[str]]] = [
+        (category, labels) for category, labels in grouped.items() if labels
+    ]
+    sections.extend((category, labels) for category, labels in extras.items() if labels)
+    return sections
 
 
 class LiveInputVisualizerWidget(QWidget):
@@ -377,27 +403,47 @@ class LiveInputVisualizerWidget(QWidget):
     def _build_recent_activity_markup(self) -> str:
         if not self._recent_activity:
             return "Recent activity: —"
-        items = [
-            self._badge_markup(
-                entry.label,
-                accent=entry.category == "input",
-                decay=activity_decay_amount(age_index),
-            )
-            for age_index, entry in enumerate(reversed(self._recent_activity))
-        ]
-        return "<b>Recent activity:</b> " + " ".join(items)
+        entries = [(entry.category, entry.label) for entry in reversed(self._recent_activity)]
+        sections = []
+        for category, labels in group_recent_activity(entries):
+            items = [
+                self._badge_markup(
+                    label,
+                    accent=category == "input",
+                    decay=activity_decay_amount(age_index),
+                    category=category,
+                )
+                for age_index, label in enumerate(labels)
+            ]
+            sections.append(f"<b>{activity_category_title(category)}:</b> " + " ".join(items))
+        return "<br/>".join(sections)
 
     def _push_recent_activity(self, category: str, label: str) -> None:
         if self._recent_activity and self._recent_activity[-1] == _RecentActivityEntry(category, label):
             return
         self._recent_activity.append(_RecentActivityEntry(category, label))
 
-    def _badge_markup(self, label: str, *, accent: bool, decay: float = 0.0) -> str:
+    def _badge_markup(
+        self,
+        label: str,
+        *,
+        accent: bool,
+        decay: float = 0.0,
+        category: str | None = None,
+    ) -> str:
         surface = self._main.theme.color("surface")
         panel = self._main.theme.color("panel")
         bg = self._main.theme.color("selected_bg" if accent else "button_bg")
         fg = self._main.theme.color("accent" if accent else "text")
         border = self._main.theme.color("accent" if accent else "border")
+        if category == "layer":
+            bg = blend_hex(self._main.theme.color("button_bg"), self._main.theme.color("accent2"), 0.16)
+            fg = self._main.theme.color("accent2")
+            border = self._main.theme.color("accent2")
+        elif category == "macro":
+            bg = blend_hex(self._main.theme.color("button_bg"), self._main.theme.color("warning"), 0.18)
+            fg = self._main.theme.color("warning")
+            border = self._main.theme.color("warning")
         if decay > 0.0:
             bg = blend_hex(bg, panel, decay)
             fg = blend_hex(fg, self._main.theme.color("text_secondary"), decay)

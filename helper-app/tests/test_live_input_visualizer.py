@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from joycon_helper.ui.widgets.live_input_visualizer import (
     activity_decay_amount,
+    activity_category_title,
     describe_layer_activity,
     describe_macro_activity,
     describe_mapped_key_activity,
     device_index_for_key_id,
     describe_rssi,
     display_label_for_key_id,
+    group_recent_activity,
     hotspot_for_key_id,
     label_for_key_id,
 )
@@ -52,6 +54,23 @@ def test_activity_decay_amount_is_bounded_and_ordered() -> None:
     assert activity_decay_amount(1) > activity_decay_amount(0)
     assert activity_decay_amount(3) > activity_decay_amount(1)
     assert activity_decay_amount(50) == 0.60
+
+
+def test_recent_activity_grouping_preserves_lane_order() -> None:
+    grouped = group_recent_activity([
+        ("macro", "Macro loot-run started"),
+        ("input", "Jump pressed"),
+        ("layer", "Layer Precision enabled"),
+        ("input", "Jump released"),
+    ])
+    assert grouped == [
+        ("input", ["Jump pressed", "Jump released"]),
+        ("layer", ["Layer Precision enabled"]),
+        ("macro", ["Macro loot-run started"]),
+    ]
+    assert activity_category_title("input") == "Inputs"
+    assert activity_category_title("layer") == "Layers"
+    assert activity_category_title("macro") == "Macros"
 
 
 def test_describe_rssi_quality_bands() -> None:
