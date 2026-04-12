@@ -33,6 +33,13 @@ Non-negotiables:
 - VID/PID values may be placeholders in dev; do not claim production compliance.
 - Keep host-side (ESP32) Joy-Con parsing conservative: do not “guess” report layouts; capture real bytes and implement based on evidence.
 
+## Implementation Standards (NON-NEGOTIABLE)
+
+- **Build every feature completely.** No placeholders, TODOs, stub functions, or "coming soon" comments in delivered code.
+- **Do not skip or simplify requirements.** Implement exactly what is asked, fully and correctly.
+- **Output only finished, working code.** Every file touched must be in a shippable state when you stop.
+- **Maintain anti-cheat-safe status at all times.** Every feature, helper, or automation must operate through real USB HID hardware output — never software injection, virtual drivers, or simulated input at the OS level.
+- **Do not stop until the whole system is fully implemented and functional.** If a slice depends on other slices, implement all of them. Do not hand off half-done work.
 ## Workflow After Every Code Change (STRICT)
 
 After **any** code/resource/doc change, follow this exact workflow:
@@ -60,8 +67,14 @@ After **any** code/resource/doc change, follow this exact workflow:
   - Only skip commit/push if the user explicitly asks you not to.
    - Do not commit generated outputs (`build/`, `.gradle/`, `managed_components/`, `.pio/`, etc.).
 
-6) Only stop when shippable
-   - Working tree clean and repo state consistent (docs match code).
+6) Monitor CI after every push — **do not move on until CI is green**
+   - After `git push`, run `gh run list --workflow "Build Release Bundle" --limit 1 --json status,conclusion,displayTitle` to check the latest run.
+   - If the run is queued or in progress, poll with `gh run watch <run-id> --exit-status` until it completes.
+   - If CI **fails**: read the failure logs with `gh run view <run-id> --log-failed`, fix every error, commit, push, and re-watch CI. Repeat until the run concludes with `success`.
+   - Never skip this check. A pushed commit is not "done" until CI passes.
+
+7) Only stop when shippable
+   - Working tree clean, CI green, and repo state consistent (docs match code).
 
 ### “Scan likely impact radius” (do this before committing)
 
