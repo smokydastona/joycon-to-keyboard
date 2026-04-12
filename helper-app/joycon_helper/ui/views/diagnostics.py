@@ -184,7 +184,7 @@ class DiagnosticsView(QWidget):
         # Controls
         ctrl_row = QHBoxLayout()
         rumble_btn = QPushButton("Rumble Test")
-        rumble_btn.clicked.connect(lambda: self._main.send_cmd({"cmd": "rumble"}))
+        rumble_btn.clicked.connect(self._do_rumble_test)
         ctrl_row.addWidget(rumble_btn)
 
         home_led_btn = QPushButton("Home LED Toggle")
@@ -398,6 +398,11 @@ class DiagnosticsView(QWidget):
     # -----------------------------------------------------------------
     # Public interface
     # -----------------------------------------------------------------
+
+    def _do_rumble_test(self) -> None:
+        """Send a 300 ms rumble pulse, then stop."""
+        self._main.send_cmd({"cmd": "rumble", "freq": 160, "amp": 50})
+        QTimer.singleShot(300, lambda: self._main.send_cmd({"cmd": "rumble", "freq": 160, "amp": 0}))
 
     def device_event(self, obj: dict) -> None:
         evt = obj.get("event")
