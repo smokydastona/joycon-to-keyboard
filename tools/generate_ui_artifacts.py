@@ -71,6 +71,24 @@ UI_BUNDLE_INPUTS = [
     UI_DIR / "misc" / "pinouts.png",
     UI_DIR / "default" / "misc" / "keyboard.png",
     UI_DIR / "dark" / "misc" / "keyboard-dark.png",
+    # Heist-theme misc assets
+    UI_DIR / "misc" / "sticky-note.png",
+    UI_DIR / "misc" / "polaroid-frame.png",
+    UI_DIR / "misc" / "stamps" / "stamp-mission-control.png",
+    UI_DIR / "misc" / "stamps" / "stamp-blueprint-layout.png",
+    UI_DIR / "misc" / "stamps" / "stamp-operation-scripts.png",
+    UI_DIR / "misc" / "stamps" / "stamp-crew-loadouts.png",
+    UI_DIR / "misc" / "stamps" / "stamp-target-assets.png",
+    UI_DIR / "misc" / "stamps" / "stamp-forensics.png",
+    UI_DIR / "misc" / "stamps" / "stamp-safehouse-config.png",
+    UI_DIR / "misc" / "stamps" / "stamp-approved.png",
+    UI_DIR / "misc" / "stamps" / "stamp-active.png",
+    UI_DIR / "misc" / "components" / "button-primary.png",
+    UI_DIR / "misc" / "components" / "button-secondary.png",
+    UI_DIR / "misc" / "components" / "panel-blueprint.png",
+    UI_DIR / "misc" / "components" / "log-entry.png",
+    UI_DIR / "misc" / "components" / "tooltip.png",
+    UI_DIR / "misc" / "previews" / "dashboard-heist-mockup.png",
 ]
 
 

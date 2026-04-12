@@ -171,6 +171,24 @@ LIGHT_OVERLAYS = {
     "keyboard.png": Path("docs/ui/default/misc/keyboard.png"),
     "background.png": Path("docs/ui/default/backgrounds/background.png"),
     "pinouts.png": Path("docs/ui/misc/pinouts.png"),
+    # Heist-theme misc assets
+    "misc/sticky-note.png": Path("docs/ui/misc/sticky-note.png"),
+    "misc/polaroid-frame.png": Path("docs/ui/misc/polaroid-frame.png"),
+    "misc/stamps/stamp-mission-control.png": Path("docs/ui/misc/stamps/stamp-mission-control.png"),
+    "misc/stamps/stamp-blueprint-layout.png": Path("docs/ui/misc/stamps/stamp-blueprint-layout.png"),
+    "misc/stamps/stamp-operation-scripts.png": Path("docs/ui/misc/stamps/stamp-operation-scripts.png"),
+    "misc/stamps/stamp-crew-loadouts.png": Path("docs/ui/misc/stamps/stamp-crew-loadouts.png"),
+    "misc/stamps/stamp-target-assets.png": Path("docs/ui/misc/stamps/stamp-target-assets.png"),
+    "misc/stamps/stamp-forensics.png": Path("docs/ui/misc/stamps/stamp-forensics.png"),
+    "misc/stamps/stamp-safehouse-config.png": Path("docs/ui/misc/stamps/stamp-safehouse-config.png"),
+    "misc/stamps/stamp-approved.png": Path("docs/ui/misc/stamps/stamp-approved.png"),
+    "misc/stamps/stamp-active.png": Path("docs/ui/misc/stamps/stamp-active.png"),
+    "misc/components/button-primary.png": Path("docs/ui/misc/components/button-primary.png"),
+    "misc/components/button-secondary.png": Path("docs/ui/misc/components/button-secondary.png"),
+    "misc/components/panel-blueprint.png": Path("docs/ui/misc/components/panel-blueprint.png"),
+    "misc/components/log-entry.png": Path("docs/ui/misc/components/log-entry.png"),
+    "misc/components/tooltip.png": Path("docs/ui/misc/components/tooltip.png"),
+    "misc/previews/dashboard-heist-mockup.png": Path("docs/ui/misc/previews/dashboard-heist-mockup.png"),
 }
 
 DARK_OVERLAYS = {
@@ -189,6 +207,24 @@ DARK_OVERLAYS = {
     "keyboard.png": Path("docs/ui/dark/misc/keyboard-dark.png"),
     "background-dark.png": Path("docs/ui/dark/backgrounds/background-dark.png"),
     "pinouts.png": Path("docs/ui/misc/pinouts.png"),
+    # Heist-theme misc assets (shared with light)
+    "misc/sticky-note.png": Path("docs/ui/misc/sticky-note.png"),
+    "misc/polaroid-frame.png": Path("docs/ui/misc/polaroid-frame.png"),
+    "misc/stamps/stamp-mission-control.png": Path("docs/ui/misc/stamps/stamp-mission-control.png"),
+    "misc/stamps/stamp-blueprint-layout.png": Path("docs/ui/misc/stamps/stamp-blueprint-layout.png"),
+    "misc/stamps/stamp-operation-scripts.png": Path("docs/ui/misc/stamps/stamp-operation-scripts.png"),
+    "misc/stamps/stamp-crew-loadouts.png": Path("docs/ui/misc/stamps/stamp-crew-loadouts.png"),
+    "misc/stamps/stamp-target-assets.png": Path("docs/ui/misc/stamps/stamp-target-assets.png"),
+    "misc/stamps/stamp-forensics.png": Path("docs/ui/misc/stamps/stamp-forensics.png"),
+    "misc/stamps/stamp-safehouse-config.png": Path("docs/ui/misc/stamps/stamp-safehouse-config.png"),
+    "misc/stamps/stamp-approved.png": Path("docs/ui/misc/stamps/stamp-approved.png"),
+    "misc/stamps/stamp-active.png": Path("docs/ui/misc/stamps/stamp-active.png"),
+    "misc/components/button-primary.png": Path("docs/ui/misc/components/button-primary.png"),
+    "misc/components/button-secondary.png": Path("docs/ui/misc/components/button-secondary.png"),
+    "misc/components/panel-blueprint.png": Path("docs/ui/misc/components/panel-blueprint.png"),
+    "misc/components/log-entry.png": Path("docs/ui/misc/components/log-entry.png"),
+    "misc/components/tooltip.png": Path("docs/ui/misc/components/tooltip.png"),
+    "misc/previews/dashboard-heist-mockup.png": Path("docs/ui/misc/previews/dashboard-heist-mockup.png"),
 }
 
 
