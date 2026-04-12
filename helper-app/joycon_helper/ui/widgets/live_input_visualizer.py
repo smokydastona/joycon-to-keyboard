@@ -209,6 +209,21 @@ def overflow_summary_label(count: int) -> str:
     return f"+{count} older"
 
 
+def build_active_controls_summary(key_ids: set[int]) -> str:
+    if not key_ids:
+        return "—"
+
+    grouped: dict[int, list[str]] = {}
+    for key_id in sorted(key_ids, key=lambda value: (device_index_for_key_id(value), label_for_key_id(value))):
+        grouped.setdefault(device_index_for_key_id(key_id), []).append(label_for_key_id(key_id))
+
+    if len(grouped) == 1 and 0 in grouped:
+        return ", ".join(grouped[0])
+
+    sections = [f"D{device_index}: {', '.join(labels)}" for device_index, labels in grouped.items()]
+    return " | ".join(sections)
+
+
 class LiveInputVisualizerWidget(QWidget):
     def __init__(self, main: MainWindow, *, compact: bool = False) -> None:
         super().__init__()
@@ -343,9 +358,8 @@ class LiveInputVisualizerWidget(QWidget):
             f"Left RSSI: {describe_rssi(self._rssi_levels.get(0))} | "
             f"Right RSSI: {describe_rssi(self._rssi_levels.get(1))}"
         )
-        active_labels = sorted(label_for_key_id(key_id) for key_id in self._active_key_ids)
         self._active_label.setText(
-            "Active controls: " + (", ".join(active_labels) if active_labels else "—")
+            "Active controls: " + build_active_controls_summary(self._active_key_ids)
         )
         self._badge_label.setText(self._build_badge_markup())
         self._history_label.setText(self._build_recent_activity_markup())

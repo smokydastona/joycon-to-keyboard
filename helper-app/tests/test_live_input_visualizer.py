@@ -3,6 +3,7 @@ from __future__ import annotations
 from joycon_helper.ui.widgets.live_input_visualizer import (
     activity_decay_amount,
     activity_category_title,
+    build_active_controls_summary,
     compact_recent_activity_groups,
     describe_layer_activity,
     describe_macro_activity,
@@ -41,6 +42,12 @@ def test_display_label_for_key_id_is_device_aware() -> None:
     assert device_index_for_key_id(129) == 1
     assert display_label_for_key_id(1) == "Forward"
     assert display_label_for_key_id(129) == "Forward [D1]"
+
+
+def test_active_controls_summary_groups_multi_device_keys() -> None:
+    assert build_active_controls_summary(set()) == "—"
+    assert build_active_controls_summary({1, 5}) == "Forward, Jump"
+    assert build_active_controls_summary({1, 5, 133}) == "D0: Forward, Jump | D1: Jump"
 
 
 def test_activity_descriptions_are_human_readable() -> None:
