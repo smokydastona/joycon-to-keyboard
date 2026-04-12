@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "version": "0.1.278",
-  "file_version": "0.1.278.0",
+  "version": "0.1.279",
+  "file_version": "0.1.279.0",
   "major": 0,
   "minor": 1,
-  "patch": 278,
-  "commit_count": 278,
-  "git_sha": "15dec78e3",
-  "updated_at_utc": "2026-04-12T17:43:49Z"
+  "patch": 279,
+  "commit_count": 279,
+  "git_sha": "c5cefdf06",
+  "updated_at_utc": "2026-04-12T17:58:00Z"
 }
