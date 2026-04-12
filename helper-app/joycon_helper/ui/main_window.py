@@ -28,6 +28,7 @@ from PyQt6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPlainTextEdit,
+    QProgressDialog,
     QPushButton,
     QSizePolicy,
     QSlider,
@@ -44,7 +45,6 @@ from .._version import __version__
 from ..app_switcher import AppSwitcher, load_rules
 from ..default_profiles import get_default_profile
 from .assets import AssetManager
-from .constants import KEYMAP_HOTSPOTS
 from .serial_bridge import SerialBridge
 from .theme import ThemeEngine
 from .widgets.live_input_visualizer import display_label_for_key_id
@@ -146,6 +146,7 @@ class MainWindow(QMainWindow):
         # Auto-update check
         try:
             from ..updater import check_for_update_async
+
             check_for_update_async(self._on_update_result)
         except Exception:
             pass
@@ -825,7 +826,10 @@ class MainWindow(QMainWindow):
         Phase 1 (this call): download everything + swap exe, then relaunch.
         Phase 2 (next launch): ``_check_pending_firmware`` flashes the boards.
         """
-        from ..updater import is_frozen
+        import threading as _threading
+
+        from ..updater import download_update_bundle, is_frozen, relaunch
+
         info = getattr(self, "_update_info", {})
         version = info.get("version", "?")
 
@@ -861,7 +865,6 @@ class MainWindow(QMainWindow):
         self._update_btn.setVisible(False)
 
         # Progress dialog
-        from PyQt6.QtWidgets import QProgressDialog
         progress_dlg = QProgressDialog("Preparing update…", None, 0, 100, self)
         progress_dlg.setWindowTitle("Updating Bind Bandit")
         progress_dlg.setWindowModality(Qt.WindowModality.ApplicationModal)
@@ -869,18 +872,8 @@ class MainWindow(QMainWindow):
         progress_dlg.setValue(0)
         progress_dlg.show()
 
-        import threading as _threading
-
         def _update_worker() -> None:
             try:
-                from ..updater import download_update_bundle, relaunch
-
-                total_size = 0
-                downloaded_so_far = 0
-
-                # Calculate total download size for progress
-                for fa in info.get("fw_assets", {}).values():
-                    total_size += fa.get("size", 0)
                 # Exe size unknown upfront; treat each asset as equal weight
                 asset_count = len(info.get("fw_assets", {})) + 1
                 current_step = [0]
@@ -924,7 +917,7 @@ class MainWindow(QMainWindow):
     def _check_pending_firmware(self) -> None:
         """After an app update, flash any firmware that was downloaded alongside it."""
         try:
-            from ..updater import load_pending_firmware, clear_pending_firmware
+            from ..updater import clear_pending_firmware, load_pending_firmware
         except Exception:
             return
 
@@ -949,11 +942,10 @@ class MainWindow(QMainWindow):
             return
 
         # Use the existing DiagnosticsView firmware flash machinery
-        diag = self._ensure_view(NAV_DIAGNOSTICS)
+        self._ensure_view(NAV_DIAGNOSTICS)
         self._nav_to(NAV_DIAGNOSTICS)
 
         import threading as _threading
-        from PyQt6.QtWidgets import QProgressDialog
 
         progress_dlg = QProgressDialog("Flashing firmware…", None, 0, 100, self)
         progress_dlg.setWindowTitle("Firmware Update")

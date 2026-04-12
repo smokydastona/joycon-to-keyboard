@@ -1,11 +1,10 @@
 from __future__ import annotations
 
+import time
 from collections import deque
 from dataclasses import dataclass
 from statistics import mean
-import time
 from typing import Any
-
 
 _RECENT_WINDOW_SECONDS = 5.0
 _MAX_RECENT_EVENTS = 512

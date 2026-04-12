@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 from joycon_helper.ui.widgets.live_input_visualizer import (
-    activity_decay_amount,
     activity_category_title,
+    activity_decay_amount,
     build_active_controls_summary,
     compact_recent_activity_groups,
     describe_layer_activity,
     describe_macro_activity,
     describe_mapped_key_activity,
-    device_index_for_key_id,
     describe_rssi,
+    device_index_for_key_id,
     display_label_for_key_id,
     group_recent_activity,
     hotspot_for_key_id,

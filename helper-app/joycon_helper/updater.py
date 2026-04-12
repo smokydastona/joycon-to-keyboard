@@ -544,7 +544,6 @@ def download_update_bundle(
         step += 1
         label = f"Downloading {asset_name} ({step}/{total_steps})…"
         url = asset_info.get("url", "")
-        size = asset_info.get("size", 0)
 
         def _fw_progress(done: int, total: int, _lbl: str = label) -> None:
             if progress_cb:

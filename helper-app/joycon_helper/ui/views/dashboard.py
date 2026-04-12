@@ -8,7 +8,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QGridLayout,
@@ -36,7 +36,7 @@ def mapped_input_preview(profile: dict, *, limit: int = 4) -> str:
     if not isinstance(mappings, dict) or not mappings:
         return "No mapped inputs yet"
 
-    names = sorted(str(name) for name in mappings.keys())
+    names = sorted(str(name) for name in mappings)
     visible = names[:limit]
     overflow = len(names) - len(visible)
     if overflow > 0:

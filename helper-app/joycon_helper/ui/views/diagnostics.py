@@ -1,4 +1,5 @@
 """Diagnostics view — input test, controller telemetry, and forensics export."""
+
 from __future__ import annotations
 
 import json
@@ -22,15 +23,18 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from ..theme import ThemeEngine
-from ..widgets.card import Card
-from ..widgets.live_input_visualizer import LiveInputVisualizerWidget, display_label_for_key_id
-from ..widgets.timeline import TimelineWidget
 from ...diagnostics_metrics import (
     CalibrationAssessment,
     DiagnosticsTelemetry,
     assess_controller_calibration,
 )
+from ..theme import ThemeEngine
+from ..widgets.card import Card
+from ..widgets.live_input_visualizer import (
+    LiveInputVisualizerWidget,
+    display_label_for_key_id,
+)
+from ..widgets.timeline import TimelineWidget
 
 if TYPE_CHECKING:
     from ..main_window import MainWindow

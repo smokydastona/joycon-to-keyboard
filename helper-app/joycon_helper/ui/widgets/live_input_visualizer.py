@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import html
-from dataclasses import dataclass, field
 from collections import deque
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QSize, Qt
