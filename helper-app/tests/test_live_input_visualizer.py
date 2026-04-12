@@ -3,6 +3,7 @@ from __future__ import annotations
 from joycon_helper.ui.widgets.live_input_visualizer import (
     activity_decay_amount,
     activity_category_title,
+    compact_recent_activity_groups,
     describe_layer_activity,
     describe_macro_activity,
     describe_mapped_key_activity,
@@ -12,6 +13,7 @@ from joycon_helper.ui.widgets.live_input_visualizer import (
     group_recent_activity,
     hotspot_for_key_id,
     label_for_key_id,
+    overflow_summary_label,
 )
 
 
@@ -71,6 +73,20 @@ def test_recent_activity_grouping_preserves_lane_order() -> None:
     assert activity_category_title("input") == "Inputs"
     assert activity_category_title("layer") == "Layers"
     assert activity_category_title("macro") == "Macros"
+
+
+def test_recent_activity_compaction_adds_lane_overflow_counts() -> None:
+    compacted = compact_recent_activity_groups([
+        ("input", ["A", "B", "C", "D", "E", "F"]),
+        ("layer", ["Layer Alpha enabled", "Layer Beta enabled", "Layer Gamma enabled"]),
+        ("macro", ["Macro loot-run started"]),
+    ])
+    assert compacted == [
+        ("input", ["A", "B", "C", "D"], 2),
+        ("layer", ["Layer Alpha enabled", "Layer Beta enabled"], 1),
+        ("macro", ["Macro loot-run started"], 0),
+    ]
+    assert overflow_summary_label(3) == "+3 older"
 
 
 def test_describe_rssi_quality_bands() -> None:

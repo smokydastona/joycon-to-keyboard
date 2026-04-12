@@ -91,6 +91,11 @@ _BASE_KEY_TO_HOTSPOT: dict[int, str] = {
 }
 
 _ACTIVITY_CATEGORY_ORDER = ("input", "layer", "macro")
+_ACTIVITY_LANE_LIMITS = {
+    "input": 4,
+    "layer": 2,
+    "macro": 2,
+}
 
 
 def label_for_key_id(key_id: int) -> str:
@@ -186,6 +191,22 @@ def group_recent_activity(entries: list[tuple[str, str]]) -> list[tuple[str, lis
     ]
     sections.extend((category, labels) for category, labels in extras.items() if labels)
     return sections
+
+
+def compact_recent_activity_groups(
+    groups: list[tuple[str, list[str]]],
+) -> list[tuple[str, list[str], int]]:
+    compacted: list[tuple[str, list[str], int]] = []
+    for category, labels in groups:
+        limit = _ACTIVITY_LANE_LIMITS.get(category, 2)
+        visible_labels = labels[:limit]
+        overflow_count = max(0, len(labels) - len(visible_labels))
+        compacted.append((category, visible_labels, overflow_count))
+    return compacted
+
+
+def overflow_summary_label(count: int) -> str:
+    return f"+{count} older"
 
 
 class LiveInputVisualizerWidget(QWidget):
@@ -405,7 +426,7 @@ class LiveInputVisualizerWidget(QWidget):
             return "Recent activity: —"
         entries = [(entry.category, entry.label) for entry in reversed(self._recent_activity)]
         sections = []
-        for category, labels in group_recent_activity(entries):
+        for category, labels, overflow_count in compact_recent_activity_groups(group_recent_activity(entries)):
             items = [
                 self._badge_markup(
                     label,
@@ -415,6 +436,14 @@ class LiveInputVisualizerWidget(QWidget):
                 )
                 for age_index, label in enumerate(labels)
             ]
+            if overflow_count:
+                items.append(
+                    self._badge_markup(
+                        overflow_summary_label(overflow_count),
+                        accent=False,
+                        category="overflow",
+                    )
+                )
             sections.append(f"<b>{activity_category_title(category)}:</b> " + " ".join(items))
         return "<br/>".join(sections)
 
@@ -444,6 +473,10 @@ class LiveInputVisualizerWidget(QWidget):
             bg = blend_hex(self._main.theme.color("button_bg"), self._main.theme.color("warning"), 0.18)
             fg = self._main.theme.color("warning")
             border = self._main.theme.color("warning")
+        elif category == "overflow":
+            bg = blend_hex(surface, panel, 0.45)
+            fg = self._main.theme.color("text_secondary")
+            border = self._main.theme.color("border")
         if decay > 0.0:
             bg = blend_hex(bg, panel, decay)
             fg = blend_hex(fg, self._main.theme.color("text_secondary"), decay)
