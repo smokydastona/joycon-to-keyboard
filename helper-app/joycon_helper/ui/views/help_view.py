@@ -162,7 +162,7 @@ def _sections() -> list[tuple[str, str, bool]]:
             (
                 "## Sidebar Navigation\n"
                 "Mission Control — connection status, quick actions (Scan for Joy-Con, Ping, "
-                "Read/Upload Profile, Toggle Overlay)\n"
+                "Read/Upload Profile, Toggle Overlay), plus a live controller-state visualizer\n"
                 "Blueprint Layout — interactive hotspot canvas for key binding\n"
                 "Operation Scripts — macro editor, layers, chords, stick config\n"
                 "Crew Loadouts — save/load/share profiles across 4 slots\n"
@@ -239,8 +239,10 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "## Forensics\n"
                 "The Forensics view keeps a live session telemetry record: total mapped events, "
                 "recent throughput, average hold time, active/peak keys, and latency samples from Ping. "
-                "Use Copy Summary for a quick shareable snapshot or Export Report to save a JSON file "
-                "with controller metadata, calibration assessment, and the recent event log."
+                "It also includes a compact live visualizer that highlights button, stick, layer, macro, "
+                "battery, and RSSI state in real time. Use Copy Summary for a quick shareable snapshot or "
+                "Export Report to save a JSON file with controller metadata, calibration assessment, and "
+                "the recent event log."
             ),
             False,
         ),

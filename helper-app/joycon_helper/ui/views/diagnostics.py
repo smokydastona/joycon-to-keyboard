@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
 
 from ..theme import ThemeEngine
 from ..widgets.card import Card
+from ..widgets.live_input_visualizer import LiveInputVisualizerWidget
 from ..widgets.timeline import TimelineWidget
 from ...diagnostics_metrics import (
     CalibrationAssessment,
@@ -66,6 +67,7 @@ class DiagnosticsView(QWidget):
         main_lay.setSpacing(16)
 
         self._build_input_test(main_lay)
+        self._build_visualizer(main_lay)
         self._build_controller_info(main_lay)
 
         self._stats_timer = QTimer(self)
@@ -270,6 +272,13 @@ class DiagnosticsView(QWidget):
 
         parent.addWidget(group)
 
+    def _build_visualizer(self, parent: QVBoxLayout) -> None:
+        group = QGroupBox("Live Visualizer")
+        layout = QVBoxLayout(group)
+        self._visualizer = LiveInputVisualizerWidget(self._main, compact=True)
+        layout.addWidget(self._visualizer)
+        parent.addWidget(group)
+
     # -----------------------------------------------------------------
     # Event handlers
     # -----------------------------------------------------------------
@@ -402,6 +411,7 @@ class DiagnosticsView(QWidget):
 
     def device_event(self, obj: dict) -> None:
         evt = obj.get("event")
+        self._visualizer.handle_device_event(obj)
 
         if evt == "mapped_key":
             key_id = obj.get("key_id", "?")
@@ -464,6 +474,7 @@ class DiagnosticsView(QWidget):
         self._refresh_metrics_display()
 
     def connection_changed(self, connected: bool) -> None:
+        self._visualizer.connection_changed(connected)
         if connected:
             self._telemetry.reset()
             self._refresh_metrics_display()
@@ -472,4 +483,5 @@ class DiagnosticsView(QWidget):
         self._perf_label.setStyleSheet(f"color: {theme.color('text_secondary')};")
         self._update_calibration_labels()
         self._timeline.apply_theme(theme)
+        self._visualizer.apply_theme(theme)
 

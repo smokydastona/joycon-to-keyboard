@@ -23,6 +23,7 @@ from PyQt6.QtWidgets import (
 
 from ..theme import ThemeEngine
 from ..widgets.card import Card
+from ..widgets.live_input_visualizer import LiveInputVisualizerWidget
 
 if TYPE_CHECKING:
     from ..main_window import MainWindow
@@ -147,18 +148,8 @@ class DashboardView(QScrollArea):
         group = QGroupBox("Device Preview")
         lay = QVBoxLayout(group)
 
-        self._device_image = QLabel()
-        self._device_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._device_image.setMinimumHeight(200)
-
-        # Try to load the default joycons image
-        pm = self._main.assets.load_pixmap("joycons_none.png", QSize(600, 400))
-        if pm:
-            self._device_image.setPixmap(pm)
-        else:
-            self._device_image.setText("(No device image found)")
-
-        lay.addWidget(self._device_image)
+        self._visualizer = LiveInputVisualizerWidget(self._main)
+        lay.addWidget(self._visualizer)
         self._layout.addWidget(group)
 
     # -----------------------------------------------------------------
@@ -177,6 +168,7 @@ class DashboardView(QScrollArea):
 
     def device_event(self, obj: dict) -> None:
         evt = obj.get("evt")
+        self._visualizer.handle_device_event(obj)
 
         if evt == "bt_status":
             state = str(obj.get("state", "—"))
@@ -184,19 +176,6 @@ class DashboardView(QScrollArea):
             left = "✓" if self._main._bt_connected_left else "✗"
             right = "✓" if self._main._bt_connected_right else "✗"
             self._bt_sides.setText(f"Left: {left}   Right: {right}")
-
-            # Update device image
-            if self._main._bt_connected_left and self._main._bt_connected_right:
-                img_name = "joycons_both.png"
-            elif self._main._bt_connected_left:
-                img_name = "joycons_left.png"
-            elif self._main._bt_connected_right:
-                img_name = "joycons_right.png"
-            else:
-                img_name = "joycons_none.png"
-            pm = self._main.assets.load_pixmap(img_name, QSize(600, 400))
-            if pm:
-                self._device_image.setPixmap(pm)
 
         if evt == "battery":
             level = self._main._battery_level
@@ -217,6 +196,7 @@ class DashboardView(QScrollArea):
 
     def connection_changed(self, connected: bool) -> None:
         c = self._main.theme.theme["colors"]
+        self._visualizer.connection_changed(connected)
         if connected:
             self._conn_status.setText("Connected")
             self._conn_status.setStyleSheet(f"color: {c['success']};")
@@ -230,6 +210,7 @@ class DashboardView(QScrollArea):
 
     def apply_theme(self, theme: ThemeEngine) -> None:
         c = theme.theme["colors"]
+        self._visualizer.apply_theme(theme)
         self._conn_status.setStyleSheet("")
         if self._main.bridge.is_connected:
             self._conn_status.setText("Connected")
