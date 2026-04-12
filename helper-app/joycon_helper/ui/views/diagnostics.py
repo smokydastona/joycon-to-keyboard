@@ -24,7 +24,7 @@ from PyQt6.QtWidgets import (
 
 from ..theme import ThemeEngine
 from ..widgets.card import Card
-from ..widgets.live_input_visualizer import LiveInputVisualizerWidget
+from ..widgets.live_input_visualizer import LiveInputVisualizerWidget, display_label_for_key_id
 from ..widgets.timeline import TimelineWidget
 from ...diagnostics_metrics import (
     CalibrationAssessment,
@@ -419,7 +419,11 @@ class DiagnosticsView(QWidget):
             action = "press" if pressed else "release"
             if pressed is None:
                 action = str(obj.get("action", "?"))
-            self._append_input_log(f"[{action}] key_id={key_id}")
+            if isinstance(key_id, int):
+                key_text = f"{display_label_for_key_id(key_id)} ({key_id})"
+            else:
+                key_text = f"key_id={key_id}"
+            self._append_input_log(f"[{action}] {key_text}")
             color = "#4caf50" if pressed is not False else "#f44336"
             self._timeline.add_event(str(key_id), color)
 
@@ -427,7 +431,9 @@ class DiagnosticsView(QWidget):
                 self._telemetry.record_mapped_key(key_id, pressed)
                 snapshot = self._telemetry.snapshot()
                 self._active_keys_label.setText(
-                    ", ".join(sorted(str(item) for item in self._telemetry._active_keys)) or "—"
+                    ", ".join(
+                        sorted(display_label_for_key_id(item) for item in self._telemetry._active_keys)
+                    ) or "—"
                 )
                 if self._perf_check.isChecked() and snapshot.active_keys == 0 and snapshot.total_events == 0:
                     self._perf_label.setText("Collecting…")

@@ -240,7 +240,8 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "The Forensics view keeps a live session telemetry record: total mapped events, "
                 "recent throughput, average hold time, active/peak keys, and latency samples from Ping. "
                 "It also includes a compact live visualizer that highlights button, stick, layer, macro, "
-                "battery, and RSSI state in real time. Use Copy Summary for a quick shareable snapshot or "
+                "battery, and RSSI state in real time, plus badge-style action chips for abstract inputs "
+                "such as Jump, Sprint, Crouch, and multi-device key spaces. Use Copy Summary for a quick shareable snapshot or "
                 "Export Report to save a JSON file with controller metadata, calibration assessment, and "
                 "the recent event log."
             ),

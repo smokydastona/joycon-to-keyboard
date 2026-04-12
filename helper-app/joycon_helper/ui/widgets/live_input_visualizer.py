@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import html
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
@@ -93,9 +94,21 @@ def label_for_key_id(key_id: int) -> str:
     return _BASE_KEY_LABELS.get(base_key_id, f"key_{key_id}")
 
 
+def device_index_for_key_id(key_id: int) -> int:
+    return max(0, key_id // 128)
+
+
 def hotspot_for_key_id(key_id: int) -> str | None:
     base_key_id = key_id % 128
     return _BASE_KEY_TO_HOTSPOT.get(base_key_id)
+
+
+def display_label_for_key_id(key_id: int) -> str:
+    label = label_for_key_id(key_id)
+    device_index = device_index_for_key_id(key_id)
+    if device_index == 0:
+        return label
+    return f"{label} [D{device_index}]"
 
 
 def describe_rssi(rssi: int | None) -> str:
@@ -148,6 +161,11 @@ class LiveInputVisualizerWidget(QWidget):
         self._active_label = QLabel("Active controls: —")
         self._active_label.setWordWrap(True)
         layout.addWidget(self._active_label)
+
+        self._badge_label = QLabel("Action badges: —")
+        self._badge_label.setWordWrap(True)
+        self._badge_label.setTextFormat(Qt.TextFormat.RichText)
+        layout.addWidget(self._badge_label)
 
         self._render()
 
@@ -244,6 +262,7 @@ class LiveInputVisualizerWidget(QWidget):
         self._active_label.setText(
             "Active controls: " + (", ".join(active_labels) if active_labels else "—")
         )
+        self._badge_label.setText(self._build_badge_markup())
 
     @staticmethod
     def _battery_text(level: int | None) -> str:
@@ -291,3 +310,37 @@ class LiveInputVisualizerWidget(QWidget):
         painter.drawText(20, 54, f"Live keys: {len(self._active_key_ids)}")
         painter.end()
         return pixmap
+
+    def _build_badge_markup(self) -> str:
+        abstract_labels = [
+            display_label_for_key_id(key_id)
+            for key_id in sorted(self._active_key_ids)
+            if hotspot_for_key_id(key_id) is None
+        ]
+        layer_labels = sorted(self._state.active_layers)
+        sections: list[str] = []
+        if abstract_labels:
+            sections.append(
+                "<b>Actions:</b> " + " ".join(self._badge_markup(label, accent=True) for label in abstract_labels)
+            )
+        if layer_labels:
+            sections.append(
+                "<b>Layers:</b> " + " ".join(self._badge_markup(label, accent=False) for label in layer_labels)
+            )
+        if self._state.last_macro != "—":
+            sections.append(
+                "<b>Macro:</b> " + self._badge_markup(self._state.last_macro, accent=False)
+            )
+        if not sections:
+            return "Action badges: —"
+        return "<br/>".join(sections)
+
+    def _badge_markup(self, label: str, *, accent: bool) -> str:
+        bg = self._main.theme.color("selected_bg" if accent else "button_bg")
+        fg = self._main.theme.color("accent" if accent else "text")
+        border = self._main.theme.color("accent" if accent else "border")
+        return (
+            f"<span style=\"background:{bg}; color:{fg}; border:1px solid {border}; "
+            "border-radius:8px; padding:2px 6px;\">"
+            f"{html.escape(label)}</span>"
+        )

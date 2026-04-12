@@ -47,6 +47,7 @@ from .assets import AssetManager
 from .constants import KEYMAP_HOTSPOTS
 from .serial_bridge import SerialBridge
 from .theme import ThemeEngine
+from .widgets.live_input_visualizer import display_label_for_key_id
 from .widgets.onboarding import OnboardingWizard, should_show_onboarding
 from .widgets.overlay_window import OverlayWindow
 from .widgets.sidebar import SidebarWidget
@@ -520,12 +521,7 @@ class MainWindow(QMainWindow):
                                 method, type(view).__name__, exc_info=True)
 
     def _get_hotspot_name(self, key_id: int) -> str:
-        for _name, _, _ in KEYMAP_HOTSPOTS["dark"]:
-            from .constants import KBD_LABEL_TO_KEYCODE
-            for lbl, code in KBD_LABEL_TO_KEYCODE.items():
-                if code == key_id:
-                    return lbl
-        return f"key_{key_id}"
+        return display_label_for_key_id(key_id)
 
     # -----------------------------------------------------------------
     # Commands
