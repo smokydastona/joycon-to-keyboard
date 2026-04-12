@@ -64,9 +64,11 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install system Qt/EGL dependencies
-        run: sudo apt-get install -y libegl1 libgl1-mesa-glx libglib2.0-0
+        run: sudo apt-get install -y libegl1 libgl1 libglib2.0-0
       - run: pip install -r helper-app/requirements-dev.txt
       - run: python -m pytest --tb=short -v --cov --cov-report=term-missing
+        env:
+          QT_QPA_PLATFORM: offscreen
 
   build-firmware:
     name: Build ${{ matrix.artifact_name }}
