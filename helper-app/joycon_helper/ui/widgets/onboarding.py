@@ -98,11 +98,22 @@ class OnboardingWizard(QDialog):
             "  • ESP32-S3 board (USB keyboard)\n"
             "  • A Joy-Con or compatible Bluetooth controller\n"
             "  • USB cable for the ESP32-S3\n\n"
-            "Let's get started!"
+            "Need to flash the firmware for the first time?\n"
+            "Use the Bind Bandit Web Flasher (Chrome / Edge):"
         )
         desc.setWordWrap(True)
         desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
         lay0.addWidget(desc)
+
+        _WEB_FLASHER_URL = "https://smokydastona.github.io/joycon-to-keyboard/"
+        web_btn = QPushButton("\U0001f310 Open Web Flasher")
+        web_btn.setProperty("accent", True)
+        web_btn.setToolTip(_WEB_FLASHER_URL)
+        web_btn.clicked.connect(
+            lambda: __import__("webbrowser").open(_WEB_FLASHER_URL)
+        )
+        lay0.addWidget(web_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+        lay0.addSpacing(8)
         self._stack.addWidget(p0)
 
         # Page 1: Connect USB

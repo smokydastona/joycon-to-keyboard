@@ -500,5 +500,70 @@ def check_in_background(callback: Callable[[dict[str, str] | None], None]) -> No
     t.start()
 
 
+def check_for_update_async(callback: Callable[[bool, dict], None]) -> None:
+    """Non-blocking update check for PyQt6 UI startup.
+
+    *callback(has_update, info)* is called from the background thread —
+    callers must marshal to the UI thread (e.g. ``QTimer.singleShot(0, ...)``)
+    before touching widgets.
+
+    ``info`` is the dict returned by ``check_for_update()``, or ``{}`` when no
+    update is available.
+    """
+    def _worker() -> None:
+        result = check_for_update()
+        callback(bool(result), result or {})
+
+    threading.Thread(target=_worker, name="update-check-async", daemon=True).start()
+
+
+def download_update_bundle(
+    info: dict,
+    *,
+    progress_cb: Callable[[str, int, int], None] | None = None,
+) -> Path:
+    """Download the new exe and all firmware assets, then install the exe.
+
+    Firmware assets are written to the pending directory so they can be
+    flashed on the next launch after the app restarts.
+
+    Steps:
+      1. Download and save each firmware binary as pending.
+      2. Download and install the new exe (atomic rename).
+
+    Returns the path of the newly-installed exe.
+
+    *progress_cb(step_label, downloaded, total)* is called from this thread.
+    """
+    fw_assets: dict[str, dict] = info.get("fw_assets", {})
+    total_steps = len(fw_assets) + 1  # +1 for the exe
+    step = 0
+
+    # Download firmware binaries first (saved as pending; flashed after relaunch)
+    for asset_name, asset_info in fw_assets.items():
+        step += 1
+        label = f"Downloading {asset_name} ({step}/{total_steps})…"
+        url = asset_info.get("url", "")
+        size = asset_info.get("size", 0)
+
+        def _fw_progress(done: int, total: int, _lbl: str = label) -> None:
+            if progress_cb:
+                progress_cb(_lbl, done, total)
+
+        data = download_bytes(url, progress_cb=_fw_progress)
+        save_pending_firmware(asset_name, data)
+        log.info("Saved pending firmware %s (%d bytes)", asset_name, len(data))
+
+    # Download and install the new exe
+    step += 1
+    label = f"Downloading Bind Bandit update ({step}/{total_steps})…"
+
+    def _exe_progress(done: int, total: int) -> None:
+        if progress_cb:
+            progress_cb(label, done, total)
+
+    return download_and_install(info["download_url"], progress_cb=_exe_progress)
+
+
 # Cleanup leftover .old exe on import (safe no-op if not frozen).
 _cleanup_old_exe()

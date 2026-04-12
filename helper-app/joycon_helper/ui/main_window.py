@@ -148,6 +148,9 @@ class MainWindow(QMainWindow):
         except Exception:
             pass
 
+        # Pending firmware (downloaded during last app update)
+        QTimer.singleShot(1500, self._check_pending_firmware)
+
         log.info("MainWindow initialized (v%s)", __version__)
 
     # -----------------------------------------------------------------
@@ -274,6 +277,7 @@ class MainWindow(QMainWindow):
             self._sidebar.add_nav_item(icon, label)
         self._sidebar.set_version(__version__)
         self._sidebar.nav_clicked.connect(self._on_nav_changed)
+        self._sidebar.update_clicked.connect(self._do_full_update)
 
     # -----------------------------------------------------------------
     # Stacked views
@@ -802,18 +806,195 @@ class MainWindow(QMainWindow):
 
     def _apply_update_result(self, has_update: bool, info: dict) -> None:
         if has_update:
-            self._update_btn.setVisible(True)
             self._update_info = info
+            version = info.get("version", "?")
+            # Toolbar button (legacy)
+            self._update_btn.setVisible(True)
+            # Sidebar button
+            self._sidebar.show_update_button(version)
 
-    def _open_update_dialog(self) -> None:
+    def _do_full_update(self) -> None:
+        """Download firmware assets + new exe, then relaunch.
+
+        Phase 1 (this call): download everything + swap exe, then relaunch.
+        Phase 2 (next launch): ``_check_pending_firmware`` flashes the boards.
+        """
+        from ..updater import is_frozen
         info = getattr(self, "_update_info", {})
         version = info.get("version", "?")
-        url = info.get("url", "")
-        QMessageBox.information(
-            self, "Update Available",
-            f"Version {version} is available.\n\n"
-            f"Download: {url}" if url else f"Version {version} is available."
+
+        if not is_frozen():
+            import webbrowser
+            url = info.get("html_url", "https://github.com/smokydastona/joycon-to-keyboard/releases")
+            QMessageBox.information(
+                self, "Update Available",
+                f"Version {version} is available.\n\n"
+                "Auto-update only works in the packaged .exe build.\n"
+                f"Download it from:\n{url}"
+            )
+            webbrowser.open(url)
+            return
+
+        fw_count = len(info.get("fw_assets", {}))
+        fw_note = (
+            f"\n\nFirmware for {fw_count} board(s) will also be downloaded and "
+            "flashed automatically after the app restarts."
+            if fw_count else ""
         )
+        reply = QMessageBox.question(
+            self, "Install Update",
+            f"Install Bind Bandit v{version}?"
+            f"{fw_note}\n\n"
+            "The app will close and relaunch automatically.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        self._sidebar.hide_update_button()
+        self._update_btn.setVisible(False)
+
+        # Progress dialog
+        from PyQt6.QtWidgets import QProgressDialog
+        progress_dlg = QProgressDialog("Preparing update…", None, 0, 100, self)
+        progress_dlg.setWindowTitle("Updating Bind Bandit")
+        progress_dlg.setWindowModality(Qt.WindowModality.ApplicationModal)
+        progress_dlg.setMinimumDuration(0)
+        progress_dlg.setValue(0)
+        progress_dlg.show()
+
+        import threading as _threading
+
+        def _update_worker() -> None:
+            try:
+                from ..updater import download_update_bundle, relaunch
+
+                total_size = 0
+                downloaded_so_far = 0
+
+                # Calculate total download size for progress
+                for fa in info.get("fw_assets", {}).values():
+                    total_size += fa.get("size", 0)
+                # Exe size unknown upfront; treat each asset as equal weight
+                asset_count = len(info.get("fw_assets", {})) + 1
+                current_step = [0]
+
+                def _progress(label: str, done: int, total: int) -> None:
+                    if total > 0:
+                        step_pct = int(done * 100 / total)
+                        # Map to overall: each step gets equal share
+                        overall = int(
+                            (current_step[0] * 100 + step_pct) / asset_count
+                        )
+                        QTimer.singleShot(0, lambda p=overall, lbl=label: (
+                            progress_dlg.setValue(p),
+                            progress_dlg.setLabelText(lbl),
+                        ))
+
+                    # Detect step boundaries by label change
+                    _progress._last = getattr(_progress, "_last", "")
+                    if label != _progress._last:
+                        current_step[0] += 1
+                        _progress._last = label
+
+                download_update_bundle(info, progress_cb=_progress)
+                QTimer.singleShot(0, lambda: (
+                    progress_dlg.setLabelText("Relaunching…"),
+                    progress_dlg.setValue(100),
+                ))
+                QTimer.singleShot(600, relaunch)
+            except Exception as exc:
+                QTimer.singleShot(0, lambda e=str(exc): (
+                    progress_dlg.close(),
+                    QMessageBox.critical(
+                        self, "Update Failed",
+                        f"The update could not be installed:\n\n{e}"
+                    ),
+                    self._sidebar.show_update_button(version),
+                ))
+
+        _threading.Thread(target=_update_worker, daemon=True).start()
+
+    def _check_pending_firmware(self) -> None:
+        """After an app update, flash any firmware that was downloaded alongside it."""
+        try:
+            from ..updater import load_pending_firmware, clear_pending_firmware
+        except Exception:
+            return
+
+        pending = load_pending_firmware()
+        if not pending:
+            return
+
+        names = ", ".join(sorted(pending))
+        reply = QMessageBox.question(
+            self, "Firmware Update Ready",
+            f"Firmware downloaded with the app update ({names}) is ready to flash.\n\n"
+            "Connect the ESP32-S3 and click Yes to flash now, or No to skip.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        )
+        if reply != QMessageBox.StandardButton.Yes:
+            clear_pending_firmware()
+            return
+
+        if not self.bridge.is_connected:
+            Toast.warning(self, "Connect to the device first, then update firmware from Diagnostics.")
+            clear_pending_firmware()
+            return
+
+        # Use the existing DiagnosticsView firmware flash machinery
+        diag = self._ensure_view(NAV_DIAGNOSTICS)
+        self._nav_to(NAV_DIAGNOSTICS)
+
+        import threading as _threading
+        from PyQt6.QtWidgets import QProgressDialog
+
+        progress_dlg = QProgressDialog("Flashing firmware…", None, 0, 100, self)
+        progress_dlg.setWindowTitle("Firmware Update")
+        progress_dlg.setWindowModality(Qt.WindowModality.ApplicationModal)
+        progress_dlg.setMinimumDuration(0)
+        progress_dlg.setValue(0)
+        progress_dlg.show()
+
+        results: list[str] = []
+
+        def _flash_worker() -> None:
+            try:
+                from ..fw_updater import FirmwareFlasher, extract_app_from_merged
+                flasher = FirmwareFlasher(self.bridge.client)
+                for name, path in sorted(pending.items()):
+                    board = "esp32s3" if "esp32s3" in name else "esp32"
+                    QTimer.singleShot(0, lambda n=name: progress_dlg.setLabelText(f"Flashing {n}…"))
+                    data = path.read_bytes()
+                    try:
+                        app = extract_app_from_merged(data)
+                    except Exception:
+                        app = data
+
+                    def _cb(done: int, total: int, _n: str = name) -> None:
+                        pct = int(done * 100 / total) if total else 0
+                        QTimer.singleShot(0, lambda p=pct: progress_dlg.setValue(p))
+
+                    flasher.flash(board, app, progress_cb=_cb)
+                    results.append(name)
+
+                clear_pending_firmware()
+                QTimer.singleShot(0, lambda: (
+                    progress_dlg.close(),
+                    Toast.success(self, f"Firmware updated: {', '.join(results)}"),
+                ))
+            except Exception as exc:
+                clear_pending_firmware()
+                QTimer.singleShot(0, lambda e=str(exc): (
+                    progress_dlg.close(),
+                    QMessageBox.warning(self, "Firmware Flash Error", str(e)),
+                ))
+
+        _threading.Thread(target=_flash_worker, daemon=True).start()
+
+    def _open_update_dialog(self) -> None:
+        """Toolbar update button — delegates to the full update flow."""
+        self._do_full_update()
 
     # -----------------------------------------------------------------
     # Cleanup
