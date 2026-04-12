@@ -33,7 +33,7 @@ typedef struct __attribute__((packed))
     int16_t y;
     int16_t rx;
     int16_t ry;
-} hid_gamepad_report_t;
+} bind_bandit_gamepad_report_t;
 
 static struct
 {
@@ -107,7 +107,7 @@ static uint8_t hat_from_dpad(bool up, bool down, bool left, bool right)
     return 8;
 }
 
-static void build_report(hid_gamepad_report_t *r)
+static void build_report(bind_bandit_gamepad_report_t *r)
 {
     memset(r, 0, sizeof(*r));
 
@@ -153,7 +153,7 @@ static void send_report_if_ready(void)
     if (!tud_hid_n_ready(GAMEPAD_HID_INSTANCE))
         return;
 
-    hid_gamepad_report_t r;
+    bind_bandit_gamepad_report_t r;
     build_report(&r);
 
     // Report ID = 0 (no report IDs used).
@@ -178,7 +178,7 @@ void usb_gamepad_set_enabled(bool enabled)
         if (!tud_hid_n_ready(GAMEPAD_HID_INSTANCE))
             return;
 
-        hid_gamepad_report_t r;
+        bind_bandit_gamepad_report_t r;
         memset(&r, 0, sizeof(r));
         r.hat = 8;
         (void)tud_hid_n_report(GAMEPAD_HID_INSTANCE, 0, &r, sizeof(r));
