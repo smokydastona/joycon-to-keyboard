@@ -6,12 +6,28 @@ from PyQt6.QtWidgets import QLabel, QStatusBar, QWidget
 from ..theme import ThemeEngine
 
 
+def format_battery_levels(levels: dict[int, int]) -> str:
+    if not levels:
+        return ""
+
+    parts: list[str] = []
+    for device_id, prefix in ((0, "L"), (1, "R")):
+        level = levels.get(device_id)
+        if level is None:
+            continue
+        clamped = max(0, min(level, 4))
+        bars = "█" * clamped + "░" * (4 - clamped)
+        parts.append(f"{prefix}:{bars}")
+    return f"🔋 {' '.join(parts)}" if parts else ""
+
+
 class AppStatusBar(QStatusBar):
     """Application status bar showing connection, slot, battery, and mode info."""
 
     def __init__(self, theme: ThemeEngine, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self._theme = theme
+        self._battery_levels: dict[int, int] = {}
 
         # Left: connection status
         self._conn_label = QLabel("Disconnected")
@@ -63,9 +79,16 @@ class AppStatusBar(QStatusBar):
     def set_mode(self, text: str) -> None:
         self._mode_label.setText(text)
 
-    def set_battery(self, level: int) -> None:
-        bars = "█" * level + "░" * (4 - level) if level >= 0 else ""
-        self._battery_label.setText(f"🔋 {bars}" if bars else "")
+    def set_battery(self, level: int, *, device_id: int = 0) -> None:
+        if level < 0:
+            self._battery_levels.pop(device_id, None)
+        else:
+            self._battery_levels[device_id] = level
+        self._battery_label.setText(format_battery_levels(self._battery_levels))
+
+    def clear_battery(self) -> None:
+        self._battery_levels.clear()
+        self._battery_label.setText("")
 
     def set_latency(self, ms: float) -> None:
         self._latency_label.setText(f"⚡ {ms:.0f}ms" if ms > 0 else "")

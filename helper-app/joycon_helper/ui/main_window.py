@@ -97,6 +97,7 @@ class MainWindow(QMainWindow):
         self._slot = 0
         self._bt_status = ""
         self._battery_level: int | None = None
+        self._battery_levels: dict[int, int] = {}
         self._latency_ms: float | None = None
         self._ping_sent_time: float | None = None
         self._overlay: OverlayWindow | None = None
@@ -457,10 +458,12 @@ class MainWindow(QMainWindow):
         # Battery
         if evt == "battery":
             try:
+                device_id = int(obj.get("device_id", 0))
                 level = int(obj.get("level", -1))
                 if 0 <= level <= 4:
                     self._battery_level = level
-                    self._status_bar.set_battery(level)
+                    self._battery_levels[device_id] = level
+                    self._status_bar.set_battery(level, device_id=device_id)
             except (ValueError, TypeError):
                 pass
 
@@ -484,6 +487,8 @@ class MainWindow(QMainWindow):
                 self._bt_connected_left = False
                 self._bt_connected_right = False
                 self._battery_level = None
+                self._battery_levels.clear()
+                self._status_bar.clear_battery()
 
         # Mapped key events
         if evt == "mapped_key":
