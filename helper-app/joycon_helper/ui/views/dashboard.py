@@ -31,6 +31,49 @@ if TYPE_CHECKING:
 log = logging.getLogger("joycon_helper.ui.views.dashboard")
 
 
+def mapped_input_preview(profile: dict, *, limit: int = 4) -> str:
+    mappings = profile.get("mappings", {})
+    if not isinstance(mappings, dict) or not mappings:
+        return "No mapped inputs yet"
+
+    names = sorted(str(name) for name in mappings.keys())
+    visible = names[:limit]
+    overflow = len(names) - len(visible)
+    if overflow > 0:
+        return ", ".join(visible) + f" +{overflow} more"
+    return ", ".join(visible)
+
+
+def build_profile_briefing(profile: dict, slot: int) -> dict[str, str]:
+    name = str(profile.get("name") or f"Slot {slot}")
+    icon = str(profile.get("icon") or "🎒")
+    mappings = profile.get("mappings", {})
+    macros = profile.get("macros", [])
+    layers = profile.get("layers", [])
+    chords = profile.get("chords", [])
+    tags = [str(tag).strip() for tag in profile.get("tags", []) if str(tag).strip()]
+    stick = profile.get("stick", {}) if isinstance(profile.get("stick", {}), dict) else {}
+    curve_type = str(stick.get("curve_type") or "linear").replace("_", " ").title()
+
+    mapping_count = len(mappings) if isinstance(mappings, dict) else 0
+    macro_count = len(macros) if isinstance(macros, list) else 0
+    layer_count = len(layers) if isinstance(layers, list) else 0
+    chord_count = len(chords) if isinstance(chords, list) else 0
+
+    return {
+        "slot": f"Slot {slot}",
+        "name": f"{icon} {name}",
+        "counts": (
+            f"{mapping_count} mapped | {macro_count} macro(s) | "
+            f"{layer_count} layer(s) | {chord_count} chord(s)"
+        ),
+        "details": (
+            f"Tags: {', '.join(tags) if tags else 'None'} | Stick curve: {curve_type}"
+        ),
+        "preview": f"Mapped inputs: {mapped_input_preview(profile)}",
+    }
+
+
 class DashboardView(QScrollArea):
     """Dashboard: overview cards, quick actions, connection status."""
 
@@ -49,6 +92,7 @@ class DashboardView(QScrollArea):
         self._build_header()
         self._build_status_cards()
         self._build_quick_actions()
+        self._build_profile_briefing()
         self._build_device_preview()
         self._build_device_log()
         self._layout.addStretch()
@@ -152,6 +196,53 @@ class DashboardView(QScrollArea):
         lay.addWidget(self._visualizer)
         self._layout.addWidget(group)
 
+    def _build_profile_briefing(self) -> None:
+        group = QGroupBox("Active Loadout")
+        layout = QVBoxLayout(group)
+        layout.setSpacing(10)
+
+        top = QGridLayout()
+        top.setSpacing(12)
+
+        self._slot_card = Card(self._main.theme)
+        slot_lay = QVBoxLayout(self._slot_card)
+        slot_lay.addWidget(QLabel("🎯  Active Slot"))
+        self._slot_label = QLabel("Slot 0")
+        self._slot_label.setFont(QFont(self._main.theme.typo("font_family"), 12, QFont.Weight.Bold))
+        slot_lay.addWidget(self._slot_label)
+        top.addWidget(self._slot_card, 0, 0)
+
+        self._profile_card = Card(self._main.theme)
+        profile_lay = QVBoxLayout(self._profile_card)
+        profile_lay.addWidget(QLabel("🗂  Loadout"))
+        self._profile_name = QLabel("🎒 General")
+        self._profile_name.setFont(QFont(self._main.theme.typo("font_family"), 12, QFont.Weight.Bold))
+        profile_lay.addWidget(self._profile_name)
+        top.addWidget(self._profile_card, 0, 1)
+
+        self._counts_card = Card(self._main.theme)
+        counts_lay = QVBoxLayout(self._counts_card)
+        counts_lay.addWidget(QLabel("📦  Composition"))
+        self._profile_counts = QLabel("0 mapped | 0 macro(s) | 0 layer(s) | 0 chord(s)")
+        self._profile_counts.setWordWrap(True)
+        self._profile_counts.setFont(QFont(self._main.theme.typo("font_family"), 11, QFont.Weight.Bold))
+        counts_lay.addWidget(self._profile_counts)
+        top.addWidget(self._counts_card, 0, 2)
+
+        layout.addLayout(top)
+
+        self._profile_details = QLabel()
+        self._profile_details.setWordWrap(True)
+        self._profile_details.setStyleSheet(f"color: {self._main.theme.color('text_secondary')};")
+        layout.addWidget(self._profile_details)
+
+        self._profile_preview = QLabel()
+        self._profile_preview.setWordWrap(True)
+        layout.addWidget(self._profile_preview)
+
+        self._layout.addWidget(group)
+        self._refresh_profile_briefing(self._main._slot, self._main._profile)
+
     # -----------------------------------------------------------------
     def _build_device_log(self) -> None:
         group = QGroupBox("Device Log")
@@ -161,6 +252,14 @@ class DashboardView(QScrollArea):
         log_widget.setMinimumHeight(150)
         lay.addWidget(log_widget)
         self._layout.addWidget(group)
+
+    def _refresh_profile_briefing(self, slot: int, profile: dict) -> None:
+        briefing = build_profile_briefing(profile, slot)
+        self._slot_label.setText(briefing["slot"])
+        self._profile_name.setText(briefing["name"])
+        self._profile_counts.setText(briefing["counts"])
+        self._profile_details.setText(briefing["details"])
+        self._profile_preview.setText(briefing["preview"])
 
     # -----------------------------------------------------------------
     # Event handlers
@@ -189,10 +288,10 @@ class DashboardView(QScrollArea):
                 self._lat_value.setText(f"{lat:.1f} ms")
 
     def profile_loaded(self, slot: int, profile: dict) -> None:
-        pass
+        self._refresh_profile_briefing(slot, profile)
 
     def profile_updated(self, profile: dict) -> None:
-        pass
+        self._refresh_profile_briefing(self._main._slot, profile)
 
     def connection_changed(self, connected: bool) -> None:
         c = self._main.theme.theme["colors"]
@@ -211,6 +310,7 @@ class DashboardView(QScrollArea):
     def apply_theme(self, theme: ThemeEngine) -> None:
         c = theme.theme["colors"]
         self._visualizer.apply_theme(theme)
+        self._profile_details.setStyleSheet(f"color: {theme.color('text_secondary')};")
         self._conn_status.setStyleSheet("")
         if self._main.bridge.is_connected:
             self._conn_status.setText("Connected")
