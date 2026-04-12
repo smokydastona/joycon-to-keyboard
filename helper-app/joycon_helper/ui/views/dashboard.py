@@ -74,12 +74,31 @@ def build_profile_briefing(profile: dict, slot: int) -> dict[str, str]:
     }
 
 
+def battery_text(level: int | None) -> str:
+    if level is None:
+        return "—"
+    clamped = max(0, min(level, 4))
+    return f"{'█' * clamped}{'░' * (4 - clamped)} ({clamped}/4)"
+
+
+def build_battery_briefing(levels: dict[int, int]) -> dict[str, str]:
+    left = levels.get(0)
+    right = levels.get(1)
+    headline = f"L {left if left is not None else '—'}/4 | R {right if right is not None else '—'}/4"
+    details = f"Left {battery_text(left)} | Right {battery_text(right)}"
+    return {
+        "headline": headline,
+        "details": details,
+    }
+
+
 class DashboardView(QScrollArea):
     """Dashboard: overview cards, quick actions, connection status."""
 
     def __init__(self, main: MainWindow) -> None:
         super().__init__()
         self._main = main
+        self._battery_levels: dict[int, int] = {}
         self.setWidgetResizable(True)
         self.setFrameShape(QScrollArea.Shape.NoFrame)
 
@@ -147,6 +166,9 @@ class DashboardView(QScrollArea):
         self._batt_level = QLabel("—")
         self._batt_level.setFont(QFont(self._main.theme.typo("font_family"), 12, QFont.Weight.Bold))
         batt_lay.addWidget(self._batt_level)
+        self._batt_detail = QLabel("Left — | Right —")
+        self._batt_detail.setStyleSheet(f"color: {self._main.theme.color('text_secondary')};")
+        batt_lay.addWidget(self._batt_detail)
         grid.addWidget(self._batt_card, 0, 2)
 
         # Latency card
@@ -243,6 +265,11 @@ class DashboardView(QScrollArea):
         self._layout.addWidget(group)
         self._refresh_profile_briefing(self._main._slot, self._main._profile)
 
+    def _refresh_battery_briefing(self) -> None:
+        briefing = build_battery_briefing(self._battery_levels)
+        self._batt_level.setText(briefing["headline"])
+        self._batt_detail.setText(briefing["details"])
+
     # -----------------------------------------------------------------
     def _build_device_log(self) -> None:
         group = QGroupBox("Device Log")
@@ -277,10 +304,11 @@ class DashboardView(QScrollArea):
             self._bt_sides.setText(f"Left: {left}   Right: {right}")
 
         if evt == "battery":
-            level = self._main._battery_level
-            if level is not None:
-                bars = "█" * level + "░" * (4 - level)
-                self._batt_level.setText(f"{bars} ({level}/4)")
+            device_id = obj.get("device_id")
+            level = obj.get("level")
+            if isinstance(device_id, int) and isinstance(level, int):
+                self._battery_levels[device_id] = level
+                self._refresh_battery_briefing()
 
         if obj.get("rsp") == "pong":
             lat = self._main._latency_ms
@@ -305,12 +333,15 @@ class DashboardView(QScrollArea):
             self._conn_status.setText("Disconnected")
             self._conn_status.setStyleSheet(f"color: {c['danger']};")
             self._conn_port.setText("No port selected")
+            self._battery_levels.clear()
+            self._refresh_battery_briefing()
         self._scan_btn.setEnabled(connected)
 
     def apply_theme(self, theme: ThemeEngine) -> None:
         c = theme.theme["colors"]
         self._visualizer.apply_theme(theme)
         self._profile_details.setStyleSheet(f"color: {theme.color('text_secondary')};")
+        self._batt_detail.setStyleSheet(f"color: {theme.color('text_secondary')};")
         self._conn_status.setStyleSheet("")
         if self._main.bridge.is_connected:
             self._conn_status.setText("Connected")

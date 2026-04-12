@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from joycon_helper.ui.views.dashboard import build_profile_briefing, mapped_input_preview
+from joycon_helper.ui.views.dashboard import (
+    battery_text,
+    build_battery_briefing,
+    build_profile_briefing,
+    mapped_input_preview,
+)
 
 
 def test_mapped_input_preview_handles_empty_and_overflow() -> None:
@@ -28,4 +33,13 @@ def test_build_profile_briefing_summarizes_slot_profile() -> None:
         "counts": "3 mapped | 1 macro(s) | 1 layer(s) | 2 chord(s)",
         "details": "Tags: quiet, pve | Stick curve: Expo Soft",
         "preview": "Mapped inputs: A, B, ZR",
+    }
+
+
+def test_build_battery_briefing_formats_per_side_levels() -> None:
+    assert battery_text(None) == "—"
+    assert battery_text(3) == "███░ (3/4)"
+    assert build_battery_briefing({0: 4, 1: 2}) == {
+        "headline": "L 4/4 | R 2/4",
+        "details": "Left ████ (4/4) | Right ██░░ (2/4)",
     }

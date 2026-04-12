@@ -162,7 +162,7 @@ def _sections() -> list[tuple[str, str, bool]]:
             (
                 "## Sidebar Navigation\n"
                 "Mission Control — connection status, quick actions (Scan for Joy-Con, Ping, "
-                "Read/Upload Profile, Toggle Overlay), an active-loadout briefing for the current slot, "
+                "Read/Upload Profile, Toggle Overlay), a per-side battery snapshot, an active-loadout briefing for the current slot, "
                 "plus a live controller-state visualizer\n"
                 "Blueprint Layout — interactive hotspot canvas for key binding\n"
                 "Operation Scripts — macro editor, layers, chords, stick config\n"
