@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from joycon_helper.ui.views.dashboard import (
+from joycon_helper.ui.dashboard_summary import (
     battery_text,
     build_battery_briefing,
     build_profile_briefing,

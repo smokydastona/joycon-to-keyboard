@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from joycon_helper.ui.widgets.status_bar import format_battery_levels
+from joycon_helper.ui.status_helpers import format_battery_levels
 
 
 def test_format_battery_levels_handles_empty_and_per_side_levels() -> None:

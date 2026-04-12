@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from joycon_helper.ui.widgets.live_input_visualizer import (
+from joycon_helper.ui.live_input_summary import (
     activity_category_title,
     activity_decay_amount,
     build_active_controls_summary,
