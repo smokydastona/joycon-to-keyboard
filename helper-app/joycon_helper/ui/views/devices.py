@@ -24,6 +24,7 @@ from PyQt6.QtWidgets import (
     QInputDialog,
     QLabel,
     QLineEdit,
+    QListWidget,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -44,6 +45,66 @@ if TYPE_CHECKING:
 
 log = logging.getLogger("joycon_helper.ui.views.devices")
 
+# ---------------------------------------------------------------------------
+# M913 button mapping constants (mirrors m913_device.py to avoid hard
+# dependency on hidapi being installed at import time)
+# ---------------------------------------------------------------------------
+_M913_BUTTON_ORDER = [
+    "left", "right", "middle", "fire",
+    "side1", "side2", "side3", "side4", "side5", "side6",
+    "side7", "side8", "side9", "side10", "side11", "side12",
+]
+_M913_BUTTON_LABELS: dict[str, str] = {
+    "left": "Left Click",    "right": "Right Click",
+    "middle": "Middle Click", "fire": "Fire",
+    "side1": "Side 1",       "side2": "Side 2",
+    "side3": "Side 3",       "side4": "Side 4",
+    "side5": "Side 5",       "side6": "Side 6",
+    "side7": "Side 7",       "side8": "Side 8",
+    "side9": "Side 9",       "side10": "Side 10",
+    "side11": "Side 11",     "side12": "Side 12",
+}
+_M913_ACTION_CHOICES: list[str] = [
+    # Mouse buttons
+    "left", "right", "middle", "backward", "forward",
+    # Special mouse
+    "dpi-", "dpi+", "dpi-cycle", "snipe", "led_toggle",
+    "fire", "three_click", "polling_switch", "none",
+    # Media
+    "media_play", "media_next", "media_prev", "media_stop",
+    "media_vol_up", "media_vol_down", "media_mute",
+    "media_email", "media_calc", "media_home", "media_search",
+    # Letters
+    "a", "b", "c", "d", "e", "f", "g", "h", "i", "j",
+    "k", "l", "m", "n", "o", "p", "q", "r", "s", "t",
+    "u", "v", "w", "x", "y", "z",
+    # Numbers
+    "1", "2", "3", "4", "5", "6", "7", "8", "9", "0",
+    # Function keys
+    "f1", "f2", "f3", "f4", "f5", "f6",
+    "f7", "f8", "f9", "f10", "f11", "f12",
+    # Navigation / common
+    "enter", "escape", "backspace", "tab", "space",
+    "up_arrow", "down_arrow", "left_arrow", "right_arrow",
+    "insert", "delete", "home", "end", "pageup", "pagedown",
+    # Modifiers
+    "shift_l", "ctrl_l", "alt_l", "super_l",
+    "shift_r", "ctrl_r", "alt_r",
+    # Hardware macros
+    *[f"macro{i}" for i in range(1, 16)],
+]
+# Key names used in the hardware macro event editor
+_M913_MACRO_KEY_NAMES: list[str] = [
+    "a", "b", "c", "d", "e", "f", "g", "h", "i", "j",
+    "k", "l", "m", "n", "o", "p", "q", "r", "s", "t",
+    "u", "v", "w", "x", "y", "z",
+    "1", "2", "3", "4", "5", "6", "7", "8", "9", "0",
+    "f1", "f2", "f3", "f4", "f5", "f6",
+    "f7", "f8", "f9", "f10", "f11", "f12",
+    "enter", "escape", "backspace", "tab", "space",
+    "up_arrow", "down_arrow", "left_arrow", "right_arrow",
+    "delete", "home", "end", "pageup", "pagedown",
+]
 
 # ---------------------------------------------------------------------------
 # Background worker for HID operations (keeps UI responsive)
@@ -315,6 +376,43 @@ class DevicesView(QWidget):
         poll_lay.addStretch()
         lay.addWidget(poll_group)
 
+        # Button Mapping (16 buttons × action combobox)
+        btn_map_group = QGroupBox("Button Mapping")
+        btn_map_lay = QVBoxLayout(btn_map_group)
+        btn_scroll = QScrollArea()
+        btn_scroll.setWidgetResizable(True)
+        btn_scroll.setMaximumHeight(340)
+        btn_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        btn_container = QWidget()
+        btn_container_lay = QVBoxLayout(btn_container)
+        btn_container_lay.setSpacing(3)
+        btn_container_lay.setContentsMargins(4, 4, 4, 4)
+        self._btn_action_widgets: dict[str, QComboBox] = {}
+        _btn_defaults = {
+            "left": "left", "right": "right",
+            "middle": "middle", "fire": "fire",
+        }
+        for _bname in _M913_BUTTON_ORDER:
+            _brow = QHBoxLayout()
+            _blbl = QLabel(_M913_BUTTON_LABELS.get(_bname, _bname))
+            _blbl.setFixedWidth(110)
+            _brow.addWidget(_blbl)
+            _bcombo = QComboBox()
+            _bcombo.setEditable(True)
+            _bcombo.addItems(_M913_ACTION_CHOICES)
+            _bcombo.setCurrentText(_btn_defaults.get(_bname, "none"))
+            _bcombo.setToolTip(
+                f"Action for {_M913_BUTTON_LABELS.get(_bname, _bname)}. "
+                "Select from list or type a combo like 'ctrl+c'."
+            )
+            self._btn_action_widgets[_bname] = _bcombo
+            _brow.addWidget(_bcombo, 1)
+            btn_container_lay.addLayout(_brow)
+        btn_container_lay.addStretch()
+        btn_scroll.setWidget(btn_container)
+        btn_map_lay.addWidget(btn_scroll)
+        lay.addWidget(btn_map_group)
+
         # Action buttons
         actions_group = QGroupBox("Actions")
         actions_lay = QHBoxLayout(actions_group)
@@ -343,6 +441,9 @@ class DevicesView(QWidget):
         diag_btn = QPushButton("Diagnostics…")
         diag_btn.clicked.connect(self._m913_diag_popup)
         actions_lay.addWidget(diag_btn)
+        macros_btn = QPushButton("Manage Macros…")
+        macros_btn.clicked.connect(self._m913_macros_popup)
+        actions_lay.addWidget(macros_btn)
         actions_lay.addStretch()
         lay.addWidget(actions_group)
 
@@ -592,6 +693,11 @@ class DevicesView(QWidget):
                 p.sister_slot = None
         else:
             p.sister_slot = None
+        # Button mappings
+        for btn_name, combo in self._btn_action_widgets.items():
+            action = combo.currentText().strip()
+            if action:
+                p.buttons[btn_name] = action
 
     def _m913_ui_from_profile(self) -> None:
         if not self._m913_profile:
@@ -616,6 +722,14 @@ class DevicesView(QWidget):
             self._m913_sister_combo.setCurrentText(f"Slot {p.sister_slot}")
         else:
             self._m913_sister_combo.setCurrentIndex(0)
+        # Button mappings
+        for btn_name, combo in self._btn_action_widgets.items():
+            action = p.buttons.get(btn_name, "none")
+            idx = combo.findText(action)
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+            else:
+                combo.setEditText(action)
 
     def _m913_pick_led_color(self) -> None:
         cur = self._m913_led_color_edit.text().strip().lstrip("#")
@@ -846,6 +960,192 @@ class DevicesView(QWidget):
         close_btn = QPushButton("Close")
         close_btn.clicked.connect(dlg.accept)
         main_lay.addWidget(close_btn)
+        dlg.exec()
+
+    def _m913_macros_popup(self) -> None:
+        """Open hardware macro editor for M913 slots 1–15."""
+        if not self._m913_profile:
+            try:
+                mod = _get_m913_mod()
+                self._m913_profile = mod.M913Profile()
+            except Exception as e:
+                QMessageBox.warning(
+                    self, "M913 Error",
+                    f"Could not initialise M913 module: {e}",
+                )
+                return
+        dlg = QDialog(self)
+        dlg.setWindowTitle("M913 Hardware Macros")
+        dlg.setMinimumSize(640, 500)
+        dlg_lay = QVBoxLayout(dlg)
+        info = QLabel(
+            "Hardware macros are stored in the M913's onboard memory. "
+            "Up to 15 slots, 67 key events each. "
+            "Assign a slot to a button via action 'macro1'–'macro15'."
+        )
+        info.setWordWrap(True)
+        dlg_lay.addWidget(info)
+
+        # Slot selector
+        slot_row = QHBoxLayout()
+        slot_row.addWidget(QLabel("Slot:"))
+        slot_combo = QComboBox()
+        for _si in range(1, 16):
+            slot_combo.addItem(f"Macro {_si}", _si)
+        slot_row.addWidget(slot_combo)
+        slot_row.addStretch()
+        dlg_lay.addLayout(slot_row)
+
+        # Event list
+        event_list = QListWidget()
+        event_list.setFont(QFont("Consolas", 9))
+        event_list.setMinimumHeight(220)
+        event_list.setToolTip(
+            "Sequence of key press/release events in this macro slot")
+        dlg_lay.addWidget(event_list)
+
+        # Key input row
+        key_row = QHBoxLayout()
+        key_row.addWidget(QLabel("Key:"))
+        key_combo = QComboBox()
+        key_combo.addItems(_M913_MACRO_KEY_NAMES)
+        key_row.addWidget(key_combo)
+        add_down_btn = QPushButton("▼ Add Press")
+        add_up_btn = QPushButton("▲ Add Release")
+        del_evt_btn = QPushButton("Delete Event")
+        del_evt_btn.setProperty("danger", True)
+        clear_slot_btn = QPushButton("Clear Slot")
+        key_row.addWidget(add_down_btn)
+        key_row.addWidget(add_up_btn)
+        key_row.addWidget(del_evt_btn)
+        key_row.addWidget(clear_slot_btn)
+        key_row.addStretch()
+        dlg_lay.addLayout(key_row)
+
+        macro_status = QLabel("")
+        macro_status.setStyleSheet(
+            f"color: {self._main.theme.color('text_secondary')};")
+        dlg_lay.addWidget(macro_status)
+
+        # Action buttons
+        action_row = QHBoxLayout()
+        apply_btn = QPushButton("Apply to Device")
+        apply_btn.setProperty("accent", True)
+        save_btn = QPushButton("Save to Profile")
+        m_close = QPushButton("Close")
+        action_row.addWidget(apply_btn)
+        action_row.addWidget(save_btn)
+        action_row.addStretch()
+        action_row.addWidget(m_close)
+        dlg_lay.addLayout(action_row)
+        m_close.clicked.connect(dlg.accept)
+
+        # Per-slot event storage: slot_num → list of (evt_type, scancode)
+        slot_events: dict[int, list[tuple[int, int]]] = {}
+        for _k, _ms in self._m913_profile.macros.items():
+            slot_events[_k] = list(_ms.events)
+
+        def _refresh_events() -> None:
+            sn: int = slot_combo.currentData()
+            evts = slot_events.get(sn, [])
+            event_list.clear()
+            try:
+                _rev = {v: k for k, v in _get_m913_mod().KEY_CODES.items()}
+            except Exception:
+                _rev = {}
+            for _et, _sc in evts:
+                _kn = _rev.get(_sc, f"0x{_sc:02X}")
+                _icon = "\u25bc" if _et == 0x81 else "\u25b2"
+                event_list.addItem(f"{_icon} {_kn}  (0x{_sc:02X})")
+
+        def _add_event(is_press: bool) -> None:
+            sn: int = slot_combo.currentData()
+            try:
+                _sc = _get_m913_mod().KEY_CODES.get(key_combo.currentText(), 0x04)
+            except Exception:
+                _sc = 0x04
+            _et = 0x81 if is_press else 0x41
+            _evts = slot_events.setdefault(sn, [])
+            if len(_evts) < 67:
+                _evts.append((_et, _sc))
+                _refresh_events()
+            else:
+                macro_status.setText("Slot full (max 67 events)")
+
+        def _delete_event() -> None:
+            sn: int = slot_combo.currentData()
+            _row = event_list.currentRow()
+            _evts = slot_events.get(sn, [])
+            if 0 <= _row < len(_evts):
+                _evts.pop(_row)
+                _refresh_events()
+
+        def _clear_slot() -> None:
+            sn: int = slot_combo.currentData()
+            slot_events[sn] = []
+            _refresh_events()
+
+        def _save_to_profile() -> None:
+            try:
+                _mod = _get_m913_mod()
+                for _sn, _evts in slot_events.items():
+                    _ms2 = _mod.MacroSlot(events=list(_evts))
+                    self._m913_profile.macros[_sn] = _ms2
+                _empty = [
+                    _k for _k, _ms2 in self._m913_profile.macros.items()
+                    if _ms2.is_empty()
+                ]
+                for _k in _empty:
+                    del self._m913_profile.macros[_k]
+                macro_status.setText(
+                    "Macros saved to profile (click Apply to flash to device)")
+                self._m913_status.setText("Macros saved to profile")
+            except Exception as _e:
+                macro_status.setText(f"Save error: {_e}")
+
+        def _apply_to_device() -> None:
+            _save_to_profile()
+            if not self._m913_devices:
+                macro_status.setText(
+                    "No device connected — macros saved to profile only")
+                return
+            _didx = self._m913_dev_combo.currentIndex()
+            if _didx < 0 or _didx >= len(self._m913_devices):
+                return
+            _dev_info = self._m913_devices[_didx]
+            _macros_snap = dict(self._m913_profile.macros)
+            self._m913_status.setText("Applying macros\u2026")
+            macro_status.setText("Applying macros to device\u2026")
+
+            def _work() -> tuple:
+                _mod2 = _get_m913_mod()
+                _dev = _mod2.M913Device()
+                _dev.open(_dev_info)
+                _sent, _errors = _dev.apply_macros(_macros_snap)
+                _dev.close()
+                return _sent, _errors
+
+            def _done(result: tuple) -> None:
+                _sent, _errors = result
+                _msg = f"Macros applied — {_sent} packet(s), {_errors} error(s)"
+                self._m913_status.setText(_msg)
+                macro_status.setText(_msg)
+                self._main._log_line(f"[M913] {_msg}")
+
+            def _err(msg: str) -> None:
+                self._m913_status.setText(f"Macro apply error: {msg}")
+                macro_status.setText(f"Error: {msg}")
+
+            _run_hid_task(self, _work, _done, _err)
+
+        slot_combo.currentIndexChanged.connect(_refresh_events)
+        add_down_btn.clicked.connect(lambda: _add_event(True))
+        add_up_btn.clicked.connect(lambda: _add_event(False))
+        del_evt_btn.clicked.connect(_delete_event)
+        clear_slot_btn.clicked.connect(_clear_slot)
+        save_btn.clicked.connect(_save_to_profile)
+        apply_btn.clicked.connect(_apply_to_device)
+        _refresh_events()
         dlg.exec()
 
     # =================================================================

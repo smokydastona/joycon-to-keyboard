@@ -12,6 +12,7 @@ from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
+    QDialog,
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
@@ -19,6 +20,7 @@ from PyQt6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -271,6 +273,12 @@ class DiagnosticsView(QWidget):
         bt_reconnect.clicked.connect(lambda: self._main.send_cmd({"cmd": "bt_reconnect"}))
         ctrl_row.addWidget(bt_reconnect)
 
+        calibrate_btn = QPushButton("Calibrate Stick")
+        calibrate_btn.setToolTip(
+            "Run the guided 3-step calibration wizard to set stick center and range")
+        calibrate_btn.clicked.connect(self._open_calibration_wizard)
+        ctrl_row.addWidget(calibrate_btn)
+
         ctrl_row.addStretch()
         lay.addLayout(ctrl_row)
 
@@ -412,6 +420,95 @@ class DiagnosticsView(QWidget):
         """Send a 300 ms rumble pulse, then stop."""
         self._main.send_cmd({"cmd": "rumble", "freq": 160, "amp": 50})
         QTimer.singleShot(300, lambda: self._main.send_cmd({"cmd": "rumble", "freq": 160, "amp": 0}))
+
+    def _open_calibration_wizard(self) -> None:
+        """Launch the guided 3-step stick calibration dialog."""
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Stick Calibration Wizard")
+        dlg.setMinimumSize(440, 300)
+        dlg_lay = QVBoxLayout(dlg)
+
+        pages = QStackedWidget()
+        dlg_lay.addWidget(pages, 1)
+
+        # Page 0: Center
+        page0 = QWidget()
+        p0_lay = QVBoxLayout(page0)
+        p0_lay.addWidget(QLabel("<b>Step 1 of 3 — Center Position</b>"))
+        p0_info = QLabel(
+            "Release the analog stick so it sits at dead-center.\n"
+            "Do not touch it. Click Next when ready."
+        )
+        p0_info.setWordWrap(True)
+        p0_lay.addWidget(p0_info)
+        p0_lay.addStretch()
+        pages.addWidget(page0)
+
+        # Page 1: Sweep
+        page1 = QWidget()
+        p1_lay = QVBoxLayout(page1)
+        p1_lay.addWidget(QLabel("<b>Step 2 of 3 — Sweep Outer Edges</b>"))
+        p1_info = QLabel(
+            "Slowly rotate the stick in a full circle around the outer\n"
+            "edge, reaching every direction. Click Next when done."
+        )
+        p1_info.setWordWrap(True)
+        p1_lay.addWidget(p1_info)
+        p1_lay.addStretch()
+        pages.addWidget(page1)
+
+        # Page 2: Save / Clear
+        page2 = QWidget()
+        p2_lay = QVBoxLayout(page2)
+        p2_lay.addWidget(QLabel("<b>Step 3 of 3 — Save or Clear Calibration</b>"))
+        p2_info = QLabel(
+            "Click Save to commit calibration data to the controller.\n"
+            "Click Clear to reset to factory defaults."
+        )
+        p2_info.setWordWrap(True)
+        p2_lay.addWidget(p2_info)
+        p2_lay.addStretch()
+        pages.addWidget(page2)
+
+        # Navigation row
+        nav_row = QHBoxLayout()
+        back_btn = QPushButton("Back")
+        next_btn = QPushButton("Next")
+        save_cal_btn = QPushButton("Save Calibration")
+        save_cal_btn.setProperty("accent", True)
+        clear_cal_btn = QPushButton("Clear Calibration")
+        clear_cal_btn.setProperty("danger", True)
+        cancel_btn = QPushButton("Cancel")
+        nav_row.addWidget(back_btn)
+        nav_row.addWidget(next_btn)
+        nav_row.addWidget(save_cal_btn)
+        nav_row.addWidget(clear_cal_btn)
+        nav_row.addStretch()
+        nav_row.addWidget(cancel_btn)
+        dlg_lay.addLayout(nav_row)
+        cancel_btn.clicked.connect(dlg.reject)
+
+        def _go_to(page_idx: int) -> None:
+            pages.setCurrentIndex(page_idx)
+            back_btn.setVisible(page_idx > 0)
+            next_btn.setVisible(page_idx < 2)
+            save_cal_btn.setVisible(page_idx == 2)
+            clear_cal_btn.setVisible(page_idx == 2)
+
+        def _save_calibration() -> None:
+            self._main.send_cmd({"cmd": "calibration", "action": "save"})
+            dlg.accept()
+
+        def _clear_calibration() -> None:
+            self._main.send_cmd({"cmd": "calibration", "action": "clear"})
+            dlg.accept()
+
+        back_btn.clicked.connect(lambda: _go_to(pages.currentIndex() - 1))
+        next_btn.clicked.connect(lambda: _go_to(pages.currentIndex() + 1))
+        save_cal_btn.clicked.connect(_save_calibration)
+        clear_cal_btn.clicked.connect(_clear_calibration)
+        _go_to(0)
+        dlg.exec()
 
     def device_event(self, obj: dict) -> None:
         evt = obj.get("event")

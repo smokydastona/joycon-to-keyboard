@@ -313,7 +313,12 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "current one finishes, enabling complex multi-phase combos.\n\n"
                 "## Humanization\n"
                 "Adds slight random delays to key events to appear more "
-                "natural."
+                "natural.\n\n"
+                "## Rapid Trigger\n"
+                "In Operation Scripts → Stick → Rapid Trigger, set Activate and "
+                "Deactivate thresholds (0–100% of full deflection). The stick button "
+                "fires when deflection exceeds Activate %, and releases when it drops "
+                "below Deactivate %. Allows sub-zone triggering for faster response."
             ),
             False,
         ),
@@ -335,7 +340,13 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "    key_id range: 0..639 (device_id*128 + base_key_id)\n"
                 "  {\"event\": \"read_profile\", \"slot\": 0, \"profile\": {...}}\n"
                 "  {\"event\": \"battery\", \"level\": 85}\n"
-                "  {\"event\": \"bt_status\", \"connected\": true}"
+                "  {\"event\": \"bt_status\", \"connected\": true}\n\n"
+                "## Calibration Commands\n"
+                "  {\"cmd\": \"calibration\", \"action\": \"save\"}   — commit current\n"
+                "    stick calibration (center + range) to NVS\n"
+                "  {\"cmd\": \"calibration\", \"action\": \"clear\"}  — reset to factory\n"
+                "    defaults\n"
+                "Triggered from Forensics → Calibrate Stick wizard."
             ),
             False,
         ),
@@ -344,8 +355,22 @@ def _sections() -> list[tuple[str, str, bool]]:
             (
                 "## M913 Gaming Keypad\n"
                 "Connect the M913 via USB. Use Target Assets → M913 Keypad to "
-                "detect the device, configure DPI stages, remap buttons, "
-                "and adjust LED settings.\n\n"
+                "detect the device, configure DPI stages, and adjust LED settings.\n\n"
+                "## Button Mapping\n"
+                "The Button Mapping grid lets you assign any of the 16 M913 buttons "
+                "to a mouse action, keyboard key, DPI action, or hardware macro slot. "
+                "Options include: left/right/middle click, dpi-cycle, dpi+/dpi-, "
+                "snipe (hold for precision DPI), media keys, keyboard combos like "
+                "'ctrl+c', and macro1–macro15. The combo box is editable — type "
+                "any action string supported by the M913 protocol.\n\n"
+                "## Hardware Macros\n"
+                "Click Manage Macros… in the Actions row to open the hardware macro "
+                "editor. Select a slot (Macro 1–15), pick a key from the dropdown, "
+                "and add Press/Release events. Up to 67 events per slot. "
+                "Click Save to Profile to persist, then Apply to Device to write "
+                "the macros to the mouse's onboard memory.\n"
+                "Assign a macro slot to a button by setting its action to 'macro1' "
+                "through 'macro15' in the Button Mapping grid.\n\n"
                 "## Razer Mouse\n"
                 "Connect a supported Razer mouse via USB. Use Target Assets → "
                 "Razer Mouse to configure DPI, polling rate, and "

@@ -569,6 +569,42 @@ class MacrosView(QWidget):
         socd_lay.addLayout(socd_row)
         settings.addWidget(socd_group)
 
+        # Rapid Trigger
+        rt_group = QGroupBox("Rapid Trigger")
+        rt_lay = QVBoxLayout(rt_group)
+        rt_desc = QLabel(
+            "Set fractional deflection thresholds for stick button triggering. "
+            "Activate fires the button; deactivate releases it."
+        )
+        rt_desc.setWordWrap(True)
+        rt_lay.addWidget(rt_desc)
+        _act_row = QHBoxLayout()
+        _act_row.addWidget(QLabel("Activate (0\u2013100%):"))
+        self._rt_activate = QSpinBox()
+        self._rt_activate.setRange(0, 100)
+        self._rt_activate.setValue(30)
+        self._rt_activate.setSuffix("%")
+        self._rt_activate.setToolTip(
+            "Deflection % at which the stick button is considered pressed")
+        self._rt_activate.valueChanged.connect(self._on_stick_changed)
+        _act_row.addWidget(self._rt_activate)
+        _act_row.addStretch()
+        rt_lay.addLayout(_act_row)
+        _deact_row = QHBoxLayout()
+        _deact_row.addWidget(QLabel("Deactivate (0\u2013100%):"))
+        self._rt_deactivate = QSpinBox()
+        self._rt_deactivate.setRange(0, 100)
+        self._rt_deactivate.setValue(20)
+        self._rt_deactivate.setSuffix("%")
+        self._rt_deactivate.setToolTip(
+            "Deflection % at which the stick button is released"
+            " (should be \u2264 activate)")
+        self._rt_deactivate.valueChanged.connect(self._on_stick_changed)
+        _deact_row.addWidget(self._rt_deactivate)
+        _deact_row.addStretch()
+        rt_lay.addLayout(_deact_row)
+        settings.addWidget(rt_group)
+
         settings.addStretch()
         lay.addLayout(settings, 1)
 
@@ -1101,6 +1137,10 @@ class MacrosView(QWidget):
             "sensitivity": self._sensitivity.value(),
             "curve_type": self._curve_type.currentText(),
             "socd_mode": self._socd_mode.currentText(),
+            "rapid_trigger": {
+                "activate": self._rt_activate.value(),
+                "deactivate": self._rt_deactivate.value(),
+            },
         }
         self._main.set_profile(profile)
 
@@ -1141,6 +1181,13 @@ class MacrosView(QWidget):
         idx = self._curve_type.findText(curve)
         if idx >= 0:
             self._curve_type.setCurrentIndex(idx)
+        socd = stick.get("socd_mode", "neutral")
+        socd_idx = self._socd_mode.findText(socd)
+        if socd_idx >= 0:
+            self._socd_mode.setCurrentIndex(socd_idx)
+        _rt = stick.get("rapid_trigger", {})
+        self._rt_activate.setValue(_rt.get("activate", 30))
+        self._rt_deactivate.setValue(_rt.get("deactivate", 20))
         self._on_stick_changed()
 
     def profile_updated(self, profile: dict) -> None:
