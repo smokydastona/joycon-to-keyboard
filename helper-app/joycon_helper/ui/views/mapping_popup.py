@@ -270,17 +270,15 @@ class MappingPopup(QDialog):
         accent = theme.theme["colors"]["accent"]
         self._kbd_canvas.set_overlay_color(accent)
         hotspots = KBD_HOTSPOTS.get(theme_key, KBD_HOTSPOTS["default"])
-        kbd_file = "keyboard-dark.png" if theme.is_dark else "keyboard.png"
-        kbd_pm = self._main.assets.load_pixmap(kbd_file)
+        kbd_pm = self._load_keyboard_pixmap(theme_key)
         if kbd_pm:
             cropped_pm, remapped_hs = self._crop_kbd_for_canvas(kbd_pm, hotspots)
             self._kbd_canvas.set_hotspots(remapped_hs)
+            self._kbd_canvas.set_wide_set(KBD_WIDE)
+            self._kbd_canvas.set_background(cropped_pm)
         else:
             self._kbd_canvas.set_hotspots(hotspots)
-            cropped_pm = None
-        self._kbd_canvas.set_wide_set(KBD_WIDE)
-        if cropped_pm:
-            self._kbd_canvas.set_background(cropped_pm)
+            self._kbd_canvas.set_wide_set(KBD_WIDE)
         self._kbd_canvas.hotspot_clicked.connect(self._on_kbd_hotspot_clicked)
         lay.addWidget(self._kbd_canvas, 1)
 
@@ -304,6 +302,28 @@ class MappingPopup(QDialog):
 
         self._selected_keycode: int | None = None
         self._tabs.addTab(page, "\u2328  Keyboard")
+
+    def _load_keyboard_pixmap(self, theme_key: str) -> QPixmap | None:
+        """Load keyboard.png for the active theme, searching misc/ as well."""
+        from pathlib import Path
+        here = Path(__file__).resolve()
+        repo = here.parents[4]
+        # Themed filename + fallback
+        candidates = [
+            ("keyboard-dark.png", "dark"),
+            ("keyboard.png", "dark"),
+            ("keyboard.png", "default"),
+        ] if theme_key == "dark" else [
+            ("keyboard.png", "default"),
+            ("keyboard.png", "dark"),
+        ]
+        for fname, tk in candidates:
+            misc_root = repo / "docs" / "ui" / tk / "misc"
+            pm = self._main.assets.load_pixmap(fname, extra_roots=[misc_root])
+            if pm:
+                return pm
+        # Last resort: let asset manager find it however it can
+        return self._main.assets.load_pixmap("keyboard.png")
 
     @staticmethod
     def _crop_kbd_for_canvas(
