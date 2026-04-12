@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 from joycon_helper.ui.widgets.live_input_visualizer import (
+    describe_layer_activity,
+    describe_macro_activity,
+    describe_mapped_key_activity,
     device_index_for_key_id,
     describe_rssi,
     display_label_for_key_id,
@@ -33,6 +36,14 @@ def test_display_label_for_key_id_is_device_aware() -> None:
     assert device_index_for_key_id(129) == 1
     assert display_label_for_key_id(1) == "Forward"
     assert display_label_for_key_id(129) == "Forward [D1]"
+
+
+def test_activity_descriptions_are_human_readable() -> None:
+    assert describe_mapped_key_activity(5, True) == "Jump pressed"
+    assert describe_mapped_key_activity(133, False) == "Jump [D1] released"
+    assert describe_layer_activity("Precision", True) == "Layer Precision enabled"
+    assert describe_layer_activity("Precision", False) == "Layer Precision disabled"
+    assert describe_macro_activity("loot-run", "started") == "Macro loot-run started"
 
 
 def test_describe_rssi_quality_bands() -> None:

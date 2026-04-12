@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import html
 from dataclasses import dataclass, field
+from collections import deque
 from typing import TYPE_CHECKING
 
 from PyQt6.QtCore import QSize, Qt
@@ -135,6 +136,25 @@ class _VisualizerState:
     controller_name: str = "Awaiting controller"
 
 
+@dataclass(frozen=True)
+class _RecentActivityEntry:
+    category: str
+    label: str
+
+
+def describe_mapped_key_activity(key_id: int, pressed: bool) -> str:
+    action = "pressed" if pressed else "released"
+    return f"{display_label_for_key_id(key_id)} {action}"
+
+
+def describe_layer_activity(name: str, active: bool) -> str:
+    return f"Layer {name} {'enabled' if active else 'disabled'}"
+
+
+def describe_macro_activity(macro_id: str, state: str) -> str:
+    return f"Macro {macro_id} {state}"
+
+
 class LiveInputVisualizerWidget(QWidget):
     def __init__(self, main: MainWindow, *, compact: bool = False) -> None:
         super().__init__()
@@ -144,6 +164,7 @@ class LiveInputVisualizerWidget(QWidget):
         self._active_key_ids: set[int] = set()
         self._battery_levels: dict[int, int] = {}
         self._rssi_levels: dict[int, int] = {}
+        self._recent_activity: deque[_RecentActivityEntry] = deque(maxlen=8)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -167,6 +188,11 @@ class LiveInputVisualizerWidget(QWidget):
         self._badge_label.setTextFormat(Qt.TextFormat.RichText)
         layout.addWidget(self._badge_label)
 
+        self._history_label = QLabel("Recent activity: —")
+        self._history_label.setWordWrap(True)
+        self._history_label.setTextFormat(Qt.TextFormat.RichText)
+        layout.addWidget(self._history_label)
+
         self._render()
 
     def connection_changed(self, connected: bool) -> None:
@@ -175,6 +201,7 @@ class LiveInputVisualizerWidget(QWidget):
         self._active_key_ids.clear()
         self._battery_levels.clear()
         self._rssi_levels.clear()
+        self._recent_activity.clear()
         self._state = _VisualizerState(bt_state="Disconnected")
         self._render()
 
@@ -192,16 +219,20 @@ class LiveInputVisualizerWidget(QWidget):
                     self._active_key_ids.add(key_id)
                 else:
                     self._active_key_ids.discard(key_id)
+                self._push_recent_activity("input", describe_mapped_key_activity(key_id, pressed))
         elif evt == "layer":
             layer_name = str(obj.get("name") or "Unnamed")
-            if bool(obj.get("active")):
+            active = bool(obj.get("active"))
+            if active:
                 self._state.active_layers.add(layer_name)
             else:
                 self._state.active_layers.discard(layer_name)
+            self._push_recent_activity("layer", describe_layer_activity(layer_name, active))
         elif evt == "macro":
             macro_id = str(obj.get("id") or "?")
             macro_state = str(obj.get("state") or "?")
             self._state.last_macro = f"{macro_id} ({macro_state})"
+            self._push_recent_activity("macro", describe_macro_activity(macro_id, macro_state))
         elif evt == "battery":
             device_id = obj.get("device_id")
             level = obj.get("level")
@@ -263,6 +294,7 @@ class LiveInputVisualizerWidget(QWidget):
             "Active controls: " + (", ".join(active_labels) if active_labels else "—")
         )
         self._badge_label.setText(self._build_badge_markup())
+        self._history_label.setText(self._build_recent_activity_markup())
 
     @staticmethod
     def _battery_text(level: int | None) -> str:
@@ -334,6 +366,20 @@ class LiveInputVisualizerWidget(QWidget):
         if not sections:
             return "Action badges: —"
         return "<br/>".join(sections)
+
+    def _build_recent_activity_markup(self) -> str:
+        if not self._recent_activity:
+            return "Recent activity: —"
+        items = [
+            self._badge_markup(entry.label, accent=entry.category == "input")
+            for entry in reversed(self._recent_activity)
+        ]
+        return "<b>Recent activity:</b> " + " ".join(items)
+
+    def _push_recent_activity(self, category: str, label: str) -> None:
+        if self._recent_activity and self._recent_activity[-1] == _RecentActivityEntry(category, label):
+            return
+        self._recent_activity.append(_RecentActivityEntry(category, label))
 
     def _badge_markup(self, label: str, *, accent: bool) -> str:
         bg = self._main.theme.color("selected_bg" if accent else "button_bg")
