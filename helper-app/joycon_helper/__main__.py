@@ -13,11 +13,16 @@ def _run() -> None:
     from PyQt6.QtCore import QSettings
     from PyQt6.QtWidgets import QApplication
 
+    from joycon_helper.ui.assets import register_app_fonts
     from joycon_helper.ui.main_window import MainWindow
 
     app = QApplication(sys.argv)
     app.setApplicationName("Bind Bandit")
     app.setOrganizationName("JoyConBridge")
+
+    # Register custom fonts before any widgets are created.
+    register_app_fonts()
+
     # Keep the app alive when the window is hidden (system tray mode).
     app.setQuitOnLastWindowClosed(False)
 

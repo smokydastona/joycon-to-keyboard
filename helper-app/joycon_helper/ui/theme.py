@@ -104,8 +104,8 @@ LIGHT_THEME: dict[str, Any] = {
         "tab_inactive_bg": "#e0d8cc",
     },
     "typography": {
-        "font_family": "Segoe UI",
-        "font_family_decorative": "Segoe Print",
+        "font_family": "Doodle",
+        "font_family_decorative": "Doodle",
         "font_size": 10,
         "font_size_sm": 9,
         "font_size_lg": 12,
@@ -169,8 +169,8 @@ DARK_THEME: dict[str, Any] = {
         "tab_inactive_bg": "#0A1A2F",
     },
     "typography": {
-        "font_family": "Segoe UI",
-        "font_family_decorative": "Segoe Print",
+        "font_family": "Doodle",
+        "font_family_decorative": "Doodle",
         "font_size": 10,
         "font_size_sm": 9,
         "font_size_lg": 12,

@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 from PyQt6.QtCore import QSize, Qt
-from PyQt6.QtGui import QColor, QImage, QPainter, QPixmap
+from PyQt6.QtGui import QColor, QFontDatabase, QImage, QPainter, QPixmap
 
 log = logging.getLogger("joycon_helper.ui.assets")
 
@@ -67,6 +67,38 @@ def ui_bundle_search_roots() -> list[Path]:
         here.parents[3] / ".ui-bundle",       # repo root/.ui-bundle
     ])
     return _dedupe_paths(roots)
+
+
+def register_app_fonts() -> None:
+    """Load custom fonts from the UI bundle into Qt's font database.
+
+    Must be called after ``QApplication`` is created, before any widgets
+    are instantiated.
+    """
+    # Font files stored under ``fonts/`` in the UI bundle.
+    _FONTS = ("Doodle.otf",)
+
+    search_roots = ui_bundle_search_roots()
+    # Also add the raw docs path so fonts work without running generate_ui_bundle
+    here = Path(__file__).resolve()
+    search_roots.append(here.parents[3] / "docs" / "ui" / "fonts")
+
+    for font_name in _FONTS:
+        for root in search_roots:
+            candidate = root / "fonts" / font_name
+            if not candidate.exists():
+                # direct path (e.g. docs/ui/fonts/Doodle.otf)
+                candidate = root / font_name
+            if candidate.exists():
+                fid = QFontDatabase.addApplicationFont(str(candidate))
+                if fid >= 0:
+                    families = QFontDatabase.applicationFontFamilies(fid)
+                    log.debug("Registered font %s → families %s", font_name, families)
+                else:
+                    log.warning("Failed to register font %s (path: %s)", font_name, candidate)
+                break
+        else:
+            log.warning("Custom font %s not found in any search root", font_name)
 
 
 def device_image_search_roots(theme: str = "default") -> list[Path]:

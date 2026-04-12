@@ -89,6 +89,7 @@ UI_BUNDLE_INPUTS = [
     UI_DIR / "misc" / "components" / "log-entry.png",
     UI_DIR / "misc" / "components" / "tooltip.png",
     UI_DIR / "misc" / "previews" / "dashboard-heist-mockup.png",
+    UI_DIR / "fonts" / "Doodle.otf",
 ]
 
 

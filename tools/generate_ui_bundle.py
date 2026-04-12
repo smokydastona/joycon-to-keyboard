@@ -171,6 +171,8 @@ LIGHT_OVERLAYS = {
     "keyboard.png": Path("docs/ui/default/misc/keyboard.png"),
     "background.png": Path("docs/ui/default/backgrounds/background.png"),
     "pinouts.png": Path("docs/ui/misc/pinouts.png"),
+    # Custom fonts
+    "fonts/Doodle.otf": Path("docs/ui/fonts/Doodle.otf"),
     # Heist-theme misc assets
     "misc/sticky-note.png": Path("docs/ui/misc/sticky-note.png"),
     "misc/polaroid-frame.png": Path("docs/ui/misc/polaroid-frame.png"),
@@ -207,6 +209,8 @@ DARK_OVERLAYS = {
     "keyboard.png": Path("docs/ui/dark/misc/keyboard-dark.png"),
     "background-dark.png": Path("docs/ui/dark/backgrounds/background-dark.png"),
     "pinouts.png": Path("docs/ui/misc/pinouts.png"),
+    # Custom fonts
+    "fonts/Doodle.otf": Path("docs/ui/fonts/Doodle.otf"),
     # Heist-theme misc assets (shared with light)
     "misc/sticky-note.png": Path("docs/ui/misc/sticky-note.png"),
     "misc/polaroid-frame.png": Path("docs/ui/misc/polaroid-frame.png"),
