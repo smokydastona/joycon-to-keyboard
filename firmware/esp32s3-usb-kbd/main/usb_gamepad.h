@@ -8,6 +8,11 @@
 
 void usb_gamepad_init(void);
 
+// When disabled, the USB gamepad interface still enumerates, but the firmware
+// stops sending gamepad reports.
+void usb_gamepad_set_enabled(bool enabled);
+bool usb_gamepad_get_enabled(void);
+
 // key_id uses the expanded multi-device space: key_id = device_id*128 + base_key_id.
 void usb_gamepad_handle_key(bool pressed, uint16_t key_id);
 

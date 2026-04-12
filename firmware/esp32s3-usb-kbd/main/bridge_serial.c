@@ -24,6 +24,7 @@
 #include "uart_proto.h"
 #include "fw_ota.h"
 #include "config_block.h"
+#include "usb_gamepad.h"
 
 static const char *TAG = "bridge-serial";
 
@@ -693,6 +694,26 @@ static void handle_home_led(cJSON *root) {
     respond_ok_simple("home_led");
 }
 
+static void handle_set_gamepad_enabled(cJSON *root) {
+    // {"cmd":"set_gamepad_enabled", "enabled":true|false}
+    cJSON *en = cJSON_GetObjectItemCaseSensitive(root, "enabled");
+    if (!cJSON_IsBool(en)) {
+        respond_error("set_gamepad_enabled", "missing_enabled");
+        return;
+    }
+
+    usb_gamepad_set_enabled(cJSON_IsTrue(en));
+
+    cJSON *rsp = cJSON_CreateObject();
+    if (rsp) {
+        cJSON_AddStringToObject(rsp, "rsp", "set_gamepad_enabled");
+        cJSON_AddBoolToObject(rsp, "ok", true);
+        cJSON_AddBoolToObject(rsp, "enabled", usb_gamepad_get_enabled());
+        cdc_write_json(rsp);
+        cJSON_Delete(rsp);
+    }
+}
+
 static void handle_line(const char *line) {
     cJSON *root = cJSON_Parse(line);
     if (!root) {
@@ -737,6 +758,8 @@ static void handle_line(const char *line) {
         handle_rumble(root);
     } else if (strcmp(cmd->valuestring, "home_led") == 0) {
         handle_home_led(root);
+    } else if (strcmp(cmd->valuestring, "set_gamepad_enabled") == 0) {
+        handle_set_gamepad_enabled(root);
     } else if (strcmp(cmd->valuestring, "set_socd_mode") == 0) {
         cJSON *mode_j = cJSON_GetObjectItemCaseSensitive(root, "mode");
         uint8_t mode = 0;

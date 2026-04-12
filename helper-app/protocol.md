@@ -16,6 +16,19 @@ All commands are JSON objects containing a `cmd`.
 {"cmd":"ping"}
 ```
 
+### Enable / disable gamepad reports
+
+This does **not** change USB enumeration; it only stops/starts sending HID gamepad reports.
+Useful if a game is listening to both keyboard/mouse and controller at the same time.
+
+```json
+{"cmd":"set_gamepad_enabled","enabled":true}
+```
+
+```json
+{"cmd":"set_gamepad_enabled","enabled":false}
+```
+
 ### Write profile slot
 
 `profile` is a JSON object.

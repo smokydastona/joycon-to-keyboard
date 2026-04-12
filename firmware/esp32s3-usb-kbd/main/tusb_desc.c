@@ -112,9 +112,9 @@ enum {
 uint8_t const desc_configuration[] = {
     TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, CONFIG_TOTAL_LEN, 0x00, 100),
     TUD_CDC_DESCRIPTOR(ITF_NUM_CDC, 4, EPNUM_CDC_NOTIF, 8, EPNUM_CDC_OUT, EPNUM_CDC_IN, 64),
-    TUD_HID_DESCRIPTOR(ITF_NUM_HID_KBD, 0, HID_ITF_PROTOCOL_KEYBOARD, sizeof(desc_hid_report_kbd), EPNUM_HID_KBD, 16, 1),
-    TUD_HID_DESCRIPTOR(ITF_NUM_HID_MOUSE, 5, HID_ITF_PROTOCOL_MOUSE, sizeof(desc_hid_report_mouse), EPNUM_HID_MOUSE, 16, 1),
-    TUD_HID_DESCRIPTOR(ITF_NUM_HID_GAMEPAD, 6, HID_ITF_PROTOCOL_NONE, sizeof(desc_hid_report_gamepad), EPNUM_HID_GAMEPAD, 16, 1),
+    TUD_HID_DESCRIPTOR(ITF_NUM_HID_KBD, 5, HID_ITF_PROTOCOL_KEYBOARD, sizeof(desc_hid_report_kbd), EPNUM_HID_KBD, 16, 1),
+    TUD_HID_DESCRIPTOR(ITF_NUM_HID_MOUSE, 6, HID_ITF_PROTOCOL_MOUSE, sizeof(desc_hid_report_mouse), EPNUM_HID_MOUSE, 16, 1),
+    TUD_HID_DESCRIPTOR(ITF_NUM_HID_GAMEPAD, 7, HID_ITF_PROTOCOL_NONE, sizeof(desc_hid_report_gamepad), EPNUM_HID_GAMEPAD, 16, 1),
 };
 
 _Static_assert(sizeof(desc_configuration) == CONFIG_TOTAL_LEN,
@@ -124,14 +124,15 @@ _Static_assert(sizeof(desc_configuration) == CONFIG_TOTAL_LEN,
 char const* string_desc_arr[] = {
     (const char[]){0x09, 0x04},
     "Bind Bandit",
-    "InputGoblin",
+    "Bind Bandit",
     "00000001",
-    "InputGoblin CDC",
-    "InputGoblin Mouse",
-    "InputGoblin Gamepad",
+    "Architect",
+    "Composer",
+    "Forger",
+    "Executor",
 };
 
-#define STRING_DESC_ARR_SIZE 7
+#define STRING_DESC_ARR_SIZE 8
 const int string_desc_arr_count = STRING_DESC_ARR_SIZE;
 
 // Required HID callbacks

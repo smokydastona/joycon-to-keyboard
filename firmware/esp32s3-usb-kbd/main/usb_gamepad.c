@@ -70,6 +70,8 @@ static struct
     int16_t slot_ry[DEVICE_SLOT_COUNT];
 } g_gamepad;
 
+static bool g_gamepad_enabled = true;
+
 static int16_t scale_axis_i16(int16_t v)
 {
     // Incoming is approximately [-4096, +4096]. Scale to [-32767, +32767].
@@ -142,6 +144,9 @@ static void build_report(hid_gamepad_report_t *r)
 
 static void send_report_if_ready(void)
 {
+    if (!g_gamepad_enabled)
+        return;
+
     if (!tud_ready())
         return;
 
@@ -158,6 +163,31 @@ static void send_report_if_ready(void)
 void usb_gamepad_init(void)
 {
     memset(&g_gamepad, 0, sizeof(g_gamepad));
+    g_gamepad_enabled = true;
+}
+
+void usb_gamepad_set_enabled(bool enabled)
+{
+    g_gamepad_enabled = enabled;
+
+    // If disabling, send a neutral report so the host doesn't retain a stuck state.
+    if (!enabled)
+    {
+        if (!tud_ready())
+            return;
+        if (!tud_hid_n_ready(GAMEPAD_HID_INSTANCE))
+            return;
+
+        hid_gamepad_report_t r;
+        memset(&r, 0, sizeof(r));
+        r.hat = 8;
+        (void)tud_hid_n_report(GAMEPAD_HID_INSTANCE, 0, &r, sizeof(r));
+    }
+}
+
+bool usb_gamepad_get_enabled(void)
+{
+    return g_gamepad_enabled;
 }
 
 void usb_gamepad_handle_key(bool pressed, uint16_t key_id)
