@@ -43,10 +43,15 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "A wireless controller (Joy-Con / Pro Controller) connects to an ESP32 "
                 "board over Bluetooth Classic. That board sends key events over a UART "
                 "link to an ESP32-S3 board, which presents itself to the PC as a real "
-                "USB HID keyboard.\n\n"
+                "USB HID keyboard + mouse + gamepad.\n\n"
                 "## Why hardware?\n"
                 "Because the PC sees an actual USB keyboard, not a virtual driver or "
                 "injected input, it is fully compatible with anti-cheat systems.\n\n"
+
+                "## Gamepad (Steam / XInput)\n"
+                "The ESP32-S3 exposes a standard USB HID gamepad. If you need games to see "
+                "an Xbox/XInput controller, enable Steam Input and map this device as an "
+                "Xbox controller in Steam.\n\n"
                 "This helper app lets you configure key mappings, macros, stick behavior, "
                 "and device profiles over a serial connection to the ESP32-S3."
             ),
@@ -76,7 +81,7 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "  ESP32 GPIO16 (RX) ← ESP32-S3 D3 / GPIO6 (TX)\n"
                 "  GND ↔ GND\n\n"
                 "## USB connection\n"
-                "  ESP32-S3 USB port → PC (acts as keyboard + CDC serial)\n\n"
+                "  ESP32-S3 USB port → PC (acts as keyboard + mouse + gamepad + CDC serial)\n\n"
                 "## Important\n"
                 "The return UART wire (ESP32-S3 TX → ESP32 RX) is required for "
                 "helper-app features like bind management, profile sync, and OTA "
@@ -97,7 +102,7 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "## ESP32-S3 (USB Device)\n"
                 "  GPIO5  = UART RX / D2 (from ESP32 TX)\n"
                 "  GPIO6  = UART TX / D3 (to ESP32 RX)\n"
-                "  USB = HID Keyboard + CDC ACM"
+                "  USB = HID Keyboard + HID Mouse + HID Gamepad + CDC ACM"
             ),
             False,
         ),

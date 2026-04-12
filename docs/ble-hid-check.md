@@ -1,6 +1,6 @@
 # BLE HID check (5 minutes, no guessing)
 
-This project is **USB HID keyboard to the PC**. The only open question is the **wireless controller → board** link.
+This project is **USB HID (keyboard + mouse + gamepad) to the PC**. The only open question is the **wireless controller → board** link.
 
 Many people claim “Joy-Con is BLE HID so ESP32-S3 can host it.” Treat that as **unproven** until you can observe BLE HID services on the controller.
 

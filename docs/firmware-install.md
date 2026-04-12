@@ -11,7 +11,7 @@ The **Bind Bandit Web Flasher** is the primary way to flash both boards for the 
 1. Open the Web Flasher: <https://smokydastona.github.io/joycon-to-keyboard/>
 2. Use **Google Chrome** or **Microsoft Edge** (Web Serial required).
 
-### ESP32-S3 (USB Keyboard) — Arduino Nano ESP32
+### ESP32-S3 (USB HID Device) — Arduino Nano ESP32
 
 3. Plug in the board via **USB-C**.
 4. **Double-tap the RESET button** quickly (< 300 ms) — a new COM port appears.
@@ -55,7 +55,7 @@ If you haven’t read it yet, start with:
 
 ## What you’re flashing (two firmwares)
 
-### 1) ESP32-S3 (USB device keyboard)
+### 1) ESP32-S3 (USB HID device)
 
 Folder:
 
@@ -64,6 +64,7 @@ Folder:
 What it does:
 
 - Enumerates as a **real USB HID keyboard** (anti-cheat-safe hardware input)
+- Also enumerates as a **USB HID mouse** and **USB HID gamepad** (still hardware HID)
 - Receives UART frames from the ESP32 and turns them into HID key events
 - Also enumerates as a **USB serial COM port** (CDC-ACM) for the helper app
 
@@ -117,18 +118,18 @@ The usual ESP-IDF loop is:
 
 Notes:
 
-- Do **ESP32-S3 first**, because it’s the “front” of the dongle (USB keyboard to PC).
+- Do **ESP32-S3 first**, because it’s the “front” of the dongle (USB HID device to PC).
 - You can do everything from the ESP-IDF PowerShell.
 
 ---
 
-## Step-by-step: ESP32-S3 USB keyboard firmware
+## Step-by-step: ESP32-S3 USB HID device firmware
 
 ### A) Connect the ESP32-S3 to your PC
 
 - Plug the ESP32-S3 into USB.
 - Confirm Windows sees it (Device Manager):
-  - it should show a **USB keyboard** device after firmware is flashed
+   - it should show a **USB keyboard + mouse + gamepad** device after firmware is flashed
   - and usually a **COM port** (CDC-ACM) once running
 
 If it’s brand new and unflashed, it may not yet enumerate as the final composite device until you flash this repo’s firmware.
@@ -193,7 +194,7 @@ If the project exposes a UART port setting, keep the default unless you know you
 
 After flashing, when you plug the ESP32-S3 into the PC:
 
-- It enumerates as a **USB keyboard**.
+- It enumerates as a **USB keyboard + mouse + gamepad**.
 - If CDC is enabled, it enumerates as a **COM port**.
 - `idf.py monitor` shows logs indicating UART receive is running.
 

@@ -12,6 +12,7 @@
 #include "keymap.h"
 #include "usb_kbd.h"
 #include "usb_mouse.h"
+#include "usb_gamepad.h"
 #include "bridge_serial.h"
 #include "profile_runtime.h"
 #include "fw_ota.h"
@@ -47,6 +48,7 @@ void app_main(void) {
     fw_ota_mark_valid();
     usb_kbd_init();
     usb_mouse_init();
+    usb_gamepad_init();
     bridge_serial_init();
     profile_runtime_init();
     uart_proto_init();
@@ -64,6 +66,7 @@ void app_main(void) {
                 uint16_t key_id = (uint16_t)(event & 0x7Fu);
                 bridge_serial_emit_mapped_key(pressed, key_id);
                 profile_runtime_handle_input(pressed, key_id);
+                usb_gamepad_handle_key(pressed, key_id);
                 continue;
             }
 
@@ -79,6 +82,7 @@ void app_main(void) {
 
                 bridge_serial_emit_mapped_key(pressed, key_id);
                 profile_runtime_handle_input(pressed, key_id);
+                usb_gamepad_handle_key(pressed, key_id);
                 continue;
             }
 
@@ -137,6 +141,7 @@ void app_main(void) {
                 int16_t x = (int16_t)((uint16_t)f.payload[2] | ((uint16_t)f.payload[3] << 8));
                 int16_t y = (int16_t)((uint16_t)f.payload[4] | ((uint16_t)f.payload[5] << 8));
                 profile_runtime_handle_analog(device_id, x, y);
+                usb_gamepad_handle_analog(device_id, x, y);
                 continue;
             }
 

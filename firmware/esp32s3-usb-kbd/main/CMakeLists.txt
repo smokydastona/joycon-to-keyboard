@@ -8,6 +8,7 @@ idf_component_register(
         "uart_proto.c"
         "usb_kbd.c"
         "usb_mouse.c"
+        "usb_gamepad.c"
         "keymap.c"
         "tusb_desc.c"
     INCLUDE_DIRS "."

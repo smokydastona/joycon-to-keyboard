@@ -5,7 +5,7 @@ graph TD
   PC[PC (Windows)] -->|USB| S3[ESP32-S3 USB device]
 
   subgraph S3FW[ESP32-S3 firmware]
-    HID[USB HID Keyboard]
+    HID[USB HID Keyboard + Mouse + Gamepad]
     CDC[USB CDC ACM COM port]
     UARTRX[UART RX frame parser]
     UARTTX[UART TX control sender]
@@ -31,10 +31,10 @@ graph TD
   S3 -->|UART ctrl frames| ESP32FW
   ESP32FW -->|UART key/status frames| S3FW
 
-  APP[Helper app (Tkinter)] -->|NDJSON over COM| CDC
+  APP[Helper app (PyQt6)] -->|NDJSON over COM| CDC
   CDC -->|NDJSON events| APP
 
-  note1[[Anti-cheat constraint: PC sees a real USB HID keyboard]] --- HID
+  note1[[Anti-cheat constraint: PC sees a real USB HID device (not injected input)]] --- HID
 ```
 
 Notes:

@@ -3,14 +3,14 @@
 This project is designed to be a **single USB dongle** that contains **two boards**:
 
 - **ESP32 (Classic Bluetooth HID host)**: connects wirelessly to your Joy-Con / compatible controller.
-- **ESP32-S3 (USB device / keyboard)**: plugs into the PC and enumerates as a **real USB HID keyboard**.
+- **ESP32-S3 (USB device / keyboard)**: plugs into the PC and enumerates as a **real USB HID keyboard + mouse + gamepad**.
 
 The boards talk over **3.3V UART**. The ESP32-S3 also provides **power** to the ESP32 so the whole adapter can run from **one USB plug**.
 
 ## Big picture (what plugs into what)
 
 - **Only the ESP32-S3 plugs into the PC via USB.**
-  - The PC sees a keyboard (HID).
+	- The PC sees a keyboard + mouse + gamepad (HID).
   - Optionally, the PC also sees a COM port (USB CDC-ACM) for the helper app.
 - The ESP32 (Classic-BT host) is powered inside the dongle and never needs to connect to the PC.
 
@@ -25,7 +25,7 @@ You need **three wires** for a working adapter:
 3) **UART data (controller → keyboard)**
 	- ESP32 `TX` → ESP32-S3 `RX`
 
-That’s enough for: Joy-Con/Binbok → ESP32 → UART → ESP32-S3 → USB keyboard.
+That’s enough for: Joy-Con/Binbok → ESP32 → UART → ESP32-S3 → USB HID device.
 
 ## Recommended connections (required for full functionality)
 
@@ -128,6 +128,8 @@ The ESP32-S3 is the “front” of the dongle:
 	- ESP32 power LED should turn on (powered through VIN).
 2) PC should enumerate the ESP32-S3 as:
 	- a **USB keyboard** (HID)
+	- a **USB mouse** (HID)
+	- a **USB gamepad** (HID)
 	- optionally a **COM port** (CDC-ACM)
 3) With ESP32 firmware running:
 	- you should see BT discovery/connect logs in `idf.py monitor`.

@@ -7,7 +7,7 @@
 This workspace contains firmware for a **two-chip adapter**:
 
 - **ESP32 (Classic BT capable)** connects wirelessly to a Joy-Con and outputs a small, fixed **UART protocol**.
-- **ESP32-S3 (e.g. Arduino Nano ESP32-S3)** receives UART and exposes a **USB HID keyboard + mouse** composite device to the PC.
+- **ESP32-S3 (e.g. Arduino Nano ESP32-S3)** receives UART and exposes a **USB HID keyboard + mouse + gamepad** composite device to the PC.
   - It also exposes a **USB CDC-ACM serial (COM port)** for the `helper-app/` protocol.
 
 If you have an Arduino Nano ESP32 (ABX00083): see `docs/arduino-nano-esp32-setup.md`.
@@ -25,7 +25,7 @@ Before buying parts, read `docs/board-checklist.md`.
 ## Folder layout
 
 - `firmware/esp32-hid-host-uart/` — ESP32 firmware (HID host → UART)
-- `firmware/esp32s3-usb-kbd/` — ESP32-S3 firmware (USB HID keyboard + CDC serial)
+- `firmware/esp32s3-usb-kbd/` — ESP32-S3 firmware (USB HID keyboard + mouse + gamepad + CDC serial)
 - `tools/` — optional offline helpers (log decoding)
 - `helper-app/` — **Bind Bandit** PC app (PyQt6 UI with sidebar navigation — works standalone for M913 mouse config or Razer mouse config, or with the bridge hardware for Joy-Con profiles/logs, or any combination)
 - `docs/` — wiring + notes

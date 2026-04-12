@@ -13,7 +13,7 @@ To verify a board is right for this project, use **the chip marking on the board
 You need **both**:
 
 1) **Joy-Con wireless link** (very likely **Bluetooth Classic HID host**)
-2) **PC-facing keyboard** (USB **HID keyboard device**)
+2) **PC-facing USB HID device** (keyboard + mouse + gamepad)
 
 It is common that a single cheap board cannot do both reliably.
 

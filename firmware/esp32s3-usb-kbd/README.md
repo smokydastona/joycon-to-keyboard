@@ -1,7 +1,7 @@
 # esp32s3-usb-kbd (Arduino Nano ESP32 / ESP32-S3)
 
-Use an **ESP32-S3** board (like Arduino Nano ESP32) as the **USB HID keyboard** device.
-It reads UART frames from the Joy-Con receiver (a Classic-BT-capable board) and sends real USB keyboard reports to the PC.
+Use an **ESP32-S3** board (like Arduino Nano ESP32) as the **USB HID keyboard + mouse + gamepad** device.
+It reads UART frames from the Joy-Con receiver (a Classic-BT-capable board) and sends real USB HID reports to the PC.
 
 This firmware also exposes a **USB CDC-ACM serial interface (COM port)** so the desktop helper app can upload/read profiles and monitor events.
 
@@ -44,6 +44,8 @@ Then reload VS Code. The workspace includes a `.vscode/settings.json` that point
 When plugged into Windows, the board should enumerate as:
 
 - a USB keyboard (HID)
+- a USB mouse (HID)
+- a USB gamepad (HID)
 - a USB serial device (CDC-ACM → COM port)
 
 The serial protocol is NDJSON (one JSON object per line). See:
@@ -133,15 +135,18 @@ Profiles may include up to 4 **overlay layers**. Each layer is activated by a co
 
 Profiles may include up to 8 **chord combos**. Each chord defines 2–4 keys that, when pressed simultaneously, fire a single action (and suppress the individual key mappings). Chords are evaluated before individual mappings. See `helper-app/protocol.md` for the JSON schema.
 
-### USB HID mouse (composite device)
+### USB HID (composite device)
 
 The ESP32-S3 enumerates as a **composite USB device** with:
 
 - USB HID keyboard (boot keyboard protocol)
 - USB HID mouse (standard mouse report)
+- USB HID gamepad (standard gamepad report)
 - USB CDC-ACM serial port (COM port for helper app)
 
 The mouse interface enables analog stick → mouse cursor mapping and mouse button mappings — all through real hardware HID reports (anti-cheat safe).
+
+The gamepad interface is a standard HID gamepad; for games that require XInput, use Steam Input to map it to an Xbox controller.
 
 ### Right stick modes
 
