@@ -12,7 +12,7 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QPixmap
 from PyQt6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -266,15 +266,21 @@ class MappingPopup(QDialog):
         theme = self._main.theme
         theme_key = "dark" if theme.is_dark else "default"
         self._kbd_canvas = HotspotCanvas(theme, page)
-        self._kbd_canvas.setMinimumHeight(220)
+        self._kbd_canvas.setMinimumHeight(260)
         accent = theme.theme["colors"]["accent"]
         self._kbd_canvas.set_overlay_color(accent)
         hotspots = KBD_HOTSPOTS.get(theme_key, KBD_HOTSPOTS["default"])
-        self._kbd_canvas.set_hotspots(hotspots)
-        self._kbd_canvas.set_wide_set(KBD_WIDE)
-        kbd_pm = self._main.assets.load_pixmap("keyboard.png")
+        kbd_file = "keyboard-dark.png" if theme.is_dark else "keyboard.png"
+        kbd_pm = self._main.assets.load_pixmap(kbd_file)
         if kbd_pm:
-            self._kbd_canvas.set_background(kbd_pm)
+            cropped_pm, remapped_hs = self._crop_kbd_for_canvas(kbd_pm, hotspots)
+            self._kbd_canvas.set_hotspots(remapped_hs)
+        else:
+            self._kbd_canvas.set_hotspots(hotspots)
+            cropped_pm = None
+        self._kbd_canvas.set_wide_set(KBD_WIDE)
+        if cropped_pm:
+            self._kbd_canvas.set_background(cropped_pm)
         self._kbd_canvas.hotspot_clicked.connect(self._on_kbd_hotspot_clicked)
         lay.addWidget(self._kbd_canvas, 1)
 
@@ -298,6 +304,38 @@ class MappingPopup(QDialog):
 
         self._selected_keycode: int | None = None
         self._tabs.addTab(page, "\u2328  Keyboard")
+
+    @staticmethod
+    def _crop_kbd_for_canvas(
+        pixmap: QPixmap,
+        hotspots: list[tuple[str, float, float]],
+        pad: float = 0.04,
+    ) -> tuple[QPixmap, list[tuple[str, float, float]]]:
+        """Crop *pixmap* to the keyboard body (hotspot extents + padding).
+
+        Returns (cropped_pixmap, remapped_hotspots) so hotspot normalised
+        coordinates still point at the correct keys inside the crop.
+        """
+        from PyQt6.QtCore import QRect
+        xs = [x for _, x, _ in hotspots]
+        ys = [y for _, _, y in hotspots]
+        x0 = max(0.0, min(xs) - pad)
+        x1 = min(1.0, max(xs) + pad)
+        y0 = max(0.0, min(ys) - pad)
+        y1 = min(1.0, max(ys) + pad)
+        w, h = pixmap.width(), pixmap.height()
+        crop_rect = QRect(
+            round(x0 * w), round(y0 * h),
+            round((x1 - x0) * w), round((y1 - y0) * h),
+        )
+        cropped = pixmap.copy(crop_rect)
+        span_x = x1 - x0
+        span_y = y1 - y0
+        remapped = [
+            (name, (nx - x0) / span_x, (ny - y0) / span_y)
+            for name, nx, ny in hotspots
+        ]
+        return cropped, remapped
 
     def _on_kbd_hotspot_clicked(self, name: str) -> None:
         """Handle click on a keyboard image hotspot."""
