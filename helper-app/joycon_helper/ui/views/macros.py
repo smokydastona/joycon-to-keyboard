@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QGroupBox,
@@ -188,6 +189,21 @@ class MacrosView(QWidget):
         add_delay_btn.clicked.connect(self._add_delay_step)
         add_row.addWidget(add_delay_btn)
 
+        add_mouse_btn_step_btn = QPushButton("+ Mouse Button")
+        add_mouse_btn_step_btn.setToolTip("Add a USB HID mouse button step")
+        add_mouse_btn_step_btn.clicked.connect(self._add_mouse_btn_step)
+        add_row.addWidget(add_mouse_btn_step_btn)
+
+        add_mouse_move_btn = QPushButton("+ Mouse Move")
+        add_mouse_move_btn.setToolTip("Add a relative mouse cursor movement step")
+        add_mouse_move_btn.clicked.connect(self._add_mouse_move_step)
+        add_row.addWidget(add_mouse_move_btn)
+
+        add_chain_btn = QPushButton("+ Chain")
+        add_chain_btn.setToolTip("Add a macro-chain step that enqueues another macro")
+        add_chain_btn.clicked.connect(self._add_chain_step)
+        add_row.addWidget(add_chain_btn)
+
         del_step_btn = QPushButton("Remove Step")
         del_step_btn.setProperty("danger", True)
         del_step_btn.setToolTip("Remove the selected step")
@@ -263,6 +279,27 @@ class MacrosView(QWidget):
         opts_row.addWidget(self._macro_delay)
         opts_row.addStretch()
         right.addLayout(opts_row)
+
+        # Humanization row
+        humanize_row = QHBoxLayout()
+        self._humanize_check = QCheckBox("Humanize")
+        self._humanize_check.setToolTip(
+            "Add slight random jitter to step delays to make input look more natural"
+        )
+        humanize_row.addWidget(self._humanize_check)
+        humanize_row.addWidget(QLabel("Jitter ±"))
+        self._jitter_spin = QSpinBox()
+        self._jitter_spin.setRange(0, 200)
+        self._jitter_spin.setValue(10)
+        self._jitter_spin.setSuffix(" ms")
+        self._jitter_spin.setToolTip(
+            "Maximum random ±jitter applied to each step delay when Humanize is enabled"
+        )
+        self._jitter_spin.setEnabled(False)
+        self._humanize_check.toggled.connect(self._jitter_spin.setEnabled)
+        humanize_row.addWidget(self._jitter_spin)
+        humanize_row.addStretch()
+        right.addLayout(humanize_row)
 
         save_btn = QPushButton("Save Macro")
         save_btn.setProperty("accent", True)
@@ -583,12 +620,30 @@ class MacrosView(QWidget):
             self._step_list.addItem(text)
 
     def _add_key_step(self) -> None:
-        self._visual_steps.append({"keycode": 0x04, "press": True, "delay_ms": 50})
+        self._visual_steps.append({"type": "key", "keycode": 0x04, "press": True, "delay_ms": 50})
         self._refresh_step_list()
         self._step_list.setCurrentRow(len(self._visual_steps) - 1)
 
     def _add_delay_step(self) -> None:
-        self._visual_steps.append({"keycode": 0, "press": True, "delay_ms": 100})
+        self._visual_steps.append({"type": "key", "keycode": 0, "press": True, "delay_ms": 100})
+        self._refresh_step_list()
+        self._step_list.setCurrentRow(len(self._visual_steps) - 1)
+
+    def _add_mouse_btn_step(self) -> None:
+        self._visual_steps.append({"type": "mouse_btn", "button": 1, "press": True, "delay_ms": 0})
+        self._refresh_step_list()
+        self._step_list.setCurrentRow(len(self._visual_steps) - 1)
+
+    def _add_mouse_move_step(self) -> None:
+        self._visual_steps.append({"type": "mouse_move", "dx": 0, "dy": 0, "delay_ms": 0})
+        self._refresh_step_list()
+        self._step_list.setCurrentRow(len(self._visual_steps) - 1)
+
+    def _add_chain_step(self) -> None:
+        profile = self._main.get_profile()
+        macros = profile.get("macros", [])
+        macro_name = macros[0].get("name", "Macro 1") if macros else "Macro 1"
+        self._visual_steps.append({"type": "macro_chain", "macro_name": macro_name, "delay_ms": 0})
         self._refresh_step_list()
         self._step_list.setCurrentRow(len(self._visual_steps) - 1)
 
@@ -604,6 +659,12 @@ class MacrosView(QWidget):
             return
         self._step_editor_frame.setVisible(True)
         step = self._visual_steps[row]
+        step_type = step.get("type", "key")
+
+        # Show key editor only for plain key steps
+        self._step_editor_frame.setVisible(step_type in ("key", "", None))
+        if step_type not in ("key", "", None):
+            return
 
         # Block signals while populating
         self._step_key_combo.blockSignals(True)
@@ -624,10 +685,14 @@ class MacrosView(QWidget):
         row = self._step_list.currentRow()
         if row < 0 or row >= len(self._visual_steps):
             return
+        step = self._visual_steps[row]
+        if step.get("type") not in ("key", "", None):
+            return  # non-key steps are only editable via raw JSON
         kc = self._step_key_combo.currentData()
         if kc is None:
             kc = 0
         self._visual_steps[row] = {
+            "type": "key",
             "keycode": kc,
             "press": self._step_action_combo.currentIndex() == 0,
             "delay_ms": self._step_delay_spin.value(),
@@ -659,6 +724,10 @@ class MacrosView(QWidget):
             self._macro_steps.setText(json.dumps(m.get("steps", []), indent=2))
             self._macro_repeat.setValue(m.get("repeat", 1))
             self._macro_delay.setValue(m.get("delay_ms", 0))
+            humanize = m.get("humanize", False)
+            self._humanize_check.setChecked(humanize)
+            self._jitter_spin.setValue(m.get("jitter_ms", 10))
+            self._jitter_spin.setEnabled(humanize)
 
     def _add_macro(self) -> None:
         profile = self._main.get_profile()
@@ -713,6 +782,8 @@ class MacrosView(QWidget):
             "repeat": self._macro_repeat.value(),
             "delay_ms": self._macro_delay.value(),
             "trigger": self._macro_trigger.currentText().lower().replace(" ", "_"),
+            "humanize": self._humanize_check.isChecked(),
+            "jitter_ms": self._jitter_spin.value() if self._humanize_check.isChecked() else 0,
         }
         self._main.set_profile(profile)
         self._refresh_macro_list()

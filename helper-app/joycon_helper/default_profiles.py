@@ -122,6 +122,7 @@ _SLOT_0: dict[str, Any] = {
     "layers": [],
     "chords": [],
     "stick": _stick_defaults(),
+    "dpi_presets": [400, 800, 1600, 3200, 6400],
 }
 
 
@@ -172,6 +173,7 @@ _SLOT_1: dict[str, Any] = {
     "layers": [],
     "chords": [],
     "stick": _stick_defaults(),
+    "dpi_presets": [400, 800, 1600, 3200, 6400],
 }
 
 
@@ -222,6 +224,7 @@ _SLOT_2: dict[str, Any] = {
     "layers": [],
     "chords": [],
     "stick": _stick_defaults(),
+    "dpi_presets": [400, 800, 1600, 3200, 6400],
 }
 
 
@@ -274,6 +277,7 @@ _SLOT_3: dict[str, Any] = {
     "layers": [],
     "chords": [],
     "stick": _stick_defaults(),
+    "dpi_presets": [400, 800, 1600, 3200, 6400],
 }
 
 

@@ -97,6 +97,8 @@ ADVANCED_TYPES: list[tuple] = [
     ("doubletap", "Double-Tap", "Different action on double-tap vs single"),
     ("leader", "Leader Key", "Starts a leader-key sequence"),
     ("profileswitch", "Profile Switch", "Switch to a different profile slot"),
+    ("sniper", "Sniper Button", "Hold to drop DPI for precision aiming"),
+    ("dpi_cycle", "DPI Cycle", "Cycle through DPI presets on each press"),
     ("disable", "Disable", "Button does nothing"),
 ]
 
@@ -516,7 +518,11 @@ class MappingPopup(QDialog):
         self._adv_stack.addWidget(self._build_placeholder("Leader Key: starts a leader-key sequence."))
         # 9: profileswitch
         self._adv_stack.addWidget(self._build_profile_switch_config())
-        # 10: disable
+        # 10: sniper
+        self._adv_stack.addWidget(self._build_sniper_config())
+        # 11: dpi_cycle
+        self._adv_stack.addWidget(self._build_dpi_cycle_config())
+        # 12: disable
         self._adv_stack.addWidget(self._build_placeholder("Disable: this button does nothing when pressed."))
 
         lay.addWidget(self._adv_stack, 1)
@@ -649,6 +655,53 @@ class MappingPopup(QDialog):
         self._ps_slot.setToolTip("Target profile slot (0-3)")
         lay.addRow("Profile slot:", self._ps_slot)
 
+        return w
+
+    def _build_sniper_config(self) -> QWidget:
+        w = QWidget()
+        lay = QFormLayout(w)
+        lay.setSpacing(10)
+
+        lbl = QLabel(
+            "Sniper Button: hold to temporarily reduce DPI for precision aiming. "
+            "DPI returns to normal when released."
+        )
+        lbl.setWordWrap(True)
+        lbl.setStyleSheet("color: grey; font-size: 12px;")
+        lay.addRow(lbl)
+
+        self._sniper_dpi = QSpinBox()
+        self._sniper_dpi.setRange(100, 16000)
+        self._sniper_dpi.setSingleStep(100)
+        self._sniper_dpi.setValue(400)
+        self._sniper_dpi.setSuffix(" DPI")
+        self._sniper_dpi.setToolTip("DPI to use while the sniper button is held")
+        lay.addRow("Sniper DPI:", self._sniper_dpi)
+
+        return w
+
+    def _build_dpi_cycle_config(self) -> QWidget:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setSpacing(8)
+
+        lbl = QLabel(
+            "DPI Cycle: each press cycles through the sensitivity presets defined "
+            "in your profile's dpi_presets array (e.g. [800, 1600, 3200])."
+        )
+        lbl.setWordWrap(True)
+        lbl.setStyleSheet("color: grey; font-size: 12px;")
+        lay.addWidget(lbl)
+
+        hint = QLabel(
+            "Configure DPI presets in Target Assets → M913 Keypad or by editing "
+            "the profile JSON directly (\"dpi_presets\": [800, 1600, 3200])."
+        )
+        hint.setWordWrap(True)
+        hint.setStyleSheet("color: grey; font-size: 11px;")
+        lay.addWidget(hint)
+
+        lay.addStretch()
         return w
 
     def _on_adv_type_changed(self, index: int) -> None:
@@ -795,6 +848,9 @@ class MappingPopup(QDialog):
             elif type_id == "profileswitch":
                 entry["target_slot"] = self._ps_slot.value()
 
+            elif type_id == "sniper":
+                entry["sniper_dpi"] = self._sniper_dpi.value()
+
             return entry
 
         return None
@@ -867,6 +923,9 @@ class MappingPopup(QDialog):
 
             elif entry_type == "profileswitch":
                 self._ps_slot.setValue(self._entry.get("target_slot", 0))
+
+            elif entry_type == "sniper":
+                self._sniper_dpi.setValue(self._entry.get("sniper_dpi", 400))
 
             # Populate modifiers for types that use keyboard tab keycodes
             if entry_type in ("turbo", "toggle", "sticky", "oneshot", "autoshift"):
@@ -941,6 +1000,10 @@ class MappingPopup(QDialog):
             return "Disabled"
         if t == "profileswitch":
             return f"Profile Switch → slot {entry.get('target_slot', '?')}"
+        if t == "sniper":
+            return f"Sniper ({entry.get('sniper_dpi', 400)} DPI)"
+        if t == "dpi_cycle":
+            return "DPI Cycle"
         if t in {tid for tid, _, _ in ADVANCED_TYPES}:
             for tid, label, _ in ADVANCED_TYPES:
                 if tid == t:
