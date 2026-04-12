@@ -10,6 +10,7 @@ from PyQt6.QtGui import QColor, QFont, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from ..constants import KEYMAP_HOTSPOTS
+from ..theme import blend_hex
 
 if TYPE_CHECKING:
     from ..main_window import MainWindow
@@ -153,6 +154,12 @@ def describe_layer_activity(name: str, active: bool) -> str:
 
 def describe_macro_activity(macro_id: str, state: str) -> str:
     return f"Macro {macro_id} {state}"
+
+
+def activity_decay_amount(age_index: int) -> float:
+    if age_index <= 0:
+        return 0.0
+    return min(0.12 * age_index, 0.60)
 
 
 class LiveInputVisualizerWidget(QWidget):
@@ -371,8 +378,12 @@ class LiveInputVisualizerWidget(QWidget):
         if not self._recent_activity:
             return "Recent activity: —"
         items = [
-            self._badge_markup(entry.label, accent=entry.category == "input")
-            for entry in reversed(self._recent_activity)
+            self._badge_markup(
+                entry.label,
+                accent=entry.category == "input",
+                decay=activity_decay_amount(age_index),
+            )
+            for age_index, entry in enumerate(reversed(self._recent_activity))
         ]
         return "<b>Recent activity:</b> " + " ".join(items)
 
@@ -381,10 +392,16 @@ class LiveInputVisualizerWidget(QWidget):
             return
         self._recent_activity.append(_RecentActivityEntry(category, label))
 
-    def _badge_markup(self, label: str, *, accent: bool) -> str:
+    def _badge_markup(self, label: str, *, accent: bool, decay: float = 0.0) -> str:
+        surface = self._main.theme.color("surface")
+        panel = self._main.theme.color("panel")
         bg = self._main.theme.color("selected_bg" if accent else "button_bg")
         fg = self._main.theme.color("accent" if accent else "text")
         border = self._main.theme.color("accent" if accent else "border")
+        if decay > 0.0:
+            bg = blend_hex(bg, panel, decay)
+            fg = blend_hex(fg, self._main.theme.color("text_secondary"), decay)
+            border = blend_hex(border, surface, decay)
         return (
             f"<span style=\"background:{bg}; color:{fg}; border:1px solid {border}; "
             "border-radius:8px; padding:2px 6px;\">"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from joycon_helper.ui.widgets.live_input_visualizer import (
+    activity_decay_amount,
     describe_layer_activity,
     describe_macro_activity,
     describe_mapped_key_activity,
@@ -44,6 +45,13 @@ def test_activity_descriptions_are_human_readable() -> None:
     assert describe_layer_activity("Precision", True) == "Layer Precision enabled"
     assert describe_layer_activity("Precision", False) == "Layer Precision disabled"
     assert describe_macro_activity("loot-run", "started") == "Macro loot-run started"
+
+
+def test_activity_decay_amount_is_bounded_and_ordered() -> None:
+    assert activity_decay_amount(0) == 0.0
+    assert activity_decay_amount(1) > activity_decay_amount(0)
+    assert activity_decay_amount(3) > activity_decay_amount(1)
+    assert activity_decay_amount(50) == 0.60
 
 
 def test_describe_rssi_quality_bands() -> None:

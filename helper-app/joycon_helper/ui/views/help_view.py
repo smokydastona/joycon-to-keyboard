@@ -242,7 +242,7 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "It also includes a compact live visualizer that highlights button, stick, layer, macro, "
                 "battery, and RSSI state in real time, plus badge-style action chips for abstract inputs "
                 "such as Jump, Sprint, Crouch, and multi-device key spaces, along with a short recent-activity strip for "
-                "the latest input, layer, and macro events. Use Copy Summary for a quick shareable snapshot or "
+                "the latest input, layer, and macro events where older entries fade automatically. Use Copy Summary for a quick shareable snapshot or "
                 "Export Report to save a JSON file with controller metadata, calibration assessment, and "
                 "the recent event log."
             ),
