@@ -108,7 +108,7 @@ class ProfilesView(QWidget):
         outer.setSpacing(8)
 
         # Header
-        header = QLabel("Profiles")
+        header = QLabel("Crew Loadouts")
         header.setFont(QFont(
             self._main.theme.typo("font_family_decorative"),
             self._main.theme.typo("font_size_title"),
@@ -239,7 +239,7 @@ class ProfilesView(QWidget):
         pt.addWidget(undo_group)
 
         pt.addStretch()
-        tabs.addTab(profiles_tab, "Profiles")
+        tabs.addTab(profiles_tab, "Crew Loadouts")
 
         # ── App Switcher tab ─────────────────────────────────────────
         switch_tab = QWidget()

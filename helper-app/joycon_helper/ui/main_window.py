@@ -68,15 +68,15 @@ NAV_GYRO_ZONES = 8
 
 # Navigation item definitions: (icon_char, label)
 NAV_ITEMS = [
-    ("🏠", "Dashboard"),
-    ("🎮", "Mapping"),
-    ("⚡", "Macros & Stick"),
-    ("💾", "Profiles"),
-    ("🖱", "Devices"),
-    ("🔧", "Diagnostics"),
+    ("🏠", "Mission Control"),
+    ("🎮", "Blueprint Layout"),
+    ("⚡", "Operation Scripts"),
+    ("💾", "Crew Loadouts"),
+    ("🖱", "Target Assets"),
+    ("🔧", "Forensics"),
     ("❓", "Help"),
-    ("⚙", "Settings"),
-    ("🎯", "Gyro & Zones"),
+    ("⚙", "Safehouse Config"),
+    ("🎯", "Motion Grid"),
 ]
 
 
@@ -1140,7 +1140,7 @@ class MainWindow(QMainWindow):
 
     def _open_settings(self) -> None:
         dlg = QDialog(self)
-        dlg.setWindowTitle("Settings")
+        dlg.setWindowTitle("Safehouse Config")
         dlg.setMinimumWidth(460)
         layout = QVBoxLayout(dlg)
 

@@ -191,9 +191,9 @@ class OnboardingWizard(QDialog):
         lay4.addWidget(t4)
         lay4.addWidget(QLabel(
             "Your Joy-Con bridge is ready to use.\n\n"
-            "  • Go to Mapping to assign controller buttons to keyboard keys\n"
-            "  • Use Macros & Stick to create macro sequences\n"
-            "  • Visit Profiles to save and share your setups\n"
+            "  • Go to Blueprint Layout to assign controller buttons to keyboard keys\n"
+            "  • Use Operation Scripts to create macro sequences\n"
+            "  • Visit Crew Loadouts to save and share your setups\n"
             "  • Check the Help tab for detailed documentation\n\n"
             "Happy gaming!"
         ))

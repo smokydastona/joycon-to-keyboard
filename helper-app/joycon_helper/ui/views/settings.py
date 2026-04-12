@@ -51,7 +51,7 @@ class SettingsView(QScrollArea):
         self._layout.setSpacing(20)
 
         # Title
-        title = QLabel("Settings")
+        title = QLabel("Safehouse Config")
         title.setFont(QFont(
             main.theme.typo("font_family_decorative"),
             main.theme.typo("font_size_title"),

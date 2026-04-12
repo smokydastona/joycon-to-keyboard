@@ -54,7 +54,7 @@ class DashboardView(QScrollArea):
 
     # -----------------------------------------------------------------
     def _build_header(self) -> None:
-        header = QLabel("Dashboard")
+        header = QLabel("Mission Control")
         header.setFont(QFont(
             self._main.theme.typo("font_family_decorative"),
             self._main.theme.typo("font_size_title"),
