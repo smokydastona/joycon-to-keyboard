@@ -81,6 +81,8 @@ static volatile uint8_t s_esp32_ota_rsp_id = 0;
 static volatile uint8_t s_esp32_ota_rsp_status = 0;
 static uint8_t s_esp32_ota_rsp_data[64];
 static volatile uint8_t s_esp32_ota_rsp_data_len = 0;
+// Set when legacy ESP32 firmware (< 0.1.249) is detected, to skip ACK waits.
+static bool s_esp32_ota_legacy_mode = false;
 
 static void cdc_write_line(const char *line) {
     if (!tud_cdc_connected()) return;
@@ -433,6 +435,7 @@ static void handle_fw_update_begin(cJSON *root) {
 
     if (is_board_esp32(root)) {
         // Relay to ESP32.
+        s_esp32_ota_legacy_mode = false;  // reset; detected fresh on first data chunk
         uint8_t buf[4];
         buf[0] = (uint8_t)(total_size & 0xFF);
         buf[1] = (uint8_t)((total_size >> 8) & 0xFF);
@@ -490,16 +493,23 @@ static void handle_fw_update_data(cJSON *root) {
             uart_proto_send_ctrl(CTRL_CMD_OTA_DATA, &s_ota_buf[offset], (uint8_t)chunk);
             offset += chunk;
 
-            if (!wait_esp32_ota_rsp(OTA_RSP_DATA, 5000)) {
-                fw_ota_abort();
-                uart_proto_send_ctrl(CTRL_CMD_OTA_ABORT, NULL, 0);
-                respond_error("fw_update_data", "esp32_data_timeout");
-                return;
-            }
-            if (s_esp32_ota_rsp_status != 0x00) {
-                uart_proto_send_ctrl(CTRL_CMD_OTA_ABORT, NULL, 0);
-                respond_error("fw_update_data", "esp32_data_write_failed");
-                return;
+            if (!s_esp32_ota_legacy_mode) {
+                // 100 ms is generous for a non-sector-boundary write (~1 ms);
+                // a timeout means the remote is legacy firmware with no ACK support.
+                if (!wait_esp32_ota_rsp(OTA_RSP_DATA, 100)) {
+                    ESP_LOGW(TAG, "OTA relay: no per-chunk ACK "
+                             "(legacy firmware) -- using timed-delay mode");
+                    s_esp32_ota_legacy_mode = true;
+                    // 50 ms keeps us well inside the 2048-byte UART RX buffer
+                    // even if the remote is busy with a sector erase (~100 ms worst).
+                    vTaskDelay(pdMS_TO_TICKS(50));
+                } else if (s_esp32_ota_rsp_status != 0x00) {
+                    uart_proto_send_ctrl(CTRL_CMD_OTA_ABORT, NULL, 0);
+                    respond_error("fw_update_data", "esp32_data_write_failed");
+                    return;
+                }
+            } else {
+                vTaskDelay(pdMS_TO_TICKS(50));
             }
         }
         respond_ok_simple("fw_update_data");
