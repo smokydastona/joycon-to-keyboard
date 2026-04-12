@@ -8,18 +8,26 @@
 
 set -e
 
-if command -v py >/dev/null 2>&1; then
-  py -3 tools/versioning.py write-repo-version --output version.json --next-commit
-  py -3 tools/versioning.py write-app-version --repo-version version.json --output helper-app/joycon_helper/_version.py
-  py -3 tools/generate_ui_artifacts.py
+PY=""
+PY_ARGS=""
+
+# Prefer the repo venv if present so UI artifacts are generated with pinned deps
+# (avoids churn across machines with different global Pillow versions).
+if [ -x "./.venv/Scripts/python.exe" ]; then
+  PY="./.venv/Scripts/python.exe"
+elif command -v py >/dev/null 2>&1; then
+  PY="py"
+  PY_ARGS="-3"
 elif command -v python >/dev/null 2>&1; then
-  python tools/versioning.py write-repo-version --output version.json --next-commit
-  python tools/versioning.py write-app-version --repo-version version.json --output helper-app/joycon_helper/_version.py
-  python tools/generate_ui_artifacts.py
+  PY="python"
 else
   echo "[pre-commit] python/py not found; cannot generate mandatory UI artifacts" >&2
   exit 1
 fi
+
+"$PY" $PY_ARGS tools/versioning.py write-repo-version --output version.json --next-commit
+"$PY" $PY_ARGS tools/versioning.py write-app-version --repo-version version.json --output helper-app/joycon_helper/_version.py
+"$PY" $PY_ARGS tools/generate_ui_artifacts.py
 
 # Stage the auto-incremented repo version file and app version.
 git add version.json 2>/dev/null || true

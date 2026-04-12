@@ -16,11 +16,11 @@ from joycon_helper.serial_client import (
 
 class TestCRC16:
     def test_empty_input(self):
-        assert _crc16_ccitt(b"") == 0xFFFF
+        assert _crc16_ccitt(b"") == 0x0000
 
     def test_known_vector(self):
-        # "123456789" → CRC-16/CCITT-FALSE = 0x29B1
-        assert _crc16_ccitt(b"123456789") == 0x29B1
+        # "123456789" → CRC-16/XMODEM = 0x31C3
+        assert _crc16_ccitt(b"123456789") == 0x31C3
 
     def test_single_byte(self):
         result = _crc16_ccitt(b"\x00")

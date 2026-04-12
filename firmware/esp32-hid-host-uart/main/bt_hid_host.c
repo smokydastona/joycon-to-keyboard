@@ -21,6 +21,7 @@
 #include "joycon_mapper.h"
 #include "uart_framing.h"
 #include "joycon_setup.h"
+#include "config.h"
 
 static const char* TAG = "bt-hidh";
 
@@ -29,13 +30,13 @@ static esp_bd_addr_t s_target_bda = {0};
 
 typedef struct {
     bool connected;
-    uint8_t device_id;  // 0 = left, 1 = right
+    uint8_t device_id;  // 0..(BRIDGE_MAX_DEVICES-1)
     uint16_t handle;
     esp_bd_addr_t bda;
     char name[64];
 } conn_dev_t;
 
-static conn_dev_t s_dev[2] = {0};
+static conn_dev_t s_dev[BRIDGE_MAX_DEVICES] = {0};
 static bool s_dual_connect = false;
 static uint8_t s_pending_device_id = 0;
 static char s_pending_name[64] = {0};
@@ -152,8 +153,23 @@ static bool bda_eq(const esp_bd_addr_t a, const esp_bd_addr_t b) {
     return memcmp(a, b, sizeof(esp_bd_addr_t)) == 0;
 }
 
+static int connected_count(void) {
+    int n = 0;
+    for (int i = 0; i < BRIDGE_MAX_DEVICES; i++) {
+        if (s_dev[i].connected) n++;
+    }
+    return n;
+}
+
+static int find_free_slot(void) {
+    for (int i = 0; i < BRIDGE_MAX_DEVICES; i++) {
+        if (!s_dev[i].connected) return i;
+    }
+    return -1;
+}
+
 static bool is_bda_connected(const esp_bd_addr_t bda) {
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < BRIDGE_MAX_DEVICES; i++) {
         if (s_dev[i].connected && bda_eq(s_dev[i].bda, bda)) {
             return true;
         }
@@ -182,7 +198,18 @@ static const char* bda_to_str(const esp_bd_addr_t bda, char* out, size_t out_len
 static void try_connect(const esp_bd_addr_t bda, uint8_t device_id, const char* name) {
     if (s_connecting) return;
 
-    s_pending_device_id = (device_id > 1) ? 0 : device_id;
+    // Refuse new connects when all slots are full.
+    if (find_free_slot() < 0) {
+        ESP_LOGW(TAG, "No free device slots (max=%d); ignoring connect", BRIDGE_MAX_DEVICES);
+        return;
+    }
+
+    uint8_t pending = device_id;
+    if (pending >= BRIDGE_MAX_DEVICES || s_dev[pending].connected) {
+        int free_slot = find_free_slot();
+        pending = (free_slot >= 0) ? (uint8_t)free_slot : 0;
+    }
+    s_pending_device_id = pending;
     if (name) {
         strncpy(s_pending_name, name, sizeof(s_pending_name) - 1);
         s_pending_name[sizeof(s_pending_name) - 1] = 0;
@@ -248,7 +275,18 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
             bridge_send_bt_status(4, param->open.bd_addr, NULL);
 
             // Best-effort: stash this connection into the requested slot.
-            uint8_t slot = (s_pending_device_id > 1) ? 0 : s_pending_device_id;
+            uint8_t slot = s_pending_device_id;
+            if (slot >= BRIDGE_MAX_DEVICES) slot = 0;
+            if (s_dev[slot].connected) {
+                int free_slot = find_free_slot();
+                if (free_slot >= 0) {
+                    slot = (uint8_t)free_slot;
+                } else {
+                    ESP_LOGW(TAG, "No free device slot for incoming connection; dropping");
+                    s_connecting = false;
+                    break;
+                }
+            }
             s_dev[slot].connected = true;
             s_dev[slot].device_id = slot;
             s_dev[slot].handle = param->open.handle;
@@ -314,7 +352,7 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
             // Clear any slot matching this handle.
             esp_bd_addr_t closed_bda = {0};
             bool have_bda = false;
-            for (int i = 0; i < 2; i++) {
+            for (int i = 0; i < BRIDGE_MAX_DEVICES; i++) {
                 if (!s_dev[i].connected) continue;
                 if (s_dev[i].handle == param->close.handle) {
                     memcpy(closed_bda, s_dev[i].bda, sizeof(esp_bd_addr_t));
@@ -392,7 +430,7 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
 #endif
 
                 uint8_t device_id = 0;
-                for (int i = 0; i < 2; i++) {
+                for (int i = 0; i < BRIDGE_MAX_DEVICES; i++) {
                     if (s_dev[i].connected && s_dev[i].handle == param->data_ind.handle) {
                         device_id = s_dev[i].device_id;
                         break;
@@ -426,14 +464,15 @@ static esp_timer_handle_t s_disc_restart_timer = NULL;
 static void disc_restart_cb(void *arg) {
     (void)arg;
     // Re-check conditions in case a connection arrived during the delay.
-    if (!s_dev[0].connected && !s_dev[1].connected && !s_connecting) {
+    int desired = s_dual_connect ? 2 : BRIDGE_MAX_DEVICES;
+    if (connected_count() < desired && !s_connecting) {
         bt_hid_host_start_discovery();
     }
 }
 
 static void rssi_poll_cb(void *arg) {
     (void)arg;
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < BRIDGE_MAX_DEVICES; i++) {
         if (s_dev[i].connected) {
             esp_bt_gap_read_rssi_delta(s_dev[i].bda);
         }
@@ -491,6 +530,14 @@ static void gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t* param) {
                     if (device_id < 2 && s_dev[device_id].connected) {
                         break;
                     }
+                } else {
+                    int free_slot = find_free_slot();
+                    if (free_slot < 0) {
+                        ESP_LOGI(TAG, "All %d device slots full; stopping discovery", BRIDGE_MAX_DEVICES);
+                        esp_bt_gap_cancel_discovery();
+                        break;
+                    }
+                    device_id = (uint8_t)free_slot;
                 }
 
                 bridge_send_bt_status(2, param->disc_res.bda, found_name);
@@ -508,11 +555,11 @@ static void gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t* param) {
                 // doesn't fire mid-scan and cancel the running inquiry.
                 esp_timer_stop(s_disc_restart_timer);
             } else if (param->disc_st_chg.state == 0 &&
-                       !s_dev[0].connected && !s_dev[1].connected &&
+                       connected_count() < (s_dual_connect ? 2 : BRIDGE_MAX_DEVICES) &&
                        !s_connecting &&
                        !esp_timer_is_active(s_disc_restart_timer)) {
                 // Scan ended naturally (not cancelled by a pending restart).
-                ESP_LOGI(TAG, "No device connected after scan; restarting discovery in 2 s");
+                ESP_LOGI(TAG, "Discovery ended; restarting in 2 s");
                 esp_timer_start_once(s_disc_restart_timer, 2000000);  // 2 s
             }
             break;
@@ -539,9 +586,9 @@ static void gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t* param) {
                 int8_t rssi = param->read_rssi_delta.rssi_delta;
                 // Find device_id by BDA
                 uint8_t dev_id = 0;
-                for (int i = 0; i < 2; i++) {
+                for (int i = 0; i < BRIDGE_MAX_DEVICES; i++) {
                     if (s_dev[i].connected && bda_eq(s_dev[i].bda, param->read_rssi_delta.bda)) {
-                        dev_id = (uint8_t)i;
+                        dev_id = s_dev[i].device_id;
                         break;
                     }
                 }

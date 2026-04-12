@@ -40,4 +40,4 @@ graph TD
 Notes:
 
 - The helper app never injects inputs; it only configures profiles and requests BT scan/connect.
-- Legacy 1-byte key events remain supported; dual Joy-Con uses extended key events.
+- Legacy 1-byte key events remain supported; multi-device setups use extended key events.

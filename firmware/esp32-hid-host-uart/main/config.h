@@ -4,6 +4,10 @@
 #define BRIDGE_UART_PORT UART_NUM_2
 #define BRIDGE_UART_BAUD 921600
 
+// Hard limit for concurrently connected Bluetooth HID devices.
+// Device IDs range 0..(BRIDGE_MAX_DEVICES-1).
+#define BRIDGE_MAX_DEVICES 5
+
 // Common ESP32 dev board pins (adjust as needed)
 #define BRIDGE_UART_TX_GPIO 17
 #define BRIDGE_UART_RX_GPIO 16

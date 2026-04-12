@@ -2,7 +2,7 @@
 
 #include "tusb.h"
 
-bool keymap_lookup(uint8_t key_id, uint8_t* modifier, uint8_t* keycode) {
+bool keymap_lookup(uint16_t key_id, uint8_t* modifier, uint8_t* keycode) {
     *modifier = 0;
     *keycode = 0;
 
@@ -133,11 +133,11 @@ bool keymap_lookup(uint8_t key_id, uint8_t* modifier, uint8_t* keycode) {
             return true;
 
         default:
-            // Right controller IDs (128 + base): mirror the left-side default.
-            // This allows the right Joy-Con to produce the same keycodes by
-            // default; per-profile overrides can assign distinct bindings.
+            // Any non-zero device's IDs are offset by 128 * device_id.
+            // Mirror the base (0..127) default mapping unless overridden
+            // by profile mappings.
             if (key_id >= 128) {
-                return keymap_lookup((uint8_t)(key_id - 128), modifier, keycode);
+                return keymap_lookup((uint16_t)(key_id % 128u), modifier, keycode);
             }
             return false;
     }

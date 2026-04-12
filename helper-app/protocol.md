@@ -21,6 +21,7 @@ All commands are JSON objects containing a `cmd`.
 `profile` is a JSON object.
 
 Current expectation (v1): the keyboard-side device receives `key_id` up/down events from UART.
+The input `key_id` space is `device_id*128 + base_key_id` and currently ranges 0..639.
 Profiles may:
 
 - remap an input `key_id` to a different output `key_id`
@@ -643,10 +644,8 @@ Example:
 Notes:
 
 - `key_id` is an *input key id*.
-- Single-controller mode uses `key_id` 0..127.
-- Dual Joy-Con mode uses:
-	- left Joy-Con: `key_id` 0..127
-	- right Joy-Con: `key_id` 128..255 (base + 128)
+- Legacy 1-byte key events use `key_id` 0..127 (device_id implicitly 0).
+- Multi-device mode uses `key_id = device_id * 128 + base_key_id` and currently ranges 0..639.
 
 Macro execution events (optional):
 
@@ -687,6 +686,7 @@ Battery level events (emitted when the Joy-Con reports its battery level):
 ```
 
 - `device_id`: `0` = left, `1` = right
+- `device_id`: `0..4` device slot id (for Joy-Con dual-connect, conventionally `0` = left, `1` = right)
 - `level`: `0` = empty, `1` = critical, `2` = low, `3` = medium, `4` = full
 
 Controller info events (emitted once per controller after the setup FSM completes):

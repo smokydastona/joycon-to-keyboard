@@ -29,14 +29,14 @@ CFG_BLOCK_ACTIVATOR  = 0x07
 CFG_BLOCK_GYRO       = 0x08
 CFG_BLOCK_FLICK_STICK = 0x09
 CFG_BLOCK_STICK_ACCEL = 0x0A
-CFG_BLOCK_PROFILE_BEGIN = 0xF0
-CFG_BLOCK_PROFILE_END   = 0xF1
-CFG_BLOCK_PROFILE_ABORT = 0xF2
+CFG_BLOCK_PROFILE_BEGIN = 0x10
+CFG_BLOCK_PROFILE_END   = 0x11
+CFG_BLOCK_PROFILE_ABORT = 0x12
 CFG_BLOCK_BULK_JSON  = 0xFE
 
 
-def _crc16_ccitt(data: bytes, init: int = 0xFFFF) -> int:
-    """CRC-16/CCITT-FALSE (same polynomial as xmodem variant used in firmware)."""
+def _crc16_ccitt(data: bytes, init: int = 0x0000) -> int:
+    """CRC-16/CCITT (xmodem init=0x0000), matching firmware config_block_crc16()."""
     crc = init
     for b in data:
         crc ^= b << 8
@@ -141,8 +141,8 @@ class SerialClient:
         """
         if not self.is_connected or self._ser is None:
             raise RuntimeError("Not connected")
-        if len(payload) > 4096:
-            raise ValueError(f"Payload too large ({len(payload)} bytes, max 4096)")
+        if len(payload) > 8192:
+            raise ValueError(f"Payload too large ({len(payload)} bytes, max 8192)")
 
         header = struct.pack("<BBH", block_type, slot, len(payload))
         crc_data = header + payload
@@ -158,66 +158,14 @@ class SerialClient:
     def send_profile_binary(self, slot: int, profile: dict[str, Any]) -> None:
         """Push a full profile to a device slot using the binary protocol.
 
-        Sends PROFILE_BEGIN, then individual blocks for each section
-        (mappings, macros, layers, chords, stick, zones, activators, gyro),
-        then PROFILE_END to commit atomically.
+        Uses CFG_BLOCK_BULK_JSON to avoid per-block format mismatches and
+        to support key_id values beyond 255.
         """
         self._validate_profile(profile)
 
-        name = profile.get("name", "")[:31]
-        name_bytes = name.encode("utf-8")[:31]
-        self.send_config_block(CFG_BLOCK_PROFILE_BEGIN, slot, name_bytes)
-
-        try:
-            # --- mappings ---
-            for m in profile.get("mappings", []):
-                self._send_mapping_block(slot, m)
-
-            # --- macros ---
-            for mac in profile.get("macros", []):
-                self._send_macro_block(slot, mac)
-
-            # --- layers ---
-            for layer in profile.get("layers", []):
-                self._send_layer_block(slot, layer)
-
-            # --- chords ---
-            for chord in profile.get("chords", []):
-                self._send_chord_block(slot, chord)
-
-            # --- stick ---
-            stick = profile.get("stick")
-            if stick:
-                self._send_stick_block(slot, stick)
-
-            # --- zones ---
-            for zone in profile.get("zones", []):
-                self._send_zone_block(slot, zone)
-
-            # --- activators ---
-            for act in profile.get("activators", []):
-                self._send_activator_block(slot, act)
-
-            # --- gyro ---
-            gyro = profile.get("gyro")
-            if gyro:
-                self._send_gyro_block(slot, gyro)
-
-            # --- flick stick ---
-            flick = profile.get("flick_stick")
-            if flick:
-                self._send_flick_stick_block(slot, flick)
-
-            # --- stick acceleration curve ---
-            saccel = profile.get("stick_accel")
-            if saccel:
-                self._send_stick_accel_block(slot, saccel)
-
-            self.send_config_block(CFG_BLOCK_PROFILE_END, slot, b"")
-        except Exception:
-            log.error("Profile binary push failed — sending ABORT", exc_info=True)
-            self.send_config_block(CFG_BLOCK_PROFILE_ABORT, slot, b"")
-            raise
+        json_str = json.dumps(profile, separators=(",", ":"), ensure_ascii=False)
+        payload = json_str.encode("utf-8")
+        self.send_config_block(CFG_BLOCK_BULK_JSON, slot, payload)
 
     # ------------------------------------------------------------------
     # Profile validation
@@ -244,16 +192,24 @@ class SerialClient:
         if not isinstance(name, str):
             raise ValueError("Profile 'name' must be a string")
 
-        # mappings
-        mappings = profile.get("mappings", [])
-        if not isinstance(mappings, list):
-            raise ValueError("Profile 'mappings' must be a list")
-        for i, m in enumerate(mappings):
+        # mappings (firmware schema): object keyed by input key_id string
+        mappings = profile.get("mappings", {})
+        if mappings is None:
+            mappings = {}
+        if not isinstance(mappings, dict):
+            raise ValueError("Profile 'mappings' must be an object")
+        for kid_s, m in mappings.items():
+            try:
+                kid = int(kid_s)
+            except Exception:
+                continue
+            if kid < 0 or kid > 639:
+                raise ValueError(f"mapping key_id out of range: {kid}")
             if not isinstance(m, dict):
-                raise ValueError(f"mappings[{i}] must be a dict")
-            mode = m.get("mode", "passthrough")
+                raise ValueError(f"mappings['{kid_s}'] must be a dict")
+            mode = m.get("type", "passthrough")
             if mode not in SerialClient._VALID_MODES:
-                log.warning("mappings[%d] has unrecognised mode '%s' — defaulting to passthrough", i, mode)
+                log.warning("mappings['%s'] has unrecognised type '%s' — defaulting to passthrough", kid_s, mode)
 
         # macros
         macros = profile.get("macros", [])

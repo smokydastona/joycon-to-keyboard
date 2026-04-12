@@ -13,7 +13,7 @@ void profile_runtime_init(void);
 void profile_runtime_reload(void);
 
 // Handle an input key event (from UART): key_id up/down.
-void profile_runtime_handle_input(bool pressed, uint8_t key_id);
+void profile_runtime_handle_input(bool pressed, uint16_t key_id);
 
 // Anti-cheat humanization: adds timing jitter to macros/turbo.
 void profile_runtime_set_humanize(bool enabled);

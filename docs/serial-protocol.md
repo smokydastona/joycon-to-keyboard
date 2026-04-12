@@ -51,14 +51,21 @@ To support multiple controller devices without breaking legacy receivers, key ev
 Payload:
 
 - `payload[0]`: `0xFC` (key event ex marker)
-- `payload[1]`: `device_id` (0 = left, 1 = right)
+- `payload[1]`: `device_id` (0..4)
 - `payload[2]`: `pressed` (0/1)
 - `payload[3]`: `base_key_id` (0..127)
 
 Receivers should map `(device_id, base_key_id)` into an input key id space. Recommended mapping:
 
-- `device_id == 0` (left): input `key_id = base_key_id` (0..127)
-- `device_id == 1` (right): input `key_id = 128 + base_key_id` (128..255)
+- input `key_id = device_id * 128 + base_key_id` (0..639)
+
+For Joy-Con dual-connect specifically, the conventional assignment is:
+
+- `device_id == 0`: left Joy-Con
+- `device_id == 1`: right Joy-Con
+
+Other connected devices (mice, controllers, etc.) may occupy `device_id` 2..4.
+
 Status payload format:
 
 - `0xFD` — status marker
@@ -168,7 +175,7 @@ Response IDs:
 The ESP32 sends Joy-Con battery level updates using marker `0xFA`:
 
 - `payload[0]`: `0xFA` (battery marker)
-- `payload[1]`: `device_id` (0 = left, 1 = right)
+- `payload[1]`: `device_id` (0..4)
 - `payload[2]`: battery level (0–4)
 
 Battery levels:
@@ -186,7 +193,7 @@ The ESP32-S3 forwards this to the helper app as an NDJSON event over CDC (see `h
 The ESP32 sends detailed controller information after the Joy-Con setup FSM reaches READY, using marker `0xF9`:
 
 - `payload[0]`: `0xF9` (controller info marker)
-- `payload[1]`: `device_id` (0 = left, 1 = right)
+- `payload[1]`: `device_id` (0..4)
 - `payload[2]`: `ctrl_type` (1 = Joy-Con (L), 2 = Joy-Con (R), 3 = Pro Controller)
 - `payload[3]`: `serial_len` (0–15)
 - `payload[4 .. 4+serial_len-1]`: serial number (ASCII)
@@ -207,7 +214,7 @@ The ESP32-S3 forwards this to the helper app as an NDJSON `controller_info` even
 The ESP32 periodically polls Bluetooth RSSI and sends signal strength using marker `0xF8`:
 
 - `payload[0]`: `0xF8` (RSSI marker)
-- `payload[1]`: `device_id` (0 or 1)
+- `payload[1]`: `device_id` (0..4)
 - `payload[2]`: `rssi` (int8, dBm, transmitted as uint8)
 
 The poll timer fires every 5 seconds for each connected device. The ESP32-S3 forwards this to the helper app as an NDJSON `rssi` event: `{"evt":"rssi","device_id":N,"rssi":N}`.

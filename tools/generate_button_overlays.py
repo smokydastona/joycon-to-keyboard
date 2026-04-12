@@ -38,6 +38,7 @@ from __future__ import annotations
 import math
 import random
 import sys
+import zlib
 from pathlib import Path
 
 try:
@@ -77,6 +78,15 @@ PALE_ALPHA_FRACTION = 0.30
 
 # Reproducible hand-drawn wobble
 RNG = random.Random(42)
+
+
+def _stable_seed(text: str) -> int:
+    """Return a stable 32-bit seed for a given string.
+
+    Python's built-in hash() is intentionally randomized per-process; using it
+    would make generated PNGs differ between runs and machines.
+    """
+    return zlib.crc32(text.encode("utf-8")) & 0xFFFF_FFFF
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -224,7 +234,7 @@ def _draw_circle_overlay(
     color: tuple[int, int, int, int],
 ) -> None:
     """Draw a sketchy circle overlay (existing style)."""
-    RNG.seed(hash(f"{cx:.0f},{cy:.0f}") & 0xFFFF_FFFF)
+    RNG.seed(_stable_seed(f"{cx:.0f},{cy:.0f}"))
     fill_color = (color[0], color[1], color[2], color[3] // 3)
     _draw_crosshatch_fill(draw, cx, cy, radius - 2, fill_color, density=5)
     _draw_sketchy_circle(draw, cx, cy, radius, color, width=2, passes=3)
@@ -471,7 +481,7 @@ def _generate_overlay(
     draw = ImageDraw.Draw(img)
 
     # Seed per-button for reproducible wobble
-    RNG.seed(hash(label) & 0xFFFF_FFFF)
+    RNG.seed(_stable_seed(label))
 
     if shapes and label in shapes:
         _draw_shape(draw, px, py, label, color, shapes)

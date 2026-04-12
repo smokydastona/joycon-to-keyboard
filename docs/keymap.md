@@ -79,22 +79,25 @@ This repo supports a full Joy-Con button set: movement, face buttons, shoulders/
 | `34`   | SL(R)  | SL on right Joy-Con (inner rail)   |
 | `35`   | SR(R)  | SR on right Joy-Con (inner rail)   |
 
-## Dual Joy-Con extended key_id space
+## Multi-device extended key_id space
 
-When two Joy-Cons are connected simultaneously in dual-connect mode, each
-controller has its own device_id. The UART extended key event (0xFC frame)
-encodes `device_id` + `base_key_id`.
+When multiple controllers are connected, each has its own `device_id`.
+The UART extended key event (0xFC frame) encodes `device_id` + `base_key_id`.
 
-The ESP32-S3 maps these into a single key_id byte:
+The ESP32-S3 maps these into a single key space:
 
-| device_id | key_id range | Formula             |
-|-----------|-------------|----------------------|
-| 0 (left)  | 0–127       | `key_id = base`      |
-| 1 (right) | 128–255     | `key_id = 128 + base`|
+| device_id | key_id range | Formula |
+|-----------|--------------|---------|
+| 0         | 0–127        | `key_id = device_id * 128 + base_key_id` |
+| 1         | 128–255      | `key_id = device_id * 128 + base_key_id` |
+| 2         | 256–383      | `key_id = device_id * 128 + base_key_id` |
+| 3         | 384–511      | `key_id = device_id * 128 + base_key_id` |
+| 4         | 512–639      | `key_id = device_id * 128 + base_key_id` |
 
-**Default behavior:** key_ids 128–255 mirror the left-side defaults (e.g.
-key_id 129 maps to `W` just like key_id 1). Per-profile overrides can assign
-distinct bindings to right-side key_ids for asymmetric dual-controller setups.
+**Default behavior:** by default, all devices mirror the same base mappings.
+In other words, `key_id % 128` uses the same defaults (e.g. key_id 129 maps
+like key_id 1). Per-profile overrides can assign distinct bindings per-device
+by targeting the full `key_id` value.
 
 ## Default USB outputs
 

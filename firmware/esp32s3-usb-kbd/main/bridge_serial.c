@@ -930,7 +930,7 @@ void bridge_serial_poll(void) {
     }
 }
 
-void bridge_serial_emit_mapped_key(bool pressed, uint8_t key_id) {
+void bridge_serial_emit_mapped_key(bool pressed, uint16_t key_id) {
     if (!tud_cdc_connected() || !s_host_open) return;
 
     cJSON *evt = cJSON_CreateObject();

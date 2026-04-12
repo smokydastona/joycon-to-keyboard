@@ -28,6 +28,7 @@
 #include "freertos/semphr.h"
 
 #include "uart_framing.h"
+#include "config.h"
 
 static const char *TAG = "joycon-setup";
 
@@ -148,12 +149,12 @@ typedef struct {
     uint8_t retry_count;
 } setup_instance_t;
 
-static setup_instance_t s_inst[2] = {0};
+static setup_instance_t s_inst[BRIDGE_MAX_DEVICES] = {0};
 
 // --- Internal helpers ---
 
 static setup_instance_t *get_inst(uint8_t device_id) {
-    if (device_id > 1) device_id = 0;
+    if (device_id >= BRIDGE_MAX_DEVICES) device_id = 0;
     return &s_inst[device_id];
 }
 
@@ -916,7 +917,7 @@ bool joycon_setup_is_ready(uint8_t device_id) {
 
 void joycon_setup_check_timeouts(void) {
     int64_t now = esp_timer_get_time();
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < BRIDGE_MAX_DEVICES; i++) {
         setup_instance_t *inst = &s_inst[i];
         if (inst->state <= SETUP_IDLE || inst->state >= SETUP_READY)
             continue;

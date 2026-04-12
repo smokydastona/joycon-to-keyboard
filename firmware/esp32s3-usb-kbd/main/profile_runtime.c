@@ -36,7 +36,9 @@ static const char *TAG = "profile";
 #define PROFILE_MAX_STEPS 128
 #define PROFILE_MAX_MACRO_ID 24
 
-#define INPUT_KEY_ID_MAX 256
+// Input key-id space is device_id*128 + base_key_id.
+// With 5 devices (0..4) and base_key_id 0..127, max is 639.
+#define INPUT_KEY_ID_MAX 640
 
 // Anti-cheat humanization: enabled by default, adds timing jitter
 // to macro delays and turbo intervals so they don't look robotic.
@@ -169,13 +171,13 @@ typedef enum {
 } layer_mode_t;
 
 typedef struct {
-    uint8_t key_id;
+    uint16_t key_id;
     map_entry_t entry;
 } layer_override_t;
 
 typedef struct {
     char name[24];
-    uint8_t activation_key_id;
+    uint16_t activation_key_id;
     layer_mode_t mode;
     bool active;
     size_t override_count;
@@ -209,7 +211,7 @@ typedef enum {
 } dt_state_t;
 
 typedef struct {
-    uint8_t key_id;
+    uint16_t key_id;
     dt_state_t state;
     esp_timer_handle_t timer;
     // Cached single-tap values for the timeout callback
@@ -220,7 +222,7 @@ typedef struct {
 static dt_tracker_t s_dt_trackers[MAX_DOUBLE_TAP_KEYS];
 static size_t s_dt_count = 0;
 
-static dt_tracker_t *find_dt_tracker(uint8_t key_id) {
+static dt_tracker_t *find_dt_tracker(uint16_t key_id) {
     for (size_t i = 0; i < s_dt_count; i++) {
         if (s_dt_trackers[i].key_id == key_id) return &s_dt_trackers[i];
     }
@@ -236,7 +238,7 @@ static void dt_timeout_cb(void *arg) {
     dt->state = DT_IDLE;
 }
 
-static void register_dt_tracker(uint8_t key_id) {
+static void register_dt_tracker(uint16_t key_id) {
     if (find_dt_tracker(key_id)) return;
     if (s_dt_count >= MAX_DOUBLE_TAP_KEYS) {
         ESP_LOGW(TAG, "Max double-tap keys reached (%d)", MAX_DOUBLE_TAP_KEYS);
@@ -263,7 +265,7 @@ static void register_dt_tracker(uint8_t key_id) {
 #define MAX_TURBO_KEYS 8
 
 typedef struct {
-    uint8_t key_id;
+    uint16_t key_id;
     bool active;
     bool key_pressed;  // toggle state
     uint8_t hid_mod;
@@ -275,7 +277,7 @@ typedef struct {
 static turbo_tracker_t s_turbo_trackers[MAX_TURBO_KEYS];
 static size_t s_turbo_count = 0;
 
-static turbo_tracker_t *find_turbo_tracker(uint8_t key_id) {
+static turbo_tracker_t *find_turbo_tracker(uint16_t key_id) {
     for (size_t i = 0; i < s_turbo_count; i++) {
         if (s_turbo_trackers[i].key_id == key_id) return &s_turbo_trackers[i];
     }
@@ -293,7 +295,7 @@ static void turbo_timer_cb(void *arg) {
     esp_timer_start_once(tt->timer, (uint64_t)next * 1000);
 }
 
-static void register_turbo_tracker(uint8_t key_id) {
+static void register_turbo_tracker(uint16_t key_id) {
     if (find_turbo_tracker(key_id)) return;
     if (s_turbo_count >= MAX_TURBO_KEYS) {
         ESP_LOGW(TAG, "Max turbo keys reached (%d)", MAX_TURBO_KEYS);
@@ -329,7 +331,7 @@ typedef enum {
 } th_state_t;
 
 typedef struct {
-    uint8_t key_id;
+    uint16_t key_id;
     th_state_t state;
     esp_timer_handle_t timer;
     uint8_t tap_hid_mod;
@@ -341,7 +343,7 @@ typedef struct {
 static th_tracker_t s_th_trackers[MAX_TAP_HOLD_KEYS];
 static size_t s_th_count = 0;
 
-static th_tracker_t *find_th_tracker(uint8_t key_id) {
+static th_tracker_t *find_th_tracker(uint16_t key_id) {
     for (size_t i = 0; i < s_th_count; i++) {
         if (s_th_trackers[i].key_id == key_id) return &s_th_trackers[i];
     }
@@ -356,7 +358,7 @@ static void th_timeout_cb(void *arg) {
     usb_kbd_set_key(th->hold_hid_mod, th->hold_hid_keycode, true);
 }
 
-static void register_th_tracker(uint8_t key_id) {
+static void register_th_tracker(uint16_t key_id) {
     if (find_th_tracker(key_id)) return;
     if (s_th_count >= MAX_TAP_HOLD_KEYS) {
         ESP_LOGW(TAG, "Max tap-hold keys reached (%d)", MAX_TAP_HOLD_KEYS);
@@ -391,7 +393,7 @@ typedef enum {
 #define MAX_ONESHOT_KEYS 8
 
 typedef struct {
-    uint8_t key_id;
+    uint16_t key_id;
     os_state_t state;
     uint8_t hid_mod;
     uint8_t hid_keycode;
@@ -401,7 +403,7 @@ typedef struct {
 static os_tracker_t s_os_trackers[MAX_ONESHOT_KEYS];
 static size_t s_os_count = 0;
 
-static os_tracker_t *find_os_tracker(uint8_t key_id) {
+static os_tracker_t *find_os_tracker(uint16_t key_id) {
     for (size_t i = 0; i < s_os_count; i++) {
         if (s_os_trackers[i].key_id == key_id) return &s_os_trackers[i];
     }
@@ -417,7 +419,7 @@ static void os_timeout_cb(void *arg) {
     }
 }
 
-static void register_os_tracker(uint8_t key_id) {
+static void register_os_tracker(uint16_t key_id) {
     if (find_os_tracker(key_id)) return;
     if (s_os_count >= MAX_ONESHOT_KEYS) {
         ESP_LOGW(TAG, "Max one-shot keys reached (%d)", MAX_ONESHOT_KEYS);
@@ -479,7 +481,7 @@ typedef enum {
 } as_state_t;
 
 typedef struct {
-    uint8_t key_id;
+    uint16_t key_id;
     as_state_t state;
     esp_timer_handle_t timer;
     uint8_t normal_mod;
@@ -491,7 +493,7 @@ typedef struct {
 static as_tracker_t s_as_trackers[MAX_AUTO_SHIFT_KEYS];
 static size_t s_as_count = 0;
 
-static as_tracker_t *find_as_tracker(uint8_t key_id) {
+static as_tracker_t *find_as_tracker(uint16_t key_id) {
     for (size_t i = 0; i < s_as_count; i++) {
         if (s_as_trackers[i].key_id == key_id) return &s_as_trackers[i];
     }
@@ -506,7 +508,7 @@ static void as_timeout_cb(void *arg) {
     usb_kbd_set_key(as->shifted_mod, as->shifted_keycode, true);
 }
 
-static void register_as_tracker(uint8_t key_id) {
+static void register_as_tracker(uint16_t key_id) {
     if (find_as_tracker(key_id)) return;
     if (s_as_count >= MAX_AUTO_SHIFT_KEYS) {
         ESP_LOGW(TAG, "Max auto-shift keys reached (%d)", MAX_AUTO_SHIFT_KEYS);
@@ -542,7 +544,7 @@ static uint8_t s_seq_index[INPUT_KEY_ID_MAX];
 #define LEADER_TIMEOUT_MS 1000
 
 typedef struct {
-    uint8_t keys[MAX_LEADER_SEQ_LEN];
+    uint16_t keys[MAX_LEADER_SEQ_LEN];
     uint8_t key_count;
     uint8_t action_mod;
     uint8_t action_keycode;
@@ -552,7 +554,7 @@ static leader_seq_t s_leader_seqs[MAX_LEADER_SEQS];
 static size_t s_leader_seq_count = 0;
 
 static bool s_leader_active = false;
-static uint8_t s_leader_buf[MAX_LEADER_SEQ_LEN];
+static uint16_t s_leader_buf[MAX_LEADER_SEQ_LEN];
 static size_t s_leader_buf_len = 0;
 static esp_timer_handle_t s_leader_timer = NULL;
 
@@ -695,10 +697,10 @@ typedef enum {
 
 typedef struct {
     activator_trigger_t trigger;
-    uint8_t  source_key;       // input key_id that triggers this
+    uint16_t source_key;       // input key_id that triggers this
     uint8_t  output_key;       // HID keycode to emit
     uint16_t threshold_ms;     // for long_press / double_press timing window
-    uint8_t  flags;            // reserved
+    uint16_t flags;            // reserved (used as secondary key_id for ACT_CHORD_TRIGGER)
     // Runtime state
     int64_t  last_press_ms;
     int64_t  last_release_ms;
@@ -720,7 +722,7 @@ static int s_active_slot = 0;
 #define MAX_CHORD_KEYS 4
 
 typedef struct {
-    uint8_t keys[MAX_CHORD_KEYS];
+    uint16_t keys[MAX_CHORD_KEYS];
     uint8_t key_count;
     map_entry_t action;
     bool active;  // Is this chord currently firing?
@@ -891,9 +893,9 @@ static void free_profile(void) {
     for (int i = 0; i < INPUT_KEY_ID_MAX; i++) {
         s_map[i].mode = MAP_PASSTHROUGH;
         // Default behavior:
-        // - left input ids (0..127) passthrough to same output id
-        // - right input ids (128..255) passthrough mirrors to base id (0..127)
-        s_map[i].remap_to = (uint8_t)((i < 128) ? i : (i - 128));
+        // - input ids map to output base id (0..127) via modulo
+        //   (supports device_id*128 + base_key_id)
+        s_map[i].remap_to = (uint8_t)(i % 128);
         s_map[i].macro_index = -1;
         s_map[i].hid_mod = 0;
         s_map[i].hid_keycode = 0;
@@ -1209,7 +1211,7 @@ static void parse_mappings(cJSON *root) {
             if (cJSON_IsNumber(timeout) && timeout->valueint >= 100 && timeout->valueint <= 1000) {
                 s_map[key_id].dt_timeout_ms = (uint16_t)timeout->valueint;
             }
-            register_dt_tracker((uint8_t)key_id);
+            register_dt_tracker((uint16_t)key_id);
             continue;
         }
 
@@ -1225,7 +1227,7 @@ static void parse_mappings(cJSON *root) {
             if (cJSON_IsNumber(delay_j) && delay_j->valueint >= 10 && delay_j->valueint <= 500) {
                 s_map[key_id].turbo_delay_ms = (uint16_t)delay_j->valueint;
             }
-            register_turbo_tracker((uint8_t)key_id);
+            register_turbo_tracker((uint16_t)key_id);
             continue;
         }
 
@@ -1255,7 +1257,7 @@ static void parse_mappings(cJSON *root) {
                     if (cJSON_IsNumber(m)) tap_mod = (uint8_t)m->valueint;
                     if (cJSON_IsNumber(k)) tap_kc = (uint8_t)k->valueint;
                 } else if (strcmp(tap_type->valuestring, "passthrough") == 0) {
-                    uint8_t base = (key_id < 128) ? (uint8_t)key_id : (uint8_t)(key_id - 128);
+                    uint8_t base = (uint8_t)(key_id % 128);
                     keymap_lookup(base, &tap_mod, &tap_kc);
                 } else if (strcmp(tap_type->valuestring, "remap") == 0) {
                     cJSON *to = cJSON_GetObjectItemCaseSensitive(tap_j, "to");
@@ -1275,7 +1277,7 @@ static void parse_mappings(cJSON *root) {
                     if (cJSON_IsNumber(m)) hold_mod = (uint8_t)m->valueint;
                     if (cJSON_IsNumber(k)) hold_kc = (uint8_t)k->valueint;
                 } else if (strcmp(hold_type->valuestring, "passthrough") == 0) {
-                    uint8_t base = (key_id < 128) ? (uint8_t)key_id : (uint8_t)(key_id - 128);
+                    uint8_t base = (uint8_t)(key_id % 128);
                     keymap_lookup(base, &hold_mod, &hold_kc);
                 } else if (strcmp(hold_type->valuestring, "remap") == 0) {
                     cJSON *to = cJSON_GetObjectItemCaseSensitive(hold_j, "to");
@@ -1294,7 +1296,7 @@ static void parse_mappings(cJSON *root) {
             if (cJSON_IsNumber(hold_ms_j) && hold_ms_j->valueint >= 50 && hold_ms_j->valueint <= 2000) {
                 s_map[key_id].th_hold_ms = (uint16_t)hold_ms_j->valueint;
             }
-            register_th_tracker((uint8_t)key_id);
+            register_th_tracker((uint16_t)key_id);
             continue;
         }
 
@@ -1305,7 +1307,7 @@ static void parse_mappings(cJSON *root) {
             s_map[key_id].mode = MAP_ONESHOT_MOD;
             s_map[key_id].os_hid_mod = (uint8_t)mod_j->valueint;
             s_map[key_id].os_hid_keycode = (uint8_t)kc_j->valueint;
-            register_os_tracker((uint8_t)key_id);
+            register_os_tracker((uint16_t)key_id);
             continue;
         }
 
@@ -1329,7 +1331,7 @@ static void parse_mappings(cJSON *root) {
             if (cJSON_IsNumber(hold_ms_j) && hold_ms_j->valueint >= 50 && hold_ms_j->valueint <= 1000) {
                 s_map[key_id].as_hold_ms = (uint16_t)hold_ms_j->valueint;
             }
-            register_as_tracker((uint8_t)key_id);
+            register_as_tracker((uint16_t)key_id);
             continue;
         }
 
@@ -1410,7 +1412,7 @@ static void parse_layer_mappings(cJSON *mappings_obj, layer_t *layer) {
         if (!cJSON_IsString(type) || !type->valuestring) continue;
 
         layer_override_t *ov = &layer->overrides[layer->override_count];
-        ov->key_id = (uint8_t)key_id;
+        ov->key_id = (uint16_t)key_id;
         memset(&ov->entry, 0, sizeof(ov->entry));
         ov->entry.mode = MAP_PASSTHROUGH;
         ov->entry.macro_index = -1;
@@ -1456,7 +1458,7 @@ static void parse_layer_mappings(cJSON *mappings_obj, layer_t *layer) {
             if (cJSON_IsNumber(timeout) && timeout->valueint >= 100 && timeout->valueint <= 1000) {
                 ov->entry.dt_timeout_ms = (uint16_t)timeout->valueint;
             }
-            register_dt_tracker((uint8_t)key_id);
+            register_dt_tracker((uint16_t)key_id);
         } else if (strcmp(type->valuestring, "turbo") == 0) {
             cJSON *mod_j = cJSON_GetObjectItemCaseSensitive(entry, "mod");
             cJSON *kc_j = cJSON_GetObjectItemCaseSensitive(entry, "keycode");
@@ -1469,7 +1471,7 @@ static void parse_layer_mappings(cJSON *mappings_obj, layer_t *layer) {
             if (cJSON_IsNumber(delay_j) && delay_j->valueint >= 10 && delay_j->valueint <= 500) {
                 ov->entry.turbo_delay_ms = (uint16_t)delay_j->valueint;
             }
-            register_turbo_tracker((uint8_t)key_id);
+            register_turbo_tracker((uint16_t)key_id);
         } else if (strcmp(type->valuestring, "sticky") == 0) {
             cJSON *mod_j = cJSON_GetObjectItemCaseSensitive(entry, "mod");
             cJSON *kc_j = cJSON_GetObjectItemCaseSensitive(entry, "keycode");
@@ -1491,7 +1493,7 @@ static void parse_layer_mappings(cJSON *mappings_obj, layer_t *layer) {
                     if (cJSON_IsNumber(m)) tap_mod = (uint8_t)m->valueint;
                     if (cJSON_IsNumber(k)) tap_kc = (uint8_t)k->valueint;
                 } else if (strcmp(tap_type->valuestring, "passthrough") == 0) {
-                    uint8_t base = (key_id < 128) ? (uint8_t)key_id : (uint8_t)(key_id - 128);
+                    uint8_t base = (uint8_t)(key_id % 128);
                     keymap_lookup(base, &tap_mod, &tap_kc);
                 } else if (strcmp(tap_type->valuestring, "remap") == 0) {
                     cJSON *to = cJSON_GetObjectItemCaseSensitive(tap_j, "to");
@@ -1508,7 +1510,7 @@ static void parse_layer_mappings(cJSON *mappings_obj, layer_t *layer) {
                     if (cJSON_IsNumber(m)) hold_mod = (uint8_t)m->valueint;
                     if (cJSON_IsNumber(k)) hold_kc = (uint8_t)k->valueint;
                 } else if (strcmp(hold_type->valuestring, "passthrough") == 0) {
-                    uint8_t base = (key_id < 128) ? (uint8_t)key_id : (uint8_t)(key_id - 128);
+                    uint8_t base = (uint8_t)(key_id % 128);
                     keymap_lookup(base, &hold_mod, &hold_kc);
                 } else if (strcmp(hold_type->valuestring, "remap") == 0) {
                     cJSON *to = cJSON_GetObjectItemCaseSensitive(hold_j, "to");
@@ -1525,7 +1527,7 @@ static void parse_layer_mappings(cJSON *mappings_obj, layer_t *layer) {
             if (cJSON_IsNumber(hold_ms_j) && hold_ms_j->valueint >= 50 && hold_ms_j->valueint <= 2000) {
                 ov->entry.th_hold_ms = (uint16_t)hold_ms_j->valueint;
             }
-            register_th_tracker((uint8_t)key_id);
+            register_th_tracker((uint16_t)key_id);
         } else if (strcmp(type->valuestring, "oneshot") == 0) {
             cJSON *mod_j = cJSON_GetObjectItemCaseSensitive(entry, "mod");
             cJSON *kc_j = cJSON_GetObjectItemCaseSensitive(entry, "keycode");
@@ -1533,7 +1535,7 @@ static void parse_layer_mappings(cJSON *mappings_obj, layer_t *layer) {
             ov->entry.mode = MAP_ONESHOT_MOD;
             ov->entry.os_hid_mod = (uint8_t)mod_j->valueint;
             ov->entry.os_hid_keycode = (uint8_t)kc_j->valueint;
-            register_os_tracker((uint8_t)key_id);
+            register_os_tracker((uint16_t)key_id);
         } else if (strcmp(type->valuestring, "profile_switch") == 0) {
             cJSON *slot_j = cJSON_GetObjectItemCaseSensitive(entry, "slot");
             if (!cJSON_IsNumber(slot_j) || slot_j->valueint < 0 || slot_j->valueint >= 4) continue;
@@ -1563,6 +1565,7 @@ static void parse_layers(cJSON *root) {
         cJSON *mappings = cJSON_GetObjectItemCaseSensitive(layer_obj, "mappings");
 
         if (!cJSON_IsNumber(key_id_j)) continue;
+        if (key_id_j->valueint < 0 || key_id_j->valueint >= INPUT_KEY_ID_MAX) continue;
 
         layer_t *l = &s_layers[count];
         memset(l, 0, sizeof(*l));
@@ -1575,7 +1578,7 @@ static void parse_layers(cJSON *root) {
             snprintf(l->name, sizeof(l->name), "layer%u", (unsigned)count);
         }
 
-        l->activation_key_id = (uint8_t)key_id_j->valueint;
+        l->activation_key_id = (uint16_t)key_id_j->valueint;
         l->mode = LAYER_HOLD;
         if (cJSON_IsString(mode_j) && mode_j->valuestring &&
             strcmp(mode_j->valuestring, "toggle") == 0) {
@@ -1623,7 +1626,7 @@ static void parse_chords(cJSON *root) {
             if (kc >= MAX_CHORD_KEYS) break;
             if (!cJSON_IsNumber(k)) continue;
             if (k->valueint < 0 || k->valueint >= INPUT_KEY_ID_MAX) continue;
-            c->keys[kc++] = (uint8_t)k->valueint;
+            c->keys[kc++] = (uint16_t)k->valueint;
         }
         if (kc < 2) continue;  // Need at least 2 keys for a chord.
         c->key_count = (uint8_t)kc;
@@ -1735,7 +1738,8 @@ static void load_profile_json(const char *json) {
             cJSON_ArrayForEach(k, keys_j) {
                 if (kc >= MAX_LEADER_SEQ_LEN) break;
                 if (!cJSON_IsNumber(k)) continue;
-                ls->keys[kc++] = (uint8_t)k->valueint;
+                if (k->valueint < 0 || k->valueint >= INPUT_KEY_ID_MAX) continue;
+                ls->keys[kc++] = (uint16_t)k->valueint;
             }
             if (kc < 1) continue;
             ls->key_count = (uint8_t)kc;
@@ -2033,13 +2037,15 @@ static void load_profile_json(const char *json) {
             }
 
             cJSON *sk_j = cJSON_GetObjectItemCaseSensitive(aj, "source_key");
-            if (cJSON_IsNumber(sk_j)) a->source_key = (uint8_t)sk_j->valueint;
+            if (cJSON_IsNumber(sk_j) && sk_j->valueint >= 0 && sk_j->valueint < INPUT_KEY_ID_MAX) {
+                a->source_key = (uint16_t)sk_j->valueint;
+            }
             cJSON *ok_j = cJSON_GetObjectItemCaseSensitive(aj, "output_key");
             if (cJSON_IsNumber(ok_j)) a->output_key = (uint8_t)ok_j->valueint;
             cJSON *tm_j = cJSON_GetObjectItemCaseSensitive(aj, "threshold_ms");
             if (cJSON_IsNumber(tm_j)) a->threshold_ms = (uint16_t)tm_j->valueint;
             cJSON *fl_j = cJSON_GetObjectItemCaseSensitive(aj, "flags");
-            if (cJSON_IsNumber(fl_j)) a->flags = (uint8_t)fl_j->valueint;
+            if (cJSON_IsNumber(fl_j) && fl_j->valueint >= 0) a->flags = (uint16_t)fl_j->valueint;
 
             if (a->threshold_ms == 0) {
                 // Defaults
@@ -2227,7 +2233,7 @@ void profile_runtime_reload(void) {
     free(json);
 }
 
-static void send_key_id(bool pressed, uint8_t key_id) {
+static void send_key_id(bool pressed, uint16_t key_id) {
     uint8_t mod = 0;
     uint8_t keycode = 0;
     if (!keymap_lookup(key_id, &mod, &keycode)) {
@@ -2237,7 +2243,7 @@ static void send_key_id(bool pressed, uint8_t key_id) {
     usb_kbd_set_key(mod, keycode, pressed);
 }
 
-static map_entry_t *find_layer_override(uint8_t key_id) {
+static map_entry_t *find_layer_override(uint16_t key_id) {
     // Check layers in reverse priority (last active layer wins).
     // O(1) lookup per layer via the override_index table.
     for (int l = (int)s_layer_count - 1; l >= 0; l--) {
@@ -2250,7 +2256,7 @@ static map_entry_t *find_layer_override(uint8_t key_id) {
     return NULL;
 }
 
-static void dispatch_mapping(map_entry_t *m, bool pressed, uint8_t key_id) {
+static void dispatch_mapping(map_entry_t *m, bool pressed, uint16_t key_id) {
     // One-shot modifier integration: when a non-oneshot key is pressed,
     // consume any armed one-shot modifier. On release, release it.
     if (m->mode != MAP_ONESHOT_MOD && s_os_count > 0) {
@@ -2525,11 +2531,13 @@ static void dispatch_mapping(map_entry_t *m, bool pressed, uint8_t key_id) {
     }
 }
 
-void profile_runtime_handle_input(bool pressed, uint8_t key_id) {
-    // Update global pressed state for chord detection.
-    if (key_id < INPUT_KEY_ID_MAX) {
-        s_key_pressed[key_id] = pressed;
+void profile_runtime_handle_input(bool pressed, uint16_t key_id) {
+    if (key_id >= INPUT_KEY_ID_MAX) {
+        return;
     }
+
+    // Update global pressed state for chord detection.
+    s_key_pressed[key_id] = pressed;
 
     // --- Leader key buffer interception ---
     // When leader mode is active, buffer key presses and reset the timeout.
@@ -2600,7 +2608,7 @@ void profile_runtime_handle_input(bool pressed, uint8_t key_id) {
                 // Chord just completed. Undo individual actions for keys
                 // that were already pressed.
                 for (uint8_t ki = 0; ki < c->key_count; ki++) {
-                    uint8_t ck = c->keys[ki];
+                    uint16_t ck = c->keys[ki];
                     if (ck == key_id) continue;  // This key's mapping hasn't fired yet.
                     if (s_chord_suppressed[ck]) continue;
                     map_entry_t *cm = find_layer_override(ck);
@@ -2671,7 +2679,7 @@ void profile_runtime_handle_input(bool pressed, uint8_t key_id) {
                 dispatch_mapping(&c->action, false, key_id);
                 // Unsuppress keys no longer part of any active chord.
                 for (uint8_t ki = 0; ki < c->key_count; ki++) {
-                    uint8_t ck = c->keys[ki];
+                    uint16_t ck = c->keys[ki];
                     bool still_suppressed = false;
                     for (size_t cj = 0; cj < s_chord_count; cj++) {
                         if (!s_chords[cj].active) continue;

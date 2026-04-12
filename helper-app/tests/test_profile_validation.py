@@ -16,7 +16,15 @@ class TestProfileValidation:
     """Verify _validate_profile catches invalid profiles."""
 
     def test_valid_minimal_profile(self):
-        profile = {"name": "test", "mappings": [], "macros": []}
+        profile = {
+            "name": "test",
+            # Firmware profile schema: mappings is an object keyed by input key_id string
+            "mappings": {
+                "1": {"type": "passthrough"},
+                "129": {"type": "remap_hid", "mod": 0, "keycode": 0x04},
+            },
+            "macros": [],
+        }
         SerialClient._validate_profile(profile)  # should not raise
 
     def test_non_dict_raises(self):
@@ -27,13 +35,13 @@ class TestProfileValidation:
         with pytest.raises(ValueError, match="'name' must be a string"):
             SerialClient._validate_profile({"name": 123})
 
-    def test_mappings_must_be_list(self):
-        with pytest.raises(ValueError, match="'mappings' must be a list"):
+    def test_mappings_must_be_object(self):
+        with pytest.raises(ValueError, match="'mappings' must be an object"):
             SerialClient._validate_profile({"name": "x", "mappings": "bad"})
 
     def test_mapping_entry_must_be_dict(self):
-        with pytest.raises(ValueError, match="mappings\\[0\\] must be a dict"):
-            SerialClient._validate_profile({"name": "x", "mappings": ["bad"]})
+        with pytest.raises(ValueError, match=r"mappings\['1'\] must be a dict"):
+            SerialClient._validate_profile({"name": "x", "mappings": {"1": "bad"}})
 
     def test_macros_must_be_list(self):
         with pytest.raises(ValueError, match="'macros' must be a list"):

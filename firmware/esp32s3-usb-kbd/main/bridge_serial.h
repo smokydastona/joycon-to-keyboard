@@ -10,7 +10,7 @@
 void bridge_serial_init(void);
 void bridge_serial_poll(void);
 
-void bridge_serial_emit_mapped_key(bool pressed, uint8_t key_id);
+void bridge_serial_emit_mapped_key(bool pressed, uint16_t key_id);
 void bridge_serial_emit_macro_state(const char *id, bool started);
 
 // Emit a layer activation/deactivation event for the helper app UI.

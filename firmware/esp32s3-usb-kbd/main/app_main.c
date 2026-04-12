@@ -61,7 +61,7 @@ void app_main(void) {
             if (f.type == UART_FRAME_KEY_EVENT && f.length == 1) {
                 uint8_t event = f.payload[0];
                 bool pressed = (event & 0x80u) != 0;
-                uint8_t key_id = event & 0x7Fu;
+                uint16_t key_id = (uint16_t)(event & 0x7Fu);
                 bridge_serial_emit_mapped_key(pressed, key_id);
                 profile_runtime_handle_input(pressed, key_id);
                 continue;
@@ -73,12 +73,9 @@ void app_main(void) {
                 uint8_t base_key_id = (uint8_t)(f.payload[3] & 0x7Fu);
 
                 // Map into a larger input key_id space.
-                // device_id=0 -> 0..127
-                // device_id=1 -> 128..255
-                uint8_t key_id = base_key_id;
-                if (device_id == 1) {
-                    key_id = (uint8_t)(128u + base_key_id);
-                }
+                // key_id = device_id*128 + base_key_id
+                // Firmware clamps/ignores out-of-range key_ids.
+                uint16_t key_id = (uint16_t)((uint16_t)device_id * 128u + (uint16_t)base_key_id);
 
                 bridge_serial_emit_mapped_key(pressed, key_id);
                 profile_runtime_handle_input(pressed, key_id);
