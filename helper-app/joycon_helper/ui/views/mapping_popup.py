@@ -11,7 +11,7 @@ import copy
 import logging
 from typing import TYPE_CHECKING, Any
 
-from PyQt6.QtCore import QSize, Qt
+from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
     QCheckBox,
@@ -26,7 +26,6 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QMessageBox,
     QPushButton,
-    QScrollArea,
     QSpinBox,
     QStackedWidget,
     QTabWidget,
@@ -49,40 +48,20 @@ from ...hid_keycodes import (
     MOD_RSHIFT,
     hid_to_name,
 )
+from ..constants import (
+    _KEYCODE_TO_KBD_LABEL,
+    KBD_HOTSPOTS,
+    KBD_LABEL_TO_KEYCODE,
+    KBD_WIDE,
+)
 from ..theme import ThemeEngine
+from ..widgets.hotspot_canvas import HotspotCanvas
 
 log = logging.getLogger("joycon_helper.ui.views.mapping_popup")
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-
-# Keyboard rows for the visual picker (HID keycodes)
-_KBD_ROWS: list[list[tuple]] = [
-    # Row 0 — Esc, F-keys
-    [("Esc", 0x29), ("F1", 0x3A), ("F2", 0x3B), ("F3", 0x3C), ("F4", 0x3D),
-     ("F5", 0x3E), ("F6", 0x3F), ("F7", 0x40), ("F8", 0x41),
-     ("F9", 0x42), ("F10", 0x43), ("F11", 0x44), ("F12", 0x45)],
-    # Row 1 — number row
-    [("`", 0x35), ("1", 0x1E), ("2", 0x1F), ("3", 0x20), ("4", 0x21),
-     ("5", 0x22), ("6", 0x23), ("7", 0x24), ("8", 0x25), ("9", 0x26),
-     ("0", 0x27), ("-", 0x2D), ("=", 0x2E), ("Bksp", 0x2A)],
-    # Row 2 — QWERTY
-    [("Tab", 0x2B), ("Q", 0x14), ("W", 0x1A), ("E", 0x08), ("R", 0x15),
-     ("T", 0x17), ("Y", 0x1C), ("U", 0x18), ("I", 0x0C), ("O", 0x12),
-     ("P", 0x13), ("[", 0x2F), ("]", 0x30), ("\\", 0x31)],
-    # Row 3 — home row
-    [("Caps", 0x39), ("A", 0x04), ("S", 0x16), ("D", 0x07), ("F", 0x09),
-     ("G", 0x0A), ("H", 0x0B), ("J", 0x0D), ("K", 0x0E), ("L", 0x0F),
-     (";", 0x33), ("'", 0x34), ("Enter", 0x28)],
-    # Row 4 — bottom row
-    [("Z", 0x1D), ("X", 0x1B), ("C", 0x06), ("V", 0x19), ("B", 0x05),
-     ("N", 0x11), ("M", 0x10), (",", 0x36), (".", 0x37), ("/", 0x38)],
-    # Row 5 — space bar + arrows
-    [("Space", 0x2C), ("Ins", 0x49), ("Del", 0x4C), ("Home", 0x4A),
-     ("End", 0x4D), ("PgUp", 0x4B), ("PgDn", 0x4E),
-     ("\u2190", 0x50), ("\u2191", 0x52), ("\u2193", 0x51), ("\u2192", 0x4F)],
-]
 
 _MODIFIER_DEFS: list[tuple] = [
     ("LCtrl", MOD_LCTRL),
@@ -135,7 +114,7 @@ class MappingPopup(QDialog):
         self._result_entry: dict[str, Any] | None = None
 
         self.setWindowTitle(f"Edit Binding — {button_name}")
-        self.setMinimumSize(680, 560)
+        self.setMinimumSize(860, 580)
         self.setModal(True)
 
         # Theme-aware styling
@@ -283,34 +262,21 @@ class MappingPopup(QDialog):
             self._mod_checks[bit] = cb
         lay.addWidget(mod_group)
 
-        # Visual keyboard grid
-        kbd_scroll = QScrollArea()
-        kbd_scroll.setWidgetResizable(True)
-        kbd_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        kbd_container = QWidget()
-        kbd_main_lay = QVBoxLayout(kbd_container)
-        kbd_main_lay.setSpacing(4)
-
-        self._kbd_buttons: dict[int, QPushButton] = {}
-        for row in _KBD_ROWS:
-            row_lay = QHBoxLayout()
-            row_lay.setSpacing(3)
-            for label, keycode in row:
-                btn = QPushButton(label)
-                btn.setFixedSize(QSize(46, 36))
-                btn.setCursor(Qt.CursorShape.PointingHandCursor)
-                btn.setToolTip(f"{label} (0x{keycode:02X})")
-                btn.clicked.connect(
-                    lambda checked, kc=keycode, lb=label: self._select_keycode(kc, lb)
-                )
-                row_lay.addWidget(btn)
-                self._kbd_buttons[keycode] = btn
-            row_lay.addStretch()
-            kbd_main_lay.addLayout(row_lay)
-
-        kbd_main_lay.addStretch()
-        kbd_scroll.setWidget(kbd_container)
-        lay.addWidget(kbd_scroll, 1)
+        # Keyboard image canvas with clickable hotspots
+        theme = self._main.theme
+        theme_key = "dark" if theme.is_dark else "default"
+        self._kbd_canvas = HotspotCanvas(theme, page)
+        self._kbd_canvas.setMinimumHeight(220)
+        accent = theme.theme["colors"]["accent"]
+        self._kbd_canvas.set_overlay_color(accent)
+        hotspots = KBD_HOTSPOTS.get(theme_key, KBD_HOTSPOTS["default"])
+        self._kbd_canvas.set_hotspots(hotspots)
+        self._kbd_canvas.set_wide_set(KBD_WIDE)
+        kbd_pm = self._main.assets.load_pixmap("keyboard.png")
+        if kbd_pm:
+            self._kbd_canvas.set_background(kbd_pm)
+        self._kbd_canvas.hotspot_clicked.connect(self._on_kbd_hotspot_clicked)
+        lay.addWidget(self._kbd_canvas, 1)
 
         # Custom keycode entry
         custom_row = QHBoxLayout()
@@ -333,18 +299,24 @@ class MappingPopup(QDialog):
         self._selected_keycode: int | None = None
         self._tabs.addTab(page, "\u2328  Keyboard")
 
-    def _select_keycode(self, keycode: int, label: str) -> None:
-        # Un-highlight previous
-        if self._selected_keycode is not None:
-            prev_btn = self._kbd_buttons.get(self._selected_keycode)
-            if prev_btn:
-                prev_btn.setStyleSheet("")
+    def _on_kbd_hotspot_clicked(self, name: str) -> None:
+        """Handle click on a keyboard image hotspot."""
+        code = KBD_LABEL_TO_KEYCODE.get(name)
+        if code is None:
+            return  # Fn or other unmapped key
+        if code < 0:
+            # Modifier key — toggle the corresponding checkbox
+            bit = -code
+            cb = self._mod_checks.get(bit)
+            if cb is not None:
+                cb.setChecked(not cb.isChecked())
+        else:
+            self._select_keycode(code, name)
 
+    def _select_keycode(self, keycode: int, label: str) -> None:
         self._selected_keycode = keycode
-        btn = self._kbd_buttons.get(keycode)
-        if btn:
-            accent = self._main.theme.theme["colors"]["accent"]
-            btn.setStyleSheet(f"background: {accent}; color: #fff; border: none;")
+        kbd_label = _KEYCODE_TO_KBD_LABEL.get(keycode, label)
+        self._kbd_canvas.set_selected(kbd_label)
         self._selected_key_label.setText(f"Selected: {label} (0x{keycode:02X})")
         self._update_preview()
 
