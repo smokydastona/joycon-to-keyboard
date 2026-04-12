@@ -39,6 +39,7 @@ static const char *TAG = "bridge-ctrl";
 
 // OTA response IDs (sent back to ESP32-S3)
 #define OTA_RSP_BEGIN   0x01
+#define OTA_RSP_DATA    0x02   /* per-chunk ACK so S3 can throttle */
 #define OTA_RSP_END     0x03
 #define OTA_RSP_VERSION 0x04
 
@@ -144,13 +145,21 @@ static void handle_ctrl_cmd(uint8_t cmd_id, const uint8_t *payload, uint8_t payl
             break;
         }
         case CTRL_CMD_OTA_DATA: {
-            if (!fw_ota_in_progress()) break;
+            if (!fw_ota_in_progress()) {
+                bridge_send_ota_rsp(OTA_RSP_DATA, 0x01, NULL, 0);
+                break;
+            }
             if (payload_len > 0 && payload) {
                 esp_err_t err = fw_ota_write(payload, payload_len);
                 if (err != ESP_OK) {
                     ESP_LOGE(TAG, "OTA write failed: %s", esp_err_to_name(err));
                     fw_ota_abort();
+                    bridge_send_ota_rsp(OTA_RSP_DATA, 0x01, NULL, 0);
+                } else {
+                    bridge_send_ota_rsp(OTA_RSP_DATA, 0x00, NULL, 0);
                 }
+            } else {
+                bridge_send_ota_rsp(OTA_RSP_DATA, 0x00, NULL, 0);
             }
             break;
         }

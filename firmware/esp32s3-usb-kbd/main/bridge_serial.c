@@ -50,6 +50,7 @@ static const char *TAG = "bridge-serial";
 // OTA response IDs received from ESP32 via UART
 #define OTA_RSP_MARKER  0xFB
 #define OTA_RSP_BEGIN   0x01
+#define OTA_RSP_DATA    0x02   /* per-chunk ACK from ESP32 */
 #define OTA_RSP_END     0x03
 #define OTA_RSP_VERSION 0x04
 
@@ -480,12 +481,26 @@ static void handle_fw_update_data(cJSON *root) {
 
     if (is_board_esp32(root)) {
         // Relay as UART control frames in OTA_UART_CHUNK-sized pieces.
+        // Wait for a per-chunk ACK from ESP32 before sending the next frame
+        // so we don't overflow its UART RX buffer while it's writing flash.
         size_t offset = 0;
         while (offset < decoded_len) {
             size_t chunk = decoded_len - offset;
             if (chunk > OTA_UART_CHUNK) chunk = OTA_UART_CHUNK;
             uart_proto_send_ctrl(CTRL_CMD_OTA_DATA, &s_ota_buf[offset], (uint8_t)chunk);
             offset += chunk;
+
+            if (!wait_esp32_ota_rsp(OTA_RSP_DATA, 5000)) {
+                fw_ota_abort();
+                uart_proto_send_ctrl(CTRL_CMD_OTA_ABORT, NULL, 0);
+                respond_error("fw_update_data", "esp32_data_timeout");
+                return;
+            }
+            if (s_esp32_ota_rsp_status != 0x00) {
+                uart_proto_send_ctrl(CTRL_CMD_OTA_ABORT, NULL, 0);
+                respond_error("fw_update_data", "esp32_data_write_failed");
+                return;
+            }
         }
         respond_ok_simple("fw_update_data");
         return;
