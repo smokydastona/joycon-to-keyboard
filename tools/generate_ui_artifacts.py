@@ -68,6 +68,8 @@ UI_BUNDLE_INPUTS = [
     UI_DIR / "default" / "backgrounds" / "razer_none.png",
     UI_DIR / "dark" / "backgrounds" / "razer_connected.png",
     UI_DIR / "dark" / "backgrounds" / "razer_none.png",
+    UI_DIR / "default" / "backgrounds" / "blueprint-texture.png",
+    UI_DIR / "dark" / "backgrounds" / "blueprint-texture.png",
     UI_DIR / "misc" / "pinouts.png",
     UI_DIR / "default" / "misc" / "keyboard.png",
     UI_DIR / "dark" / "misc" / "keyboard-dark.png",

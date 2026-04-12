@@ -70,11 +70,13 @@ def ui_bundle_search_roots() -> list[Path]:
 
 
 def device_image_search_roots(theme: str = "default") -> list[Path]:
-    bundle_name = ".ui-bundle-dark" if theme == "dark" else ".ui-bundle"
+    # The heist theme shares the dark device images (same navy/dark tone).
+    _asset_theme = "dark" if theme in ("dark", "heist") else "default"
+    bundle_name = ".ui-bundle-dark" if _asset_theme == "dark" else ".ui-bundle"
     roots: list[Path] = []
     try:
         cwd = Path.cwd()
-        roots.append(cwd / "docs" / "ui" / theme / "backgrounds")
+        roots.append(cwd / "docs" / "ui" / _asset_theme / "backgrounds")
         roots.extend([
             cwd,
             cwd / bundle_name / "backgrounds",
@@ -99,7 +101,7 @@ def device_image_search_roots(theme: str = "default") -> list[Path]:
     here = Path(__file__).resolve()
     repo = here.parents[3]
     roots.extend([
-        repo / "docs" / "ui" / theme / "backgrounds",
+        repo / "docs" / "ui" / _asset_theme / "backgrounds",
         here.parents[1],
         here.parents[1] / bundle_name / "backgrounds",
         here.parents[1] / bundle_name,

@@ -187,6 +187,82 @@ DARK_THEME: dict[str, Any] = {
     },
 }
 
+# Heist-plan theme — nautical blueprint-board aesthetic from the style guide.
+# Colors derived from the Bind Bandit Heist-Plan UI Style Guide:
+#   Blueprint Navy #0A1A2F, Graphite Black #0B0B0C, Chalk White #F2F2F2,
+#   Red String Crimson #C62828, Tape Beige #C9B89A, Sepia Ink #6A4A2C,
+#   Blueprint Cyan Lines #4AA8FF, Pencil-Crayon Navy #1C2E4A
+HEIST_THEME: dict[str, Any] = {
+    "name": "heist-plan",
+    "is_dark": True,
+    "colors": {
+        "bg":              "#0A1A2F",
+        "surface":         "#0d2040",
+        "surface2":        "#1C2E4A",
+        "panel":           "#0e1e36",
+        "text":            "#F2F2F2",
+        "text_secondary":  "#C9B89A",
+        "muted":           "#7a8fa8",
+        "border":          "#1e3555",
+        "border_light":    "#163048",
+        "accent":          "#4AA8FF",
+        "accent_hover":    "#6bbeff",
+        "accent2":         "#2b9e6a",
+        "danger":          "#C62828",
+        "danger_hover":    "#d63030",
+        "warning":         "#F7E36A",
+        "success":         "#4CAF50",
+        "active":          "#2b9e6a",
+        "conflict":        "#C62828",
+        "modified":        "#F7E36A",
+        "selected":        "#4AA8FF",
+        "selected_bg":     "#0e2a4a",
+        "pulse_bright":    "#4AA8FF",
+        "sidebar_bg":      "#07111f",
+        "sidebar_text":    "#C9B89A",
+        "sidebar_active":  "#4AA8FF",
+        "sidebar_hover":   "#0d1e30",
+        "card_shadow":     "rgba(0, 0, 0, 0.50)",
+        "overlay_bg":      "rgba(0, 0, 0, 0.72)",
+        "scrollbar_bg":    "#0d1e33",
+        "scrollbar_handle": "#1e3555",
+        "tooltip_bg":      "#0B0B0C",
+        "tooltip_text":    "#F2F2F2",
+        "input_bg":        "#091524",
+        "input_border":    "#1e3555",
+        "button_bg":       "#1C2E4A",
+        "button_hover":    "#253a5c",
+        "button_pressed":  "#2a4268",
+        "tab_active_bg":   "#0d2040",
+        "tab_inactive_bg": "#0A1A2F",
+    },
+    "typography": {
+        "font_family":           "IBM Plex Mono, Cascadia Code, Consolas",
+        "font_family_decorative": "Special Elite, Segoe Print",
+        "font_size":             10,
+        "font_size_sm":          9,
+        "font_size_lg":          12,
+        "font_size_xl":          16,
+        "font_size_title":       20,
+        "mono_family":           "IBM Plex Mono, Cascadia Code, Consolas",
+        "mono_size":             10,
+    },
+    "spacing": {"xs": 4, "sm": 8, "md": 12, "lg": 16, "xl": 24, "xxl": 32},
+    "radii": {"sm": 4, "md": 8, "lg": 12, "xl": 16},
+    "shadows": {
+        "card":    "0px 4px 16px rgba(0,0,0,0.50)",
+        "popup":   "0px 10px 32px rgba(0,0,0,0.60)",
+        "sidebar": "2px 0px 12px rgba(0,0,0,0.50)",
+    },
+}
+
+# Convenience mapping used by ThemeEngine.set_mode()
+_THEMES: dict[str, Any] = {
+    "light": LIGHT_THEME,
+    "dark":  DARK_THEME,
+    "heist": HEIST_THEME,
+}
+
 
 # ---------------------------------------------------------------------------
 # ThemeEngine
@@ -195,15 +271,33 @@ DARK_THEME: dict[str, Any] = {
 class ThemeEngine:
     """Manages the active theme and generates QSS stylesheets."""
 
-    def __init__(self, dark: bool | None = None) -> None:
-        if dark is None:
-            dark = self._detect_dark_preference()
-        self._is_dark = dark
-        self._theme = DARK_THEME if dark else LIGHT_THEME
+    def __init__(self, dark: bool | None = None, mode: str | None = None) -> None:
+        """Initialise the theme engine.
 
+        *mode* (``"light"``, ``"dark"``, or ``"heist"``) takes priority over
+        the legacy *dark* boolean when both are supplied.  When neither is
+        given the system dark-mode preference is used (maps to ``"dark"`` or
+        ``"light"``).
+        """
+        if mode is not None:
+            resolved = _THEMES.get(mode.lower(), DARK_THEME)
+            self._mode = mode.lower()
+        else:
+            if dark is None:
+                dark = self._detect_dark_preference()
+            self._mode = "dark" if dark else "light"
+            resolved = _THEMES[self._mode]
+        self._theme = resolved
+
+    # ── backward-compat property ──
     @property
     def is_dark(self) -> bool:
-        return self._is_dark
+        return self._theme.get("is_dark", False)
+
+    @property
+    def mode_name(self) -> str:
+        """Return the current mode name: ``"light"``, ``"dark"``, or ``"heist"``."""
+        return self._mode
 
     @property
     def theme(self) -> dict[str, Any]:
@@ -221,9 +315,20 @@ class ThemeEngine:
     def radius(self, key: str) -> int:
         return self._theme["radii"].get(key, 6)
 
+    def set_mode(self, mode: str) -> None:
+        """Switch to a named theme mode (``"light"``, ``"dark"``, ``"heist"``)."""
+        resolved = _THEMES.get(mode.lower())
+        if resolved is None:
+            log.warning("Unknown theme mode %r, ignoring", mode)
+            return
+        self._mode = mode.lower()
+        self._theme = resolved
+
     def toggle(self) -> None:
-        self._is_dark = not self._is_dark
-        self._theme = DARK_THEME if self._is_dark else LIGHT_THEME
+        """Cycle: light → dark → heist → light …"""
+        order = ["light", "dark", "heist"]
+        next_idx = (order.index(self._mode) + 1) % len(order)
+        self.set_mode(order[next_idx])
 
     def generate_qss(self) -> str:
         c = self._theme["colors"]

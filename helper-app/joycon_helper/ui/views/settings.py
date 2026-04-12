@@ -87,10 +87,14 @@ class SettingsView(QScrollArea):
 
         # Theme selector
         self._theme_combo = QComboBox()
-        self._theme_combo.addItems(["Dark", "Light"])
-        self._theme_combo.setCurrentIndex(0 if self._main.theme.is_dark else 1)
-        self._theme_combo.setToolTip("Application colour scheme")
-        self._theme_combo.currentIndexChanged.connect(self._on_theme_changed)
+        self._theme_combo.addItems(["Dark", "Light", "Heist"])
+        _mode_to_idx = {"dark": 0, "light": 1, "heist": 2}
+        self._theme_combo.setCurrentIndex(
+            _mode_to_idx.get(self._main.theme.mode_name, 0))
+        self._theme_combo.setToolTip(
+            "Application colour scheme\n"
+            "Heist: blueprint-navy tactical board aesthetic")
+        self._theme_combo.currentTextChanged.connect(self._on_theme_changed)
         form.addRow("Theme:", self._theme_combo)
 
         # Minimise to tray
@@ -411,10 +415,13 @@ class SettingsView(QScrollArea):
     # Callbacks
     # -----------------------------------------------------------------
 
-    def _on_theme_changed(self, index: int) -> None:
-        want_dark = index == 0
-        if want_dark != self._main.theme.is_dark:
-            self._main._toggle_theme()
+    def _on_theme_changed(self, value: str | int) -> None:
+        # Accept both text (new) and legacy index (belt-and-suspenders).
+        if isinstance(value, int):
+            value = ["dark", "light", "heist"][value] if value < 3 else "dark"
+        mode = value.lower()
+        if mode != self._main.theme.mode_name:
+            self._main._set_theme_mode(mode)
 
     def _on_opacity_changed(self, value: int) -> None:
         self._opacity_label.setText(f"{value}%")

@@ -744,12 +744,19 @@ class MainWindow(QMainWindow):
     # Theme
     # -----------------------------------------------------------------
 
+    def _set_theme_mode(self, mode: str) -> None:
+        """Switch to a named theme ("light", "dark", or "heist") and refresh the UI."""
+        self.theme.set_mode(mode)
+        # Heist uses the same dark-style device images as the dark theme.
+        asset_variant = "dark" if self.theme.is_dark or mode == "heist" else "default"
+        self.assets.set_theme(asset_variant)
+        icons = {"dark": "🌙", "heist": "🔦", "light": "☀"}
+        self._theme_btn.setText(icons.get(mode, "🌙"))
+        self._apply_theme()
+
     def _toggle_theme(self) -> None:
         self.theme.toggle()
-        theme_name = "dark" if self.theme.is_dark else "default"
-        self.assets.set_theme(theme_name)
-        self._theme_btn.setText("🌙" if self.theme.is_dark else "☀")
-        self._apply_theme()
+        self._set_theme_mode(self.theme.mode_name)
 
     def _apply_theme(self) -> None:
         qss = self.theme.generate_qss()
@@ -1259,14 +1266,9 @@ class MainWindow(QMainWindow):
             self._settings.setValue("log_level", log_combo.currentText())
             logging.getLogger().setLevel(getattr(logging, log_combo.currentText(), logging.INFO))
 
-            want_dark = theme_combo.currentIndex() == 0
-            if want_dark != self.theme.is_dark:
-                self.theme.toggle()
-                qss = self.theme.generate_qss()
-                QApplication.instance().setStyleSheet(qss)
-                self.assets = AssetManager("dark" if self.theme.is_dark else "default")
-                if self._overlay and not self._overlay.is_closed:
-                    self._overlay.apply_theme(self.theme)
+            # Legacy inline settings dialog — keep in sync with new Settings view.
+            # This branch may still exist in older code paths; forward to set_mode.
+            pass  # theme is now handled by the Settings view via _set_theme_mode()
 
     # -----------------------------------------------------------------
     # Windows auto-start helpers
