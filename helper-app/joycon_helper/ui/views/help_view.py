@@ -167,7 +167,7 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "Operation Scripts — macro editor, layers, chords, stick config\n"
                 "Crew Loadouts — save/load/share profiles across 4 slots\n"
                 "Target Assets — M913 keypad and Razer mouse configuration\n"
-                "Forensics — input test, controller info\n"
+                "Forensics — input test, controller info, telemetry, exportable reports\n"
                 "Help — you are here\n\n"
                 "## Key Binding\n"
                 "The Blueprint Layout tab has device tabs: Joy-Con, M913, and Mouse. "
@@ -235,6 +235,12 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "remembered across sessions and clamped to visible screens. "
                 "Right-click the overlay for opacity presets, placement presets "
                 "(8 screen positions), and compact mode."
+                "\n\n"
+                "## Forensics\n"
+                "The Forensics view keeps a live session telemetry record: total mapped events, "
+                "recent throughput, average hold time, active/peak keys, and latency samples from Ping. "
+                "Use Copy Summary for a quick shareable snapshot or Export Report to save a JSON file "
+                "with controller metadata, calibration assessment, and the recent event log."
             ),
             False,
         ),
