@@ -57,7 +57,7 @@ static void send_report(void) {
         return;
     }
 
-    tud_hid_n_mouse_report(1, 0, s_buttons, dx, dy, vs, hs);
+    tud_hid_n_mouse_report(1, 1, s_buttons, dx, dy, vs, hs);
 
     // Subtract what we sent from pending accumulators.
     s_pending_dx -= dx;

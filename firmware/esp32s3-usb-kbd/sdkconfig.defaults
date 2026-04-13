@@ -9,8 +9,8 @@ CONFIG_TINYUSB_CDC_ENABLED=y
 # save resources.
 CONFIG_ESP_CONSOLE_NONE=y
 
-# Two HID interface instances: keyboard (instance 0) + mouse (instance 1).
-# NOTE: Gamepad (instance 2) temporarily removed for enumeration diagnosis.
+# Two HID interface instances: keyboard (instance 0) + combined mouse+gamepad (instance 1).
+# Gamepad uses Report ID 2 on instance 1 to stay within ESP32-S3 USB OTG EP1-EP4 IN limit.
 CONFIG_TINYUSB_HID_COUNT=2
 
 # Flash size — partition table requires ~3.6 MB (two OTA app slots).

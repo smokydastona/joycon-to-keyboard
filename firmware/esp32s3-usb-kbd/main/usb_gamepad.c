@@ -5,8 +5,11 @@
 #include "tusb.h"
 
 // HID instance index for the gamepad interface in this firmware.
-// 0 = keyboard, 1 = mouse, 2 = gamepad
-#define GAMEPAD_HID_INSTANCE 2
+// 0 = keyboard, 1 = combined mouse+gamepad (report ID 1 = mouse, ID 2 = gamepad)
+// Instance 2 no longer exists — gamepad is multiplexed on instance 1 to stay
+// within the ESP32-S3 USB OTG EP limit (IN endpoints EP1-EP4 only).
+#define GAMEPAD_HID_INSTANCE 1
+#define GAMEPAD_REPORT_ID    2
 
 // Key IDs (base ids) as defined by this project.
 // Keep in sync with docs/keymap.md and any key_id packing rules.
@@ -156,8 +159,8 @@ static void send_report_if_ready(void)
     bind_bandit_gamepad_report_t r;
     build_report(&r);
 
-    // Report ID = 0 (no report IDs used).
-    (void)tud_hid_n_report(GAMEPAD_HID_INSTANCE, 0, &r, sizeof(r));
+    // Report ID 2 (gamepad in combined mouse+gamepad HID instance 1).
+    (void)tud_hid_n_report(GAMEPAD_HID_INSTANCE, GAMEPAD_REPORT_ID, &r, sizeof(r));
 }
 
 void usb_gamepad_init(void)
@@ -181,7 +184,7 @@ void usb_gamepad_set_enabled(bool enabled)
         bind_bandit_gamepad_report_t r;
         memset(&r, 0, sizeof(r));
         r.hat = 8;
-        (void)tud_hid_n_report(GAMEPAD_HID_INSTANCE, 0, &r, sizeof(r));
+        (void)tud_hid_n_report(GAMEPAD_HID_INSTANCE, GAMEPAD_REPORT_ID, &r, sizeof(r));
     }
 }
 
