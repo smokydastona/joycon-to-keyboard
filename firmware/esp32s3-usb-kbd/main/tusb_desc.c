@@ -15,7 +15,7 @@ tusb_desc_device_t const desc_device = {
     // NOTE: These VID/PID are placeholders.
     // If you ship hardware, use your own VID/PID.
     .idVendor = 0xCafe,
-    .idProduct = 0x4030,
+    .idProduct = 0x4031,
     .bcdDevice = 0x0100,
 
     .iManufacturer = 0x01,
