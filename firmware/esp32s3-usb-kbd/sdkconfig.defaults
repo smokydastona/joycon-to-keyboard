@@ -9,8 +9,9 @@ CONFIG_TINYUSB_CDC_ENABLED=y
 # save resources.
 CONFIG_ESP_CONSOLE_NONE=y
 
-# Three HID interface instances: keyboard (instance 0) + mouse (instance 1) + gamepad (instance 2).
-CONFIG_TINYUSB_HID_COUNT=3
+# Two HID interface instances: keyboard (instance 0) + mouse (instance 1).
+# NOTE: Gamepad (instance 2) temporarily removed for enumeration diagnosis.
+CONFIG_TINYUSB_HID_COUNT=2
 
 # Flash size — partition table requires ~3.6 MB (two OTA app slots).
 CONFIG_ESPTOOLPY_FLASHSIZE_4MB=y

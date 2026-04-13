@@ -15,7 +15,7 @@ tusb_desc_device_t const desc_device = {
     // NOTE: These VID/PID are placeholders.
     // If you ship hardware, use your own VID/PID.
     .idVendor = 0xCafe,
-    .idProduct = 0x4031,
+    .idProduct = 0x4032,  // Diagnostic: no-gamepad test (was 0x4031)
     .bcdDevice = 0x0100,
 
     .iManufacturer = 0x01,
@@ -37,6 +37,7 @@ static uint8_t const desc_hid_report_mouse[] = {
 
 // HID report descriptor: standard gamepad (instance 2)
 // 16 buttons + hat switch + X/Y + Rx/Ry axes.
+// NOTE: Temporarily disabled for enumeration diagnosis. Re-enable after root cause found.
 static uint8_t const desc_hid_report_gamepad[] = {
     0x05, 0x01,       // Usage Page (Generic Desktop)
     0x09, 0x05,       // Usage (Game Pad)
@@ -92,11 +93,11 @@ enum {
     ITF_NUM_CDC_DATA,
     ITF_NUM_HID_KBD,
     ITF_NUM_HID_MOUSE,
-    ITF_NUM_HID_GAMEPAD,
+    // ITF_NUM_HID_GAMEPAD,  // Disabled for enumeration diagnosis
     ITF_NUM_TOTAL,
 };
 
-#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN + TUD_HID_DESC_LEN + TUD_HID_DESC_LEN + TUD_HID_DESC_LEN)
+#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN + TUD_HID_DESC_LEN + TUD_HID_DESC_LEN)
 
 // Endpoint allocation:
 // - CDC: 1x interrupt IN notification, 1x bulk OUT, 1x bulk IN
@@ -107,14 +108,14 @@ enum {
 #define EPNUM_CDC_IN     0x82
 #define EPNUM_HID_KBD    0x83
 #define EPNUM_HID_MOUSE  0x84
-#define EPNUM_HID_GAMEPAD 0x85
+#define EPNUM_HID_GAMEPAD 0x85  // Defined but not used in descriptor (diagnosis)
 
 uint8_t const desc_configuration[] = {
     TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, CONFIG_TOTAL_LEN, 0x00, 100),
     TUD_CDC_DESCRIPTOR(ITF_NUM_CDC, 4, EPNUM_CDC_NOTIF, 8, EPNUM_CDC_OUT, EPNUM_CDC_IN, 64),
     TUD_HID_DESCRIPTOR(ITF_NUM_HID_KBD, 5, HID_ITF_PROTOCOL_KEYBOARD, sizeof(desc_hid_report_kbd), EPNUM_HID_KBD, 16, 1),
     TUD_HID_DESCRIPTOR(ITF_NUM_HID_MOUSE, 6, HID_ITF_PROTOCOL_MOUSE, sizeof(desc_hid_report_mouse), EPNUM_HID_MOUSE, 16, 1),
-    TUD_HID_DESCRIPTOR(ITF_NUM_HID_GAMEPAD, 7, HID_ITF_PROTOCOL_NONE, sizeof(desc_hid_report_gamepad), EPNUM_HID_GAMEPAD, 16, 1),
+    // Gamepad interface temporarily removed for enumeration diagnosis
 };
 
 _Static_assert(sizeof(desc_configuration) == CONFIG_TOTAL_LEN,
@@ -129,10 +130,10 @@ char const* string_desc_arr[] = {
     "Architect",
     "Composer",
     "Forger",
-    "Executor",
+    // "Executor" removed with gamepad (diagnosis)
 };
 
-#define STRING_DESC_ARR_SIZE 8
+#define STRING_DESC_ARR_SIZE 7
 const int string_desc_arr_count = STRING_DESC_ARR_SIZE;
 
 // Required HID callbacks
