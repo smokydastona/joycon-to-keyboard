@@ -45,6 +45,19 @@ _TEXT_OFFSET_Y = -36
 _HOVER_GROW = 8
 _PULSE_RANGE = 4
 
+# Thumbstick group patterns — hotspots whose names match the same prefix
+# are always moved together during drag-edit.  The centre button may be
+# named differently per device ("LStick" on Joy-Con, "LS" on Gamepad), so
+# we normalise everything to two canonical groups.
+_STICK_PREFIXES: dict[str, str] = {
+    # Joy-Con naming
+    "LStick": "L", "LSUp": "L", "LSDown": "L", "LSLeft": "L", "LSRight": "L",
+    # Joy-Con right
+    "RStick": "R", "RSUp": "R", "RSDown": "R", "RSLeft": "R", "RSRight": "R",
+    # Gamepad naming (centre is "LS" / "RS")
+    "LS": "L", "RS": "R",
+}
+
 
 class HotspotItem:
     """Holds QGraphicsItems for a single hotspot."""
@@ -90,6 +103,7 @@ class HotspotCanvas(QGraphicsView):
         # State
         self._bg_item: QGraphicsPixmapItem | None = None
         self._hotspots: list[HotspotItem] = []
+        self._stick_groups: dict[str, list[HotspotItem]] = {}
         self._selected: str | None = None
         self._hovered: str | None = None
         self._overlay_color = "#a03cc8"  # violet default
@@ -148,6 +162,7 @@ class HotspotCanvas(QGraphicsView):
 
     def set_hotspots(self, hotspots: list[tuple[str, float, float]]) -> None:
         self._hotspots = [HotspotItem(name, nx, ny) for name, nx, ny in hotspots]
+        self._rebuild_stick_groups()
         self._rebuild_hotspot_items()
 
     def set_hotspot_shapes(self, shapes: dict[str, Any]) -> None:
@@ -284,16 +299,34 @@ class HotspotCanvas(QGraphicsView):
             if rect.width() > 0 and rect.height() > 0:
                 nx = max(0.0, min(1.0, scene_pos.x() / rect.width()))
                 ny = max(0.0, min(1.0, scene_pos.y() / rect.height()))
-                self._dragging.norm_x = nx
-                self._dragging.norm_y = ny
-                cx = nx * rect.width()
-                cy = ny * rect.height()
-                self._dragging.dot.setPath(
-                    self._make_shape_path(cx, cy, self._dragging.name)
-                )
-                if self._dragging.label:
-                    lw = self._dragging.label.boundingRect().width()
-                    self._dragging.label.setPos(cx - lw / 2, cy + _TEXT_OFFSET_Y)
+                # Move entire stick group together
+                siblings = self._stick_groups.get(self._dragging.name)
+                targets = siblings if siblings else [self._dragging]
+                for hs in targets:
+                    hs.norm_x = nx
+                    hs.norm_y = ny
+                    cx = nx * rect.width()
+                    cy = ny * rect.height()
+                    if hs.dot:
+                        hs.dot.setPath(
+                            self._make_shape_path(cx, cy, hs.name)
+                        )
+                    if hs.label:
+                        lw = hs.label.boundingRect().width()
+                        spec = self._shapes.get(hs.name)
+                        if spec and spec[0].startswith("arc_"):
+                            d = spec[0][4:]
+                            outer_r = spec[2]
+                            if d == "top":
+                                hs.label.setPos(cx - lw / 2, cy - outer_r - 20)
+                            elif d == "bottom":
+                                hs.label.setPos(cx - lw / 2, cy + outer_r + 4)
+                            elif d == "left":
+                                hs.label.setPos(cx - outer_r - lw - 4, cy - 8)
+                            else:
+                                hs.label.setPos(cx + outer_r + 4, cy - 8)
+                        else:
+                            hs.label.setPos(cx - lw / 2, cy + _TEXT_OFFSET_Y)
             return
         name = self._pick_hotspot(event.position())
         if name != self._hovered:
@@ -312,6 +345,20 @@ class HotspotCanvas(QGraphicsView):
     # -----------------------------------------------------------------
     # Internals
     # -----------------------------------------------------------------
+
+    def _rebuild_stick_groups(self) -> None:
+        """Build a map from hotspot name → list of co-located stick siblings."""
+        groups: dict[str, list[HotspotItem]] = {}  # "L"/"R" → items
+        for hs in self._hotspots:
+            key = _STICK_PREFIXES.get(hs.name)
+            if key:
+                groups.setdefault(key, []).append(hs)
+        # Flatten: every member maps to the full sibling list
+        self._stick_groups: dict[str, list[HotspotItem]] = {}
+        for members in groups.values():
+            if len(members) > 1:
+                for hs in members:
+                    self._stick_groups[hs.name] = members
 
     def _pick_hotspot(self, view_pos: Any) -> str | None:
         scene_pos = self.mapToScene(int(view_pos.x()), int(view_pos.y()))
