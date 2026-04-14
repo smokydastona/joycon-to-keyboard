@@ -35,6 +35,15 @@ Add the reverse UART line so the ESP32-S3 can send commands to the ESP32 (requir
 
 Without this wire, basic keyboard output still works but the helper app cannot communicate with the ESP32.
 
+## Installer assist connections (required for host-first Web Flasher)
+
+To let the ESP32 host flash the Nano ESP32-S3 over the existing UART bridge, add two more 3.3V control wires:
+
+- ESP32 `GPIO21` → Nano `B1 / GPIO0`
+- ESP32 `GPIO22` → Nano `RESET`
+
+These lines let the host force the Nano into ROM download mode, flash the merged ESP32-S3 firmware, then release it back into normal run mode. You can leave them connected permanently, or only wire them during first install / recovery.
+
 ## Pin defaults used by this repo
 
 These are the defaults you’ll get without changing `menuconfig`.
@@ -66,6 +75,8 @@ So the default "minimum wiring" becomes:
 - GND ↔ GND
 - Nano 5V/VUSB → ESP32 VIN/5V
 
+For the easier host-first Web Flasher path, use six wires total: power, ground, both UART directions, and the two installer control lines above.
+
 ## Exact pin-to-pin wiring (matches `pinouts.png`)
 
 If you are using the exact boards shown in `pinouts.png`:
@@ -93,6 +104,13 @@ Not required for basic one-way key output.
 Required if you want the **helper app to initiate controller connect/scan** (no button presses on the boards).
 
 - Nano **D3 (GPIO6)** → NodeMCU **UART2_RX (GPIO16)**
+
+### Installer control lines (ESP32 → ESP32-S3)
+
+- NodeMCU **GPIO21** → Nano **B1 (GPIO0)**
+- NodeMCU **GPIO22** → Nano **RESET**
+
+The Web Flasher uses these two lines after the ESP32 host is installed. It opens the host serial port, tells the host to pull Nano `GPIO0` low and pulse Nano `RESET`, then flashes the Nano over the existing `GPIO17/GPIO16` UART bridge.
 
 ## Voltage levels (important)
 

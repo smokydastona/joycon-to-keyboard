@@ -28,6 +28,15 @@ In that case you also need a **power wire** from the Nano’s USB 5V to the ESP3
 
 Full detailed wiring (including power model and pin defaults): see `docs/wiring.md`.
 
+## Recommended wiring for the host-first Web Flasher
+
+If you want the easiest first-time install path, add the two installer wires as well:
+
+- ESP32 `GPIO21` → Nano `B1 / GPIO0`
+- ESP32 `GPIO22` → Nano `RESET`
+
+The host firmware uses those pins to put the Nano into ROM download mode and flash it over the normal bridge UART.
+
 ## Firmware to flash on the Nano ESP32
 
 Use: `firmware/esp32s3-usb-kbd/`

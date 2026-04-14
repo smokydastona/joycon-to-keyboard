@@ -151,6 +151,10 @@ body {
   padding: 20px;
 }
 
+.install-card {
+  grid-column: 1 / -1;
+}
+
 .mini-steps h2,
 .help summary,
 .card h2,
@@ -221,7 +225,8 @@ body {
   display: block;
 }
 
-.card esp-web-install-button button {
+.card esp-web-install-button button,
+.primary-action {
   width: 100%;
   padding: 15px 18px;
   background: linear-gradient(180deg, var(--accent), var(--accent-hover));
@@ -236,14 +241,59 @@ body {
   transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
 }
 
-.card esp-web-install-button button:hover {
+.card esp-web-install-button button:hover,
+.primary-action:hover {
   transform: translateY(-1px);
   filter: brightness(1.02);
   box-shadow: 0 16px 28px rgba(74, 168, 255, 0.24);
 }
 
-.card esp-web-install-button button:active {
+.card esp-web-install-button button:active,
+.primary-action:active {
   transform: translateY(0);
+}
+
+.primary-action:disabled {
+  cursor: wait;
+  filter: saturate(0.4);
+  box-shadow: none;
+}
+
+.wire-list,
+.step-list {
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.wire-list strong,
+.step-list strong {
+  color: var(--text-secondary);
+}
+
+.install-status {
+  min-height: 1.4em;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.progress-shell {
+  width: 100%;
+  height: 12px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: rgba(7, 17, 31, 0.72);
+  border: 1px solid var(--border-light);
+}
+
+.progress-bar {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.2s ease;
 }
 
 .help details {
@@ -285,6 +335,20 @@ body {
 .help-note {
   margin-top: 14px;
   line-height: 1.6;
+}
+
+.fallback-box {
+  margin-top: 16px;
+  padding: 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(7, 17, 31, 0.66);
+  border: 1px solid var(--border-light);
+}
+
+.fallback-box p {
+  color: var(--muted);
+  line-height: 1.6;
+  margin: 12px 0;
 }
 
 .diagnostics-panel {

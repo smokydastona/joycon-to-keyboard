@@ -11,6 +11,7 @@
 #include "bt_hid_host.h"
 #include "uart_framing.h"
 #include "fw_ota.h"
+#include "installer_console.h"
 #include "joycon_mapper.h"
 #include "joycon_setup.h"
 
@@ -194,6 +195,11 @@ static void ctrl_task(void *arg) {
     uint8_t payload_i = 0;
 
     while (1) {
+        if (installer_console_passthrough_active()) {
+            vTaskDelay(pdMS_TO_TICKS(20));
+            continue;
+        }
+
         uint8_t b;
         int got = uart_read_bytes(BRIDGE_UART_PORT, &b, 1, pdMS_TO_TICKS(20));
         if (got != 1) {

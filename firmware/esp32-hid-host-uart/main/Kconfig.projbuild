@@ -103,6 +103,22 @@ config JOYCON_HOST_SETUP_CONNECT_DELAY_MS
         complete power-mode negotiations (e.g. sniff mode).  Set to 0 to
         disable the delay.
 
+config BIND_BANDIT_INSTALLER_S3_BOOT_GPIO
+    int "Installer S3 BOOT pin (Nano B1 / GPIO0)"
+    range 0 39
+    default 21
+    help
+        ESP32 GPIO used to drive the Nano ESP32-S3 boot strap pin during the
+        browser-based first-install flow. Wire this to Nano B1 / GPIO0.
+
+config BIND_BANDIT_INSTALLER_S3_RESET_GPIO
+    int "Installer S3 RESET pin"
+    range 0 39
+    default 22
+    help
+        ESP32 GPIO used to pulse the Nano ESP32-S3 RESET pin during the
+        browser-based first-install flow.
+
 config JOYCON_HOST_MOTION_SHAKE_THRESHOLD
     int "Shake gesture accel threshold"
     range 2000 30000

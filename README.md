@@ -105,6 +105,13 @@ Flash both boards from your browser (Chrome/Edge) — no ESP-IDF or drivers need
 
 👉 **<https://smokydastona.github.io/joycon-to-keyboard/>**
 
+Recommended order:
+
+1. Flash the ESP32 host first.
+2. Wire the installer leads (`GPIO21` -> Nano `B1 / GPIO0`, `GPIO22` -> Nano `RESET`).
+3. Let the page flash the ESP32-S3 through the host bridge.
+4. Use the helper app for normal firmware updates after that.
+
 ## Next
 
 0) Wiring (one USB dongle): see `docs/wiring.md`

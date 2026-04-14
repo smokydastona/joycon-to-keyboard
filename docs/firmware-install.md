@@ -11,17 +11,39 @@ The **Bind Bandit Web Flasher** is the primary way to flash both boards for the 
 1. Open the Web Flasher: <https://smokydastona.github.io/joycon-to-keyboard/>
 2. Use **Google Chrome** or **Microsoft Edge** (Web Serial required).
 
-### ESP32-S3 (USB HID Device) — Arduino Nano ESP32
+### Recommended flow: host first, then host-assisted Nano install
 
-3. Plug in the board via **USB-C**.
-4. **Double-tap the RESET button** quickly (< 300 ms) — a new COM port appears.
-5. Click **Connect & Install ESP32-S3** and select the *new* port.
+Wire the boards together first using `docs/wiring.md`, including the installer-assist lines:
+
+- ESP32 `GPIO17` → Nano `D2 / GPIO5`
+- ESP32 `GPIO16` ← Nano `D3 / GPIO6`
+- ESP32 `GPIO21` → Nano `B1 / GPIO0`
+- ESP32 `GPIO22` → Nano `RESET`
+- GND ↔ GND
+- Nano `VUSB OUT` → ESP32 `VIN / 5V`
+
+Then follow the page in this order.
 
 ### ESP32 (Bluetooth Host) — NodeMCU-32S / WROOM-32
 
-6. Plug in the board via USB.
-7. **Hold BOOT → tap RESET → release BOOT** to enter download mode.
-8. Click **Connect & Install ESP32** and select the port (usually "CP210x" or "CH340").
+3. Plug in the board via USB.
+4. **Hold BOOT → tap RESET → release BOOT** to enter download mode.
+5. Click **Install ESP32 Host** and select the port (usually "CP210x" or "CH340").
+
+### ESP32-S3 (USB HID Device) — Arduino Nano ESP32
+
+6. Replug the **ESP32 host** normally after flashing it.
+7. Click **Install ESP32-S3 Through Host** and select the **host** COM port.
+8. The page tells the host to pull Nano `GPIO0` and `RESET`, enters the Nano ROM bootloader, flashes the S3 firmware over UART, then releases the Nano back into normal run mode.
+9. Move the USB cable to the Nano ESP32-S3 for normal use.
+
+### Direct Nano fallback (advanced)
+
+If host-assisted flashing fails, the Web Flasher still exposes a direct Nano install fallback:
+
+1. Plug the Nano in via **USB-C**.
+2. **Double-tap the RESET button** quickly (< 300 ms) so a new COM port appears.
+3. Use the fallback **Install ESP32-S3 Directly** button and pick that Nano bootloader port.
 
 The web flasher erases all flash (clean NVS) by default — recommended for new boards. After flashing, wire the boards together per `docs/wiring.md`.
 
@@ -118,7 +140,8 @@ The usual ESP-IDF loop is:
 
 Notes:
 
-- Do **ESP32-S3 first**, because it’s the “front” of the dongle (USB HID device to PC).
+- For the Web Flasher, do **ESP32 host first**, then the host-assisted Nano install.
+- For manual ESP-IDF development, you can still build either board independently.
 - You can do everything from the ESP-IDF PowerShell.
 
 ---

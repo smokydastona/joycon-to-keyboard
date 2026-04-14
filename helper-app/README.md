@@ -55,7 +55,9 @@ Current UI sections (sidebar navigation, PyQt6):
 First-time flashing uses the **[Web Flasher](https://smokydastona.github.io/joycon-to-keyboard/)** — a browser-based tool (Chrome/Edge) that programs blank boards directly over USB with no toolchain required.
 
 - Open the Diagnostics tab → **"Open Web Flasher"** button to launch it.
-- The Web Flasher handles both the ESP32 (BT host) and ESP32-S3 (USB keyboard) boards.
+- Flash the ESP32 host first, then let the page flash the ESP32-S3 through the already-wired host bridge.
+- The host-assisted flow expects the extra installer wires from `docs/wiring.md`: `GPIO21` -> Nano `B1 / GPIO0` and `GPIO22` -> Nano `RESET`.
+- The Web Flasher still includes a direct Nano fallback for recovery.
 - After first-time flash, future updates use the **OTA** path in the Diagnostics tab (no download mode needed).
 
 The Mapping view's Joy-Con canvas switches between four states based on BT status: disconnected (`joycons-none.png`), left only, right only, and both connected.

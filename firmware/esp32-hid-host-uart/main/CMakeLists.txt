@@ -4,6 +4,7 @@ idf_component_register(
         "bt_hid_host.c"
         "bridge_ctrl.c"
         "fw_ota.c"
+        "installer_console.c"
         "uart_framing.c"
         "joycon_mapper.c"
         "joycon_setup.c"

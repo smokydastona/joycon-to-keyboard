@@ -9,6 +9,7 @@
     type="module"
     src="https://unpkg.com/esp-web-tools@10.2.1/dist/web/install-button.js?module"
   ></script>
+  <script type="module" src="installer.js"></script>
 </head>
 <body>
   <main class="simple-shell">
@@ -16,76 +17,111 @@
       <p class="eyebrow">First-time setup</p>
       <h1>Bind Bandit Web Flasher</h1>
       <p class="hero-copy">
-        Flash the two boards once, in order: <strong>ESP32-S3 first</strong>, then <strong>ESP32</strong>.
-        After that, use the desktop app for normal updates.
+        Flash the <strong>ESP32 host</strong> first, wire the Nano installer leads, then let the
+        browser flash the <strong>ESP32-S3 through the host</strong>. After first install, use the
+        desktop app for normal updates.
       </p>
       <div class="quick-row">
         <span class="quick-pill">Use Chrome or Edge</span>
-        <span class="quick-pill">Flash order: S3 -> ESP32</span>
+        <span class="quick-pill">Flash order: ESP32 -> host-assisted S3</span>
+        <span class="quick-pill">Extra wires: GPIO21 / GPIO22</span>
       </div>
     </section>
 
-    <div class="unsupported panel" id="unsupported">
+    <div class="unsupported panel" id="unsupported" hidden>
       Your browser does not support Web Serial. Use <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong> on desktop.
     </div>
-
-    <section class="mini-steps panel">
-      <h2>Quick steps</h2>
-      <ol>
-        <li>Put the board in download mode.</li>
-        <li>Click the matching install button.</li>
-        <li>Pick the board's serial port.</li>
-        <li>Repeat for the second board.</li>
-      </ol>
-    </section>
 
     <section class="boards">
       <article class="card panel">
         <div class="card-head">
           <span class="chip">Step 1</span>
-          <h2>ESP32-S3</h2>
+          <h2>Flash the ESP32 host</h2>
         </div>
-        <p>The USB keyboard bridge that plugs into the PC.</p>
-        <p class="card-reminder">Double-tap RESET, then install.</p>
-        <esp-web-install-button manifest="manifest-esp32s3.json">
-          <button slot="activate">Install ESP32-S3</button>
+        <p>
+          Use the normal ESP Web Tools flow for the NodeMCU ESP32-WROOM-32. Enter download
+          mode with <strong>BOOT -> RESET -> release BOOT</strong>, then install the host firmware.
+        </p>
+        <p class="card-reminder">Do this first. The host becomes the Nano installer.</p>
+        <esp-web-install-button manifest="manifest-esp32.json">
+          <button slot="activate">Install ESP32 Host</button>
         </esp-web-install-button>
       </article>
 
       <article class="card panel">
         <div class="card-head">
           <span class="chip">Step 2</span>
-          <h2>ESP32</h2>
+          <h2>Add the installer wires</h2>
         </div>
-        <p>The Bluetooth host that talks to the Joy-Con.</p>
-        <p class="card-reminder">Hold BOOT, tap RESET, release BOOT, then install.</p>
-        <esp-web-install-button manifest="manifest-esp32.json">
-          <button slot="activate">Install ESP32</button>
-        </esp-web-install-button>
+        <p>
+          Keep the normal bridge wiring, then add two temporary or permanent installer leads so the
+          host can force the Nano into ROM download mode.
+        </p>
+        <ul class="wire-list">
+          <li><strong>GPIO17</strong> -> Nano <strong>D2 / GPIO5</strong></li>
+          <li><strong>GPIO16</strong> <- Nano <strong>D3 / GPIO6</strong></li>
+          <li><strong>GPIO21</strong> -> Nano <strong>B1 / GPIO0</strong></li>
+          <li><strong>GPIO22</strong> -> Nano <strong>RESET</strong></li>
+          <li><strong>GND</strong> <-> <strong>GND</strong></li>
+          <li>Nano <strong>VUSB OUT</strong> -> ESP32 <strong>5V / VIN</strong></li>
+        </ul>
+        <p class="card-reminder">Keep both boards disconnected from the PC except for the host USB cable during this step.</p>
+      </article>
+
+      <article class="card panel install-card">
+        <div class="card-head">
+          <span class="chip">Step 3</span>
+          <h2>Install the ESP32-S3 through the host</h2>
+        </div>
+        <p>
+          Connect to the host's USB serial port. The page will tell the host to pull Nano
+          <strong>GPIO0</strong> and <strong>RESET</strong>, then flash the merged S3 firmware over the existing UART bridge.
+        </p>
+        <button class="primary-action" id="install-s3-via-host" type="button">Install ESP32-S3 Through Host</button>
+        <div class="install-status" id="install-status" aria-live="polite">Waiting for the host install step.</div>
+        <div class="progress-shell" aria-hidden="true">
+          <div class="progress-bar" id="install-progress"></div>
+        </div>
+        <ol class="step-list">
+          <li>Plug the <strong>ESP32 host</strong> into USB after flashing it.</li>
+          <li>Click the button above and pick the host COM port.</li>
+          <li>Wait for the page to prepare the Nano, flash it, then release it back into run mode.</li>
+          <li>Move the USB cable to the Nano ESP32-S3 for normal use.</li>
+        </ol>
       </article>
     </section>
 
     <section class="help panel">
       <details>
-        <summary>Need help entering boot mode or picking a port?</summary>
+        <summary>Need help with wiring, COM ports, or fallback flashing?</summary>
         <div class="help-grid">
           <div class="help-block">
-            <h3>ESP32-S3</h3>
+            <h3>Host COM port</h3>
             <ul>
-              <li>Plug in over USB-C.</li>
-              <li>Double-tap RESET quickly.</li>
-              <li>Pick the new COM port that appears.</li>
+              <li>After Step 1, unplug and replug the ESP32 host normally.</li>
+              <li>Pick the CP210x or CH340 serial port for the NodeMCU board.</li>
+              <li>The host prints lines beginning with <strong>BBI</strong> when it is ready.</li>
             </ul>
           </div>
           <div class="help-block">
-            <h3>ESP32</h3>
+            <h3>Fallback</h3>
             <ul>
-              <li>Hold BOOT.</li>
-              <li>Tap RESET once.</li>
-              <li>Release BOOT and use the usual CP210x or CH340 port.</li>
+              <li>If host-assisted flashing fails, you can still flash the Nano directly.</li>
+              <li>Use USB-C, double-tap RESET, and install from the advanced fallback below.</li>
+              <li>The helper app still handles normal updates after first install.</li>
             </ul>
           </div>
         </div>
+        <details class="fallback-box">
+          <summary>Advanced fallback: flash the Nano ESP32-S3 directly</summary>
+          <p>
+            Use this only if you cannot get the host-assisted path working. Double-tap the Nano
+            RESET button, then pick the Nano port directly.
+          </p>
+          <esp-web-install-button manifest="manifest-esp32s3.json">
+            <button slot="activate">Install ESP32-S3 Directly</button>
+          </esp-web-install-button>
+        </details>
         <p class="help-note">
           If no port appears, try a data-capable USB cable, a different USB port, or see the
           <a href="https://github.com/smokydastona/joycon-to-keyboard/blob/main/docs/wiring.md" target="_blank" rel="noopener">wiring guide</a>
@@ -107,108 +143,10 @@
         smokydastona/joycon-to-keyboard
       </a>
       <span class="footer-divider"></span>
-      <a href="https://esphome.github.io/esp-web-tools/" target="_blank" rel="noopener">Powered by ESP Web Tools</a>
+      <a href="https://esphome.github.io/esp-web-tools/" target="_blank" rel="noopener">ESP Web Tools</a>
+      <span class="footer-divider"></span>
+      <a href="https://github.com/espressif/esptool-js" target="_blank" rel="noopener">esptool-js</a>
     </footer>
   </main>
-
-  <script>
-    if (!("serial" in navigator)) {
-      document.getElementById("unsupported").hidden = false;
-    }
-
-    /* ── Diagnostics logger ── */
-    const diagLog = document.getElementById("diag-log");
-    const diagSec = document.getElementById("diag-section");
-    function dlog(msg) {
-      diagSec.hidden = false;
-      const ts = new Date().toLocaleTimeString();
-      diagLog.textContent += `[${ts}] ${msg}\n`;
-      diagLog.scrollTop = diagLog.scrollHeight;
-    }
-
-    /* ── Pre-flight: manifest + firmware download check ── */
-    async function runDiag() {
-      dlog("Pre-flight checks starting…");
-
-      /* Check script loaded */
-      if (customElements.get("esp-web-install-button")) {
-        dlog("✅ ESP Web Tools component registered");
-      } else {
-        dlog("❌ ESP Web Tools component NOT registered — script may have failed to load");
-      }
-
-      dlog(`Secure context: ${window.isSecureContext}  |  Web Serial API: ${"serial" in navigator}`);
-      dlog(`User-Agent: ${navigator.userAgent.slice(0, 120)}`);
-
-      const manifests = [
-        { url: "manifest-esp32s3.json", label: "ESP32-S3" },
-        { url: "manifest-esp32.json",   label: "ESP32" }
-      ];
-
-      for (const m of manifests) {
-        try {
-          dlog(`Fetching manifest: ${m.url}`);
-          const mResp = await fetch(m.url);
-          dlog(`  HTTP ${mResp.status} ${mResp.statusText}  Content-Type: ${mResp.headers.get("content-type")}`);
-          if (!mResp.ok) { dlog("  ❌ Manifest fetch failed"); continue; }
-          const mJson = await mResp.json();
-          dlog(`  ✅ Manifest OK — name: "${mJson.name}"  chipFamily: ${mJson.builds?.[0]?.chipFamily}`);
-
-          for (const build of mJson.builds || []) {
-            for (const part of build.parts || []) {
-              const fwUrl = new URL(part.path, new URL(m.url, location.href)).href;
-              dlog(`  Fetching firmware: ${fwUrl}`);
-              try {
-                const fwResp = await fetch(fwUrl);
-                if (!fwResp.ok) { dlog(`    ❌ HTTP ${fwResp.status}`); continue; }
-                const buf = await fwResp.arrayBuffer();
-                const bytes = new Uint8Array(buf);
-                const magic = bytes[0];
-                const sizeKB = (bytes.length / 1024).toFixed(1);
-                dlog(`    ✅ ${sizeKB} KB downloaded  |  offset: 0x${part.offset.toString(16)}  |  first byte: 0x${magic.toString(16).toUpperCase().padStart(2,'0')} ${magic === 0xE9 ? "(valid bootloader ✓)" : magic === 0xFF ? "(padding — bootloader further in ✓)" : "(unexpected!)"}`);
-              } catch (fwErr) {
-                dlog(`    ❌ Firmware fetch error: ${fwErr.message}`);
-              }
-            }
-          }
-        } catch (mErr) {
-          dlog(`  ❌ Manifest error: ${mErr.message}`);
-        }
-      }
-      dlog("Pre-flight done.\n");
-    }
-    runDiag();
-
-    /* ── Intercept install button clicks + capture dialog events ── */
-    document.querySelectorAll("esp-web-install-button").forEach(btn => {
-      const label = btn.closest(".card")?.querySelector("h2")?.textContent || "unknown";
-
-      /* Watch for the install dialog being created in the DOM */
-      const observer = new MutationObserver(mutations => {
-        for (const mut of mutations) {
-          for (const node of mut.addedNodes) {
-            if (node.tagName && node.tagName.toLowerCase() === "ew-install-dialog") {
-              dlog(`[${label}] Install dialog opened`);
-              node.addEventListener("state-changed", e => {
-                dlog(`[${label}] state: ${e.detail?.state || JSON.stringify(e.detail)}`);
-              });
-              node.addEventListener("closed", () => {
-                dlog(`[${label}] Dialog closed`);
-              });
-              node.addEventListener("error", e => {
-                dlog(`[${label}] ❌ ERROR: ${e.detail?.message || e.detail || e}`);
-              });
-            }
-          }
-        }
-      });
-      observer.observe(document.body, { childList: true });
-
-      /* Log button clicks */
-      btn.addEventListener("click", () => {
-        dlog(`[${label}] Install button clicked — waiting for port picker…`);
-      }, true);
-    });
-  </script>
 </body>
 </html>

@@ -2,6 +2,8 @@
 
 #include "config.h"
 
+#include "installer_console.h"
+
 #include "driver/uart.h"
 #include "esp_log.h"
 
@@ -16,6 +18,10 @@ static inline uint8_t xor_checksum(uint8_t length, const uint8_t* payload) {
 }
 
 static void bridge_send_frame(const uint8_t* payload, uint8_t length) {
+    if (installer_console_passthrough_active()) {
+        return;
+    }
+
     // Frame format: AA 55 <len> <payload...> <checksum>
     // checksum = XOR of len and payload bytes.
     uint8_t header[3] = {BRIDGE_SYNC0, BRIDGE_SYNC1, length};

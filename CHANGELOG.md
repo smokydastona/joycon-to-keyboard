@@ -9,6 +9,8 @@ Until then, entries are grouped by date.
 
 ### Added
 
+- **Host-assisted ESP32-S3 first install**: The ESP32 host firmware now exposes a `BBI` installer console on its USB-UART port, plus a temporary raw passthrough mode that lets the Web Flasher drive `esptool-js` through the host. First-time flashing is now host-first: flash the ESP32, wire `GPIO21` -> Nano `B1 / GPIO0` and `GPIO22` -> Nano `RESET`, then let the host flash the Nano ESP32-S3 over the existing bridge UART.
+
 - **Bridge UART relocated to GPIO5/6 (Nano D2/D3)**: Moved bridge UART RX/TX from GPIO44/43 (Nano D0/D1) to GPIO5/6 (Nano D2/D3). Root cause: GPIO43/44 are the I/O MUX defaults for UART0; the bootloader briefly initialises UART0 on those pins and the I/O MUX assignment has higher priority than the GPIO matrix routing for UART1, silently blocking all bridge UART reception even after `CONFIG_ESP_CONSOLE_NONE` and `gpio_reset_pin()` were applied. GPIO5/6 have no UART0 association and are fully conflict-free. Updated Kconfig defaults, wiring.md, arduino-nano-esp32-setup.md, firmware-install.md, sdkconfig.defaults, and help tab.
 
 - **UART diagnostic CDC command (`uart_diag`)**: Added a `{"cmd":"uart_diag"}` command to the ESP32-S3 CDC protocol. Reports bridge UART port, baud, configured GPIO pins, RX pin logic level, buffered byte count, and up to 16 sample bytes read with a 100 ms timeout. Used to diagnose why zero UART frames arrive despite correct software configuration.

@@ -57,11 +57,26 @@ This firmware uses an **A/B OTA partition layout** (`partitions.csv`). The helpe
 - **Rollback protection** is enabled (`CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`). After an OTA update, the new firmware must call `fw_ota_mark_valid()` early in `app_main` — if it crashes before doing so, the bootloader automatically reverts to the previous partition.
 
 OTA control commands and response frames are documented in `docs/serial-protocol.md`.
+
+## Host-assisted Nano installer
+
+This firmware now exposes a small installer console on the host USB-UART port.
+The Web Flasher uses it for first-time installs:
+
+- `GPIO17` / `GPIO16` remain the Nano bridge UART.
+- `GPIO21` drives Nano `B1 / GPIO0`.
+- `GPIO22` drives Nano `RESET`.
+
+The browser opens the host COM port, sends `BBI` control commands, asks the host to put the Nano into ROM download mode, then uses a temporary raw passthrough on the bridge UART so `esptool-js` can flash the Nano over the already-wired adapter.
+
+During this passthrough window, normal Joy-Con UART framing is suppressed so the Nano bootloader sees a clean serial stream.
 ## UART (default)
 
 - Baud: 921600
 - TX pin: GPIO 17
 - RX pin: GPIO 16 (optional helper-app control)
+- Installer boot pin: GPIO 21
+- Installer reset pin: GPIO 22
 
 Set in `main/config.h`.
 
