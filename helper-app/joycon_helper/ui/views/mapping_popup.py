@@ -53,6 +53,8 @@ from ..constants import (
     KBD_HOTSPOTS,
     KBD_LABEL_TO_KEYCODE,
     KBD_WIDE,
+    MOUSE_HOTSPOTS,
+    MOUSE_WIDE,
 )
 from ..theme import ThemeEngine
 from ..widgets.hotspot_canvas import HotspotCanvas
@@ -84,6 +86,17 @@ MOUSE_BUTTONS: list[tuple] = [
     ("Scroll Up", 6),
     ("Scroll Down", 7),
 ]
+
+# Hotspot name → button id mapping (links canvas hotspots to MOUSE_BUTTONS)
+_MOUSE_HOTSPOT_TO_BTN: dict[str, tuple[int, str]] = {
+    "left":        (1, "Left Click"),
+    "right":       (2, "Right Click"),
+    "middle":      (3, "Middle Click"),
+    "back":        (4, "Back (X1)"),
+    "forward":     (5, "Forward (X2)"),
+    "scroll_up":   (6, "Scroll Up"),
+    "scroll_down": (7, "Scroll Down"),
+}
 
 # Advanced binding types
 ADVANCED_TYPES: list[tuple] = [
@@ -399,26 +412,45 @@ class MappingPopup(QDialog):
     def _build_mouse_tab(self) -> None:
         page = QWidget()
         lay = QVBoxLayout(page)
-        lay.setContentsMargins(16, 16, 16, 16)
-        lay.setSpacing(10)
+        lay.setContentsMargins(8, 8, 8, 8)
+        lay.setSpacing(8)
 
-        info = QLabel("Select a mouse button or scroll action to bind.")
+        info = QLabel("Click a mouse button on the image, or use the buttons below.")
         info.setStyleSheet("color: grey; font-size: 12px;")
         lay.addWidget(info)
 
+        # Mouse image canvas with clickable hotspots
+        theme = self._main.theme
+        theme_key = "dark" if theme.is_dark else "default"
+        self._mouse_canvas = HotspotCanvas(theme, page)
+        self._mouse_canvas.setMinimumHeight(260)
+        accent = theme.theme["colors"]["accent"]
+        self._mouse_canvas.set_overlay_color(accent)
+        mouse_hs = MOUSE_HOTSPOTS.get(theme_key, MOUSE_HOTSPOTS["default"])
+        mouse_pm = self._load_mouse_pixmap(theme_key)
+        if mouse_pm:
+            self._mouse_canvas.set_hotspots(mouse_hs)
+            self._mouse_canvas.set_wide_set(MOUSE_WIDE)
+            self._mouse_canvas.set_background(mouse_pm)
+        else:
+            self._mouse_canvas.set_hotspots(mouse_hs)
+            self._mouse_canvas.set_wide_set(MOUSE_WIDE)
+        self._mouse_canvas.hotspot_clicked.connect(self._on_mouse_hotspot_clicked)
+        lay.addWidget(self._mouse_canvas, 1)
+
+        # Fallback button row for quick selection
         self._mouse_selected: int | None = None
         self._mouse_btns: dict[int, QPushButton] = {}
-
         grid = QGridLayout()
-        grid.setSpacing(8)
+        grid.setSpacing(6)
         for i, (label, btn_id) in enumerate(MOUSE_BUTTONS):
             btn = QPushButton(label)
-            btn.setFixedHeight(40)
+            btn.setFixedHeight(32)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.clicked.connect(
                 lambda checked, bid=btn_id, lb=label: self._select_mouse(bid, lb)
             )
-            grid.addWidget(btn, i // 3, i % 3)
+            grid.addWidget(btn, i // 4, i % 4)
             self._mouse_btns[btn_id] = btn
         lay.addLayout(grid)
 
@@ -426,8 +458,32 @@ class MappingPopup(QDialog):
         self._mouse_label.setStyleSheet("font-size: 13px; font-weight: bold;")
         lay.addWidget(self._mouse_label)
 
-        lay.addStretch()
         self._tabs.addTab(page, "\U0001F5B1  Mouse")
+
+    def _load_mouse_pixmap(self, theme_key: str) -> QPixmap | None:
+        """Load razer_none.png for the active theme."""
+        from pathlib import Path
+        repo = Path(__file__).resolve().parents[4]
+        candidates = [
+            ("razer_none.png", theme_key),
+            ("razer_none.png", "default"),
+        ]
+        for fname, tk in candidates:
+            bg_root = repo / "docs" / "ui" / tk / "backgrounds"
+            pm = self._main.assets.load_pixmap(fname, extra_roots=[bg_root])
+            if pm:
+                return pm
+        return self._main.assets.load_pixmap("razer_none.png")
+
+    def _on_mouse_hotspot_clicked(self, name: str) -> None:
+        """Handle click on a mouse image hotspot."""
+        entry = _MOUSE_HOTSPOT_TO_BTN.get(name)
+        if entry is None:
+            return
+        btn_id, label = entry
+        self._select_mouse(btn_id, label)
+        # Also highlight the hotspot on the canvas
+        self._mouse_canvas.set_selected(name)
 
     def _select_mouse(self, btn_id: int, label: str) -> None:
         accent = self._main.theme.theme["colors"]["accent"]
@@ -437,6 +493,13 @@ class MappingPopup(QDialog):
             )
         self._mouse_selected = btn_id
         self._mouse_label.setText(f"Selected: {label}")
+        # Sync canvas selection with the hotspot name
+        hotspot_name = next(
+            (hn for hn, (bi, _) in _MOUSE_HOTSPOT_TO_BTN.items() if bi == btn_id),
+            None,
+        )
+        if hotspot_name and hasattr(self, "_mouse_canvas"):
+            self._mouse_canvas.set_selected(hotspot_name)
         self._update_preview()
 
     # =================================================================
