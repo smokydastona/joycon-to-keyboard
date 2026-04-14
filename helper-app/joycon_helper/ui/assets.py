@@ -243,6 +243,13 @@ class AssetManager:
             variants[state] = self.find_file(f"razer_{state}.png")
         return variants
 
+    def find_gamepad_variants(self) -> dict[str, Path | None]:
+        """Return paths to gamepad_*.png files."""
+        variants: dict[str, Path | None] = {}
+        for state in ("none", "connected"):
+            variants[state] = self.find_file(f"gamepad_{state}.png")
+        return variants
+
     def load_icon(self) -> QPixmap | None:
         here = Path(__file__).resolve()
         repo = here.parents[3]

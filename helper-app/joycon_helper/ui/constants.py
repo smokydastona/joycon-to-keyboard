@@ -570,3 +570,151 @@ _MODBITS_TO_KBD_LABELS: dict[int, list[str]] = {}
 for _lbl, _code in KBD_LABEL_TO_KEYCODE.items():
     if _code < 0:
         _MODBITS_TO_KBD_LABELS.setdefault(-_code, []).append(_lbl)
+
+
+# ---------------------------------------------------------------------------
+# Gamepad (Xbox Elite) image dimensions & state names
+# ---------------------------------------------------------------------------
+GAMEPAD_IMAGE_W = 1536
+GAMEPAD_IMAGE_H = 1024
+GAMEPAD_IMAGE_STATE_NAMES = ("none", "connected")
+
+# ---------------------------------------------------------------------------
+# Gamepad hotspot positions — per-theme (normalised over gamepad.png)
+#
+# Xbox Elite controller layout:
+#   Triggers (LT/RT), Bumpers (LB/RB), Sticks (LS/RS + 4 directions each),
+#   D-pad (4 directions), Face buttons (A/B/X/Y), Center (Xbox/View/Menu/Share),
+#   Back paddles (P1/P2/P3/P4).
+# ---------------------------------------------------------------------------
+GAMEPAD_HOTSPOTS: dict[str, list[tuple[str, float, float]]] = {
+    "dark": [
+        # Triggers (top of controller)
+        ("LT",       0.265, 0.310),
+        ("RT",       0.775, 0.310),
+        # Bumpers (just below triggers)
+        ("LB",       0.295, 0.345),
+        ("RB",       0.745, 0.345),
+        # Center cluster
+        ("Xbox",     0.520, 0.345),
+        ("View",     0.460, 0.400),
+        ("Menu",     0.575, 0.400),
+        ("Share",    0.520, 0.420),
+        # Left stick (upper left quadrant)
+        ("LS",       0.340, 0.395),
+        ("LSUp",     0.340, 0.395),
+        ("LSDown",   0.340, 0.395),
+        ("LSLeft",   0.340, 0.395),
+        ("LSRight",  0.340, 0.395),
+        # D-pad (lower left quadrant)
+        ("DUp",      0.445, 0.545),
+        ("DDown",    0.445, 0.600),
+        ("DLeft",    0.415, 0.572),
+        ("DRight",   0.475, 0.572),
+        # Face buttons (right quadrant — diamond layout)
+        ("Y",        0.735, 0.385),
+        ("X",        0.710, 0.415),
+        ("B",        0.760, 0.415),
+        ("A",        0.735, 0.445),
+        # Right stick (lower right)
+        ("RS",       0.615, 0.520),
+        ("RSUp",     0.615, 0.520),
+        ("RSDown",   0.615, 0.520),
+        ("RSLeft",   0.615, 0.520),
+        ("RSRight",  0.615, 0.520),
+        # Back paddles (lower grip area)
+        ("P1",       0.255, 0.640),
+        ("P2",       0.345, 0.615),
+        ("P3",       0.695, 0.615),
+        ("P4",       0.785, 0.640),
+    ],
+    "default": [
+        # Triggers (top of controller)
+        ("LT",       0.265, 0.310),
+        ("RT",       0.775, 0.310),
+        # Bumpers (just below triggers)
+        ("LB",       0.295, 0.345),
+        ("RB",       0.745, 0.345),
+        # Center cluster
+        ("Xbox",     0.520, 0.345),
+        ("View",     0.460, 0.400),
+        ("Menu",     0.575, 0.400),
+        ("Share",    0.520, 0.420),
+        # Left stick (upper left quadrant)
+        ("LS",       0.340, 0.395),
+        ("LSUp",     0.340, 0.395),
+        ("LSDown",   0.340, 0.395),
+        ("LSLeft",   0.340, 0.395),
+        ("LSRight",  0.340, 0.395),
+        # D-pad (lower left quadrant)
+        ("DUp",      0.445, 0.545),
+        ("DDown",    0.445, 0.600),
+        ("DLeft",    0.415, 0.572),
+        ("DRight",   0.475, 0.572),
+        # Face buttons (right quadrant — diamond layout)
+        ("Y",        0.735, 0.385),
+        ("X",        0.710, 0.415),
+        ("B",        0.760, 0.415),
+        ("A",        0.735, 0.445),
+        # Right stick (lower right)
+        ("RS",       0.615, 0.520),
+        ("RSUp",     0.615, 0.520),
+        ("RSDown",   0.615, 0.520),
+        ("RSLeft",   0.615, 0.520),
+        ("RSRight",  0.615, 0.520),
+        # Back paddles (lower grip area)
+        ("P1",       0.255, 0.640),
+        ("P2",       0.345, 0.615),
+        ("P3",       0.695, 0.615),
+        ("P4",       0.785, 0.640),
+    ],
+}
+
+# ---------------------------------------------------------------------------
+# Gamepad button shapes — matching the Joy-Con-style shape system
+# ---------------------------------------------------------------------------
+GAMEPAD_BUTTON_SHAPES: dict[str, ShapeSpec] = {
+    # Triggers — wide rounded bumper shapes
+    "LT":      ("rrect", 80, 30, 10),
+    "RT":      ("rrect", 80, 30, 10),
+    # Bumpers — slightly narrower
+    "LB":      ("rrect", 72, 26, 8),
+    "RB":      ("rrect", 72, 26, 8),
+    # Face buttons — circles
+    "A":       ("circle", 22),
+    "B":       ("circle", 22),
+    "X":       ("circle", 22),
+    "Y":       ("circle", 22),
+    # Thumbsticks — larger circles
+    "LS":      ("circle", 28),
+    "RS":      ("circle", 28),
+    # Stick directions — quarter-ring arcs around thumbstick
+    "LSUp":    ("arc_top", 30, 48),
+    "LSDown":  ("arc_bottom", 30, 48),
+    "LSLeft":  ("arc_left", 30, 48),
+    "LSRight": ("arc_right", 30, 48),
+    "RSUp":    ("arc_top", 30, 48),
+    "RSDown":  ("arc_bottom", 30, 48),
+    "RSLeft":  ("arc_left", 30, 48),
+    "RSRight": ("arc_right", 30, 48),
+    # D-pad — directional arrows
+    "DUp":     ("arrow_up", 20),
+    "DDown":   ("arrow_down", 20),
+    "DLeft":   ("arrow_left", 20),
+    "DRight":  ("arrow_right", 20),
+    # Center buttons — circles
+    "Xbox":    ("circle", 24),
+    "View":    ("rrect", 28, 16, 6),
+    "Menu":    ("rrect", 28, 16, 6),
+    "Share":   ("circle", 14),
+    # Back paddles — tall rounded rectangles
+    "P1":      ("rrect", 24, 56, 8),
+    "P2":      ("rrect", 24, 56, 8),
+    "P3":      ("rrect", 24, 56, 8),
+    "P4":      ("rrect", 24, 56, 8),
+}
+
+# ---------------------------------------------------------------------------
+# Gamepad wide button set
+# ---------------------------------------------------------------------------
+GAMEPAD_WIDE: set[str] = {"LT", "RT", "LB", "RB", "P1", "P2", "P3", "P4"}

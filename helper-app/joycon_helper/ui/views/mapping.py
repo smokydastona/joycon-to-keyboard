@@ -31,6 +31,9 @@ from PyQt6.QtWidgets import (
 
 from ..constants import (
     _KEYCODE_TO_KBD_LABEL,
+    GAMEPAD_BUTTON_SHAPES,
+    GAMEPAD_HOTSPOTS,
+    GAMEPAD_WIDE,
     INCEDIUS_HOTSPOTS,
     INCEDIUS_WIDE,
     JOYCON_BUTTON_SHAPES,
@@ -186,6 +189,13 @@ class MappingView(QWidget):
         self._mouse_canvas.hotspot_right_clicked.connect(self._on_hotspot_right_click)
         self._mouse_canvas.hotspot_hovered.connect(self._on_hotspot_hovered)
         self._device_tabs.addTab(self._mouse_canvas, "Mouse")
+
+        # Gamepad / Xbox Elite canvas
+        self._gp_canvas = HotspotCanvas(self._main.theme)
+        self._gp_canvas.hotspot_clicked.connect(self._on_hotspot_clicked)
+        self._gp_canvas.hotspot_right_clicked.connect(self._on_hotspot_right_click)
+        self._gp_canvas.hotspot_hovered.connect(self._on_hotspot_hovered)
+        self._device_tabs.addTab(self._gp_canvas, "Gamepad")
 
         # Keyboard canvas (popup only — not a tab)
         self._kbd_canvas = HotspotCanvas(self._main.theme)
@@ -409,6 +419,9 @@ class MappingView(QWidget):
         self._m913_canvas.set_wide_set(M913_WIDE)
         self._mouse_canvas.set_hotspots(MOUSE_HOTSPOTS[tk])
         self._mouse_canvas.set_wide_set(MOUSE_WIDE)
+        self._gp_canvas.set_hotspots(GAMEPAD_HOTSPOTS[tk])
+        self._gp_canvas.set_hotspot_shapes(GAMEPAD_BUTTON_SHAPES)
+        self._gp_canvas.set_wide_set(GAMEPAD_WIDE)
         self._kbd_canvas.set_hotspots(KBD_HOTSPOTS[tk])
         self._kbd_canvas.set_wide_set(KBD_WIDE)
 
@@ -426,6 +439,11 @@ class MappingView(QWidget):
         mouse_pm = self._main.assets.load_pixmap("razer_none.png")
         if mouse_pm:
             self._mouse_canvas.set_background(mouse_pm)
+
+        # Gamepad background
+        gp_pm = self._main.assets.load_pixmap("gamepad_none.png")
+        if gp_pm:
+            self._gp_canvas.set_background(gp_pm)
 
         # Keyboard (popup canvas)
         kbd_pm = self._main.assets.load_pixmap("keyboard.png")
@@ -476,6 +494,7 @@ class MappingView(QWidget):
         "_jc_canvas":    ("joycon",   "jc"),
         "_m913_canvas":  ("m913",     "m913"),
         "_mouse_canvas": ("mouse",    "mouse"),
+        "_gp_canvas":    ("gamepad",  "gp"),
         "_kbd_canvas":   ("keyboard", "kbd"),
     }
 
@@ -555,6 +574,7 @@ class MappingView(QWidget):
             (self._jc_canvas, KEYMAP_HOTSPOTS[tk]),
             (self._m913_canvas, m913_hs),
             (self._mouse_canvas, MOUSE_HOTSPOTS[tk]),
+            (self._gp_canvas, GAMEPAD_HOTSPOTS[tk]),
         ]
 
     def _active_canvas(self) -> HotspotCanvas:
@@ -908,6 +928,7 @@ class MappingView(QWidget):
             "m913":     [[n, x, y] for n, x, y in self._m913_stock_pos],
             "incedius": [[n, x, y] for n, x, y in self._m913_incedius_pos],
             "mouse":    [[n, x, y] for n, x, y in self._mouse_canvas.export_positions()],
+            "gamepad":  [[n, x, y] for n, x, y in self._gp_canvas.export_positions()],
             "keyboard": [[n, x, y] for n, x, y in self._kbd_canvas.export_positions()],
         }
 
@@ -957,6 +978,10 @@ class MappingView(QWidget):
             hs = [(n, x, y) for n, x, y in data["mouse"]]
             self._mouse_canvas.set_hotspots(hs)
             loaded.append("Mouse")
+        if "gamepad" in data:
+            hs = [(n, x, y) for n, x, y in data["gamepad"]]
+            self._gp_canvas.set_hotspots(hs)
+            loaded.append("Gamepad")
         if "keyboard" in data:
             hs = [(n, x, y) for n, x, y in data["keyboard"]]
             self._kbd_canvas.set_hotspots(hs)
@@ -1202,6 +1227,10 @@ class MappingView(QWidget):
         mouse_pm = self._main.assets.load_pixmap("razer_none.png")
         if mouse_pm:
             self._mouse_canvas.set_background(mouse_pm)
+
+        gp_pm = self._main.assets.load_pixmap("gamepad_none.png")
+        if gp_pm:
+            self._gp_canvas.set_background(gp_pm)
 
         kbd_pm = self._main.assets.load_pixmap("keyboard.png")
         if kbd_pm:

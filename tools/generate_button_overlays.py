@@ -52,6 +52,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 # Import shapes + positions from the authoritative constants.py
 sys.path.insert(0, str(REPO_ROOT / "helper-app"))
 from joycon_helper.ui.constants import (  # noqa: E402  # isort: skip
+    GAMEPAD_BUTTON_SHAPES,
+    GAMEPAD_HOTSPOTS as _GAMEPAD_NORM,
+    GAMEPAD_WIDE,
     INCEDIUS_HOTSPOTS as _INCEDIUS_NORM,
     INCEDIUS_WIDE,
     JOYCON_BUTTON_SHAPES,
@@ -403,6 +406,13 @@ MOUSE_HOTSPOTS: list[tuple[str, int, int]] = [
     for name, nx, ny in _MOUSE_NORM["dark"]
 ]
 
+# ── Gamepad / Xbox Elite (30 buttons) ────────────────────────────────────
+# Computed from the authoritative normalised positions in constants.py.
+GP_HOTSPOTS: list[tuple[str, int, int]] = [
+    (name, int(nx * IMAGE_W), int(ny * IMAGE_H))
+    for name, nx, ny in _GAMEPAD_NORM["dark"]
+]
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Rainbow colour palettes — one uniform colour per rainbow hue, all devices
 # ═══════════════════════════════════════════════════════════════════════════
@@ -450,6 +460,12 @@ DEVICES: dict[str, dict] = {
         "hotspots": MOUSE_HOTSPOTS,
         "wide": MOUSE_WIDE,
         "prefix": "mouse",
+    },
+    "gamepad": {
+        "hotspots": GP_HOTSPOTS,
+        "wide": GAMEPAD_WIDE,
+        "prefix": "gp",
+        "shapes": GAMEPAD_BUTTON_SHAPES,
     },
 }
 
