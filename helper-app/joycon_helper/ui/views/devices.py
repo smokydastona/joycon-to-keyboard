@@ -6,12 +6,11 @@ Tkinter app.py M913 and Razer tabs.
 """
 from __future__ import annotations
 
+import json
 import logging
+import zipfile
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
-
-import json
-import zipfile
 
 from PyQt6.QtCore import QObject, QSettings, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFont
@@ -23,7 +22,6 @@ from PyQt6.QtWidgets import (
     QDialog,
     QFileDialog,
     QFrame,
-    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QInputDialog,
@@ -42,7 +40,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from ..constants import INCEDIUS_HOTSPOTS, M913_HOTSPOTS
+from ..constants import M913_HOTSPOTS
 from ..theme import ThemeEngine
 from ..widgets.card import Card
 from ..widgets.hotspot_canvas import HotspotCanvas
@@ -775,7 +773,8 @@ class DevicesView(QWidget):
                 pm = self._main.assets.load_pixmap(
                     "m913_none.png", QSize(400, 300))
                 if pm and self._m913_canvas:
-                    self._m913_canvas.set_background(pm)        except Exception as e:
+                    self._m913_canvas.set_background(pm)
+        except Exception as e:
             self._m913_status.setText(f"Error: {e}")
             log.error("M913 detect failed: %s", e, exc_info=True)
 

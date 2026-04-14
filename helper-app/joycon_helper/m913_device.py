@@ -1399,10 +1399,8 @@ class M913Device:
                         btn_byte = data[1] if len(data) > 1 else 0
                         if btn_byte & 0x10:
                             active_stage = (active_stage + 1) % num_enabled
-                            try:
+                            with contextlib.suppress(Exception):
                                 on_stage_change(active_stage)
-                            except Exception:
-                                pass
             except Exception as ex:
                 log.debug("M913 input reader exception: %s", ex)
             finally:
