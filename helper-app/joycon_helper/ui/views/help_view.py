@@ -157,7 +157,8 @@ def _sections() -> list[tuple[str, str, bool]]:
             (
                 "1. Flash the ESP32 host, then let it flash the Nano ESP32-S3 via the Web Flasher (see Firmware Installation).\n"
                 "2. Move the USB cable to the Nano ESP32-S3 and connect it to the PC.\n"
-                "3. Open Bind Bandit, select the COM port, click Connect.\n"
+                "3. Open Bind Bandit — it auto-detects and connects to the ESP32-S3 bridge. "
+                "If auto-connect is disabled in Settings, select the COM port manually and click Connect.\n"
                 "4. Click Scan for Joy-Con in Mission Control → Quick Actions, "
                 "then hold the sync button on your Joy-Con until the lights blink.\n"
                 "5. The ESP32 should discover and connect to the Joy-Con.\n"
@@ -562,7 +563,7 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "  Minimize to system tray on close\n"
                 "  Start minimized to tray\n"
                 "  Start with Windows (registry auto-start)\n"
-                "  Auto-connect to last serial port\n\n"
+                "  Auto-connect to ESP32-S3 bridge (detects by USB VID/PID; falls back to last-used port)\n\n"
                 "### Overlay tab\n"
                 "  Default opacity slider (20–100%)\n"
                 "  Auto-hide timer (0 = disabled, otherwise seconds of no input)\n\n"

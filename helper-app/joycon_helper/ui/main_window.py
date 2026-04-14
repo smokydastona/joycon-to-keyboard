@@ -97,6 +97,7 @@ class MainWindow(QMainWindow):
         # Application state
         self._profile: dict[str, Any] = get_default_profile(0)
         self._slot = 0
+        self._last_port: str = ""  # last-used COM port device name
         self._bt_status = ""
         self._battery_level: int | None = None
         self._battery_levels: dict[int, int] = {}
@@ -144,8 +145,8 @@ class MainWindow(QMainWindow):
         self._connect_signals()
         self._apply_theme()
 
-        # Refresh ports on startup
-        QTimer.singleShot(200, self._refresh_ports)
+        # Refresh ports on startup and auto-connect if an ESP32-S3 is found
+        QTimer.singleShot(200, self._refresh_and_auto_connect)
 
         # First-run onboarding wizard
         if should_show_onboarding():
@@ -392,12 +393,54 @@ class MainWindow(QMainWindow):
     # Serial connection
     # -----------------------------------------------------------------
 
+    # ESP32-S3 USB bridge VID/PID (from firmware/esp32s3-usb-kbd/main/tusb_desc.c)
+    _BRIDGE_VID = 0xCafe
+    _BRIDGE_PID = 0x4030
+
     def _refresh_ports(self) -> None:
         import serial.tools.list_ports
         ports = serial.tools.list_ports.comports()
+        prev = self._port_combo.currentData()
         self._port_combo.clear()
-        for p in ports:
+        bridge_idx: int | None = None
+        for i, p in enumerate(ports):
             self._port_combo.addItem(f"{p.device} — {p.description}", p.device)
+            if p.vid == self._BRIDGE_VID and p.pid == self._BRIDGE_PID:
+                bridge_idx = i
+        # Auto-select the ESP32-S3 bridge if detected
+        if bridge_idx is not None:
+            self._port_combo.setCurrentIndex(bridge_idx)
+        else:
+            # Fall back to previously selected port or last session port
+            fallback = prev or self._last_port
+            if fallback:
+                idx = self._port_combo.findData(fallback)
+                if idx >= 0:
+                    self._port_combo.setCurrentIndex(idx)
+
+    def _refresh_and_auto_connect(self) -> None:
+        """Refresh ports and auto-connect to the ESP32-S3 bridge if present."""
+        self._refresh_ports()
+        if self.bridge.is_connected:
+            return
+        # Respect the auto_connect setting
+        settings = self._settings
+        if not settings.value("auto_connect", True, type=bool):
+            return
+        port = self._port_combo.currentData()
+        if not port:
+            return
+        # Only auto-connect if the selected port is actually the bridge
+        import serial.tools.list_ports
+        for p in serial.tools.list_ports.comports():
+            if p.device == port and p.vid == self._BRIDGE_VID and p.pid == self._BRIDGE_PID:
+                try:
+                    baud = int(self._baud_edit.text())
+                except ValueError:
+                    baud = 115200
+                log.info("Auto-connecting to ESP32-S3 bridge on %s", port)
+                self.bridge.connect_serial(port, baud)
+                return
 
     def _toggle_connect(self) -> None:
         if self.bridge.is_connected:
@@ -676,16 +719,19 @@ class MainWindow(QMainWindow):
             self._notify_views("profile_updated", profile=profile)
             self._skip_undo = False
 
-        # Restore last COM port selection
-        last_port = state.get("last_port")
+        # Restore last COM port selection (stored as device name, e.g. "COM3")
+        last_port = state.get("last_port", "")
         if isinstance(last_port, str) and last_port:
-            idx = self._port_combo.findText(last_port)
+            # Backwards compat: old state files stored display text like
+            # "COM3 — USB Serial Device"; extract the device name.
+            if " \u2014 " in last_port:
+                last_port = last_port.split(" \u2014 ", 1)[0]
+            self._last_port = last_port
+            idx = self._port_combo.findData(last_port)
             if idx >= 0:
                 self._port_combo.setCurrentIndex(idx)
-            else:
-                # Port isn't in the list (yet); add it so auto-connect can try
-                self._port_combo.addItem(last_port)
-                self._port_combo.setCurrentIndex(self._port_combo.count() - 1)
+            # Don't add a text-only placeholder; _refresh_ports will
+            # repopulate and use _last_port as fallback.
 
         log.info("Restored session state: slot=%s, port=%s", saved_slot, last_port)
 
@@ -693,7 +739,7 @@ class MainWindow(QMainWindow):
         """Persist current session state so the next launch picks up where we left off."""
         state = load_state()
         state["last_slot"] = self._slot
-        state["last_port"] = self._port_combo.currentText() or ""
+        state["last_port"] = self._port_combo.currentData() or ""
         # Save the current profile for the active slot
         if self._profile:
             save_slot_profile(self._slot, self._profile)
