@@ -411,6 +411,19 @@ def clear_pending_firmware() -> None:
         log.info("Cleared pending firmware directory")
 
 
+def remove_pending_firmware(name: str) -> None:
+    """Remove a single pending firmware file and clean up the directory if empty."""
+    d = _pending_fw_dir()
+    target = d / name
+    if target.is_file():
+        target.unlink(missing_ok=True)
+        log.info("Removed pending firmware: %s", name)
+
+    if d.is_dir() and not any(d.iterdir()):
+        d.rmdir()
+        log.info("Removed empty pending firmware directory")
+
+
 # ---------------------------------------------------------------------------
 # Install pre-downloaded exe
 # ---------------------------------------------------------------------------

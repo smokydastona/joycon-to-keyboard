@@ -950,7 +950,7 @@ class MainWindow(QMainWindow):
     def _check_pending_firmware(self) -> None:
         """After an app update, flash any firmware that was downloaded alongside it."""
         try:
-            from ..updater import clear_pending_firmware, load_pending_firmware
+            from ..updater import load_pending_firmware, remove_pending_firmware
         except Exception:
             return
 
@@ -962,16 +962,14 @@ class MainWindow(QMainWindow):
         reply = QMessageBox.question(
             self, "Firmware Update Ready",
             f"Firmware downloaded with the app update ({names}) is ready to flash.\n\n"
-            "Connect the ESP32-S3 and click Yes to flash now, or No to skip.",
+            "Connect the ESP32-S3 and click Yes to flash now, or No to keep it queued for later.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
         if reply != QMessageBox.StandardButton.Yes:
-            clear_pending_firmware()
             return
 
         if not self.bridge.is_connected:
-            Toast.warning(self, "Connect to the device first, then update firmware from Diagnostics.")
-            clear_pending_firmware()
+            Toast.warning(self, "Connect to the device first. The downloaded firmware will stay queued for a later retry.")
             return
 
         # Use the existing DiagnosticsView firmware flash machinery
@@ -1007,18 +1005,17 @@ class MainWindow(QMainWindow):
                         QTimer.singleShot(0, lambda p=pct: progress_dlg.setValue(p))
 
                     flasher.flash(board, app, progress_cb=_cb)
+                    remove_pending_firmware(name)
                     results.append(name)
 
-                clear_pending_firmware()
                 QTimer.singleShot(0, lambda: (
                     progress_dlg.close(),
                     Toast.success(self, f"Firmware updated: {', '.join(results)}"),
                 ))
             except Exception as exc:
-                clear_pending_firmware()
                 QTimer.singleShot(0, lambda e=str(exc): (
                     progress_dlg.close(),
-                    QMessageBox.warning(self, "Firmware Flash Error", str(e)),
+                    QMessageBox.warning(self, "Firmware Flash Error", f"{e}\n\nAny remaining firmware will stay queued for retry on the next launch."),
                 ))
 
         _threading.Thread(target=_flash_worker, daemon=True).start()

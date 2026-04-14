@@ -149,5 +149,6 @@ When running as a packaged `.exe`, the app checks the [GitHub Releases](https://
 - If an update is available, the version label in the sidebar changes to **"Update to X.Y.Z"**.
 - Clicking updates downloads the new `.exe`, swaps it in place, and prompts you to restart.
 - After relaunch, pending firmware is flashed over the existing ESP32-S3 serial connection, and the ESP32 host is updated through that same bridge path so both boards can be verified against the same release version.
+- If the ESP32-S3 is not connected yet, or you skip the flash prompt, the downloaded firmware stays queued so you can retry on the next launch instead of losing the staged update.
 - When running from source (not frozen), only a notification is shown — no auto-install.
 - The check uses an unauthenticated GET to the public GitHub API. No personal data is sent.
