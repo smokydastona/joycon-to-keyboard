@@ -463,7 +463,11 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "  1. The ↑ Update button appears at the bottom of the sidebar.\n"
                 "  2. Click it and confirm to start the update.\n"
                 "  3. The new app is downloaded and the app restarts automatically.\n"
-                "  4. After relaunch, firmware is flashed over USB (connect first).\n\n"
+                "  4. After relaunch, firmware is flashed over the existing ESP32-S3 USB serial link (connect first).\n"
+                "  5. The ESP32 Bluetooth host is updated through the ESP32-S3 relay path so both boards stay on the same release.\n\n"
+                "Bind Bandit verifies the reported firmware version after each flash. If a stage times out or returns an error,\n"
+                "the helper log records the failing board, stage, byte offset, and recent serial traffic. Failed OTA sessions also\n"
+                "write an ota_failure_*.json report into the logs folder for later diagnosis.\n\n"
                 "The update covers both the helper app and all firmware in one step.\n\n"
             ),
             False,
@@ -492,8 +496,10 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "  Try a different baud rate (default: 115200).\n\n"
                 "## Firmware flash fails\n"
                 "  For first-time flash, use the Web Flasher in Chrome/Edge.\n"
-                "  ESP32: Hold BOOT while tapping RESET to enter download mode.\n"
-                "  ESP32-S3 (Nano ESP32): Double-tap RESET for download mode.\n"
+                "  OTA updates after first install should happen through Bind Bandit while connected to the ESP32-S3.\n"
+                "  If an OTA update fails, open Settings → Export Debug Bundle and keep the generated ZIP plus the latest helper.log / ota_failure_*.json files.\n"
+                "  ESP32: Hold BOOT while tapping RESET to enter download mode only for recovery or first-time flash.\n"
+                "  ESP32-S3 (Nano ESP32): Double-tap RESET for download mode only for recovery or first-time flash.\n"
                 "  Check that you select the correct COM port for each board."
             ),
             False,
@@ -513,7 +519,11 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "The app checks for updates on launch. When a new version is available,\n"
                 "an ↑ Update button appears at the bottom of the left sidebar.\n"
                 "Click it to install the update and restart — firmware is updated\n"
-                "automatically after relaunch."
+                "automatically after relaunch.\n\n"
+                "## Debugging update failures\n"
+                "If an update fails, use Settings → Export Debug Bundle. The ZIP includes\n"
+                "app logs and crash logs, and firmware OTA failures also leave ota_failure_*.json\n"
+                "reports in the logs folder with the board, stage, and recent serial history."
             ),
             False,
         ),

@@ -486,6 +486,9 @@ class SettingsView(QScrollArea):
         import zipfile
 
         from PyQt6.QtWidgets import QFileDialog
+
+        from ...logger import crash_logs_dir, logs_dir
+
         path, _ = QFileDialog.getSaveFileName(
             self, "Export Debug Bundle", "bind_bandit_debug.zip",
             "ZIP (*.zip)")
@@ -505,14 +508,15 @@ class SettingsView(QScrollArea):
                 zf.writestr("current_profile.json",
                             json.dumps(profile, indent=2, ensure_ascii=False))
 
-                # Log file
-                log_dir = os.path.join(os.path.dirname(os.path.dirname(
-                    os.path.dirname(os.path.abspath(__file__)))), "logs")
-                if os.path.isdir(log_dir):
-                    for fname in os.listdir(log_dir):
-                        fpath = os.path.join(log_dir, fname)
-                        if os.path.isfile(fpath):
-                            zf.write(fpath, f"logs/{fname}")
+                # Application logs and crash dumps.
+                for source_dir, archive_prefix in (
+                    (logs_dir(), "logs"),
+                    (crash_logs_dir(), "crash-logs"),
+                ):
+                    if source_dir.is_dir():
+                        for entry in source_dir.iterdir():
+                            if entry.is_file():
+                                zf.write(entry, f"{archive_prefix}/{entry.name}")
 
             from ..widgets.toast import Toast
             Toast.success(self, f"Debug bundle saved to {os.path.basename(path)}")

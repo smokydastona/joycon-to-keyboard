@@ -21,6 +21,7 @@ from datetime import datetime
 from typing import Any
 from urllib.request import Request, urlopen
 
+from .logger import logs_dir
 from .updater import RELEASES_URL
 
 # Import build date — may be empty for local dev runs.
@@ -57,9 +58,17 @@ _END_TIMEOUT = 30
 # How long to wait for GitHub API responses (seconds).
 _HTTP_TIMEOUT = 15
 
-# OTA chunk retry settings.
-_OTA_CHUNK_RETRIES = 3
-_OTA_CHUNK_RETRY_DELAY = 0.5  # seconds, multiplied by attempt number
+# OTA data writes are not retried per chunk. The transport protocol does not
+# provide chunk sequence deduplication, so re-sending a chunk after a lost ACK
+# can duplicate bytes in flash and corrupt the image.
+
+# Post-flash version verification settings.
+_VERIFY_RETRIES = 20
+_VERIFY_DELAY = 0.5
+
+# Diagnostics capture.
+_SERIAL_HISTORY_LIMIT = 80
+_QUEUE_DRAIN_LIMIT = 512
 
 # Download retry settings.
 _MAX_RETRIES = 3
@@ -276,6 +285,44 @@ def compute_sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def _make_operation_id(board: str) -> str:
+    ts = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    return f"ota-{board}-{ts}"
+
+
+def _normalise_version(version: str | None) -> str | None:
+    if version is None:
+        return None
+    return version.strip().lstrip("v")
+
+
+def _history_to_lines(serial_client: Any, *, limit: int = _SERIAL_HISTORY_LIMIT) -> list[str]:
+    if not hasattr(serial_client, "snapshot_history"):
+        return []
+
+    lines: list[str] = []
+    for entry in serial_client.snapshot_history(limit=limit):
+        stamp = datetime.fromtimestamp(entry.timestamp).strftime("%H:%M:%S.%f")[:-3]
+        lines.append(f"{stamp} {entry.direction.upper()}: {entry.raw}")
+    return lines
+
+
+def _write_ota_failure_report(report: dict[str, Any]) -> str | None:
+    try:
+        report_dir = logs_dir()
+        report_path = report_dir / (
+            f"ota_failure_{report['board']}_{report['operation_id']}.json"
+        )
+        report_path.write_text(
+            json.dumps(report, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        return str(report_path)
+    except Exception:
+        log.exception("Failed to write OTA failure report")
+        return None
+
+
 # ---------------------------------------------------------------------------
 # Merged-binary helpers
 # ---------------------------------------------------------------------------
@@ -314,12 +361,18 @@ class FirmwareFlasher:
 
     def get_version(self, board: str = BOARD_S3) -> str | None:
         """Query firmware version from a board. Returns version string or None."""
+        self._flush_rx_queue(reason=f"pre-fw_version:{board}")
         cmd: dict[str, Any] = {"cmd": "fw_version"}
         if board == BOARD_ESP32:
             cmd["board"] = "esp32"
 
         self._ser.send_obj(cmd)
-        rsp = self._wait_response("fw_version", timeout=_CMD_TIMEOUT)
+        rsp = self._wait_response(
+            "fw_version",
+            timeout=_CMD_TIMEOUT,
+            stage=f"fw_version:{board}",
+            response_filter=lambda item: item.get("board") == board,
+        )
         if rsp and rsp.get("ok"):
             return rsp.get("version")
         return None
@@ -329,6 +382,7 @@ class FirmwareFlasher:
         board: str,
         firmware: bytes,
         *,
+        expected_version: str | None = None,
         progress_cb: Callable[[int, int], None] | None = None,
     ) -> None:
         """Flash firmware to a board over serial.
@@ -336,86 +390,289 @@ class FirmwareFlasher:
         Raises RuntimeError on failure.
         """
         total = len(firmware)
-        log.info("Starting OTA flash: board=%s size=%d", board, total)
-
-        # 1. Begin
-        cmd_begin: dict[str, Any] = {"cmd": "fw_update_begin", "size": total}
-        if board == BOARD_ESP32:
-            cmd_begin["board"] = "esp32"
-        self._ser.send_obj(cmd_begin)
-
-        rsp = self._wait_response("fw_update_begin", timeout=_CMD_TIMEOUT)
-        if not rsp or not rsp.get("ok"):
-            err = rsp.get("error", "unknown") if rsp else "no_response"
-            raise RuntimeError(f"fw_update_begin failed: {err}")
-
-        # 2. Send data chunks
+        operation_id = _make_operation_id(board)
+        firmware_sha256 = compute_sha256(firmware)
+        stage = "start"
         offset = 0
+        log.info(
+            "Starting OTA flash: op=%s board=%s size=%d sha256=%s expected_version=%s",
+            operation_id,
+            board,
+            total,
+            firmware_sha256,
+            expected_version or "<unknown>",
+        )
+
         try:
+            self._flush_rx_queue(reason=f"pre-flash:{operation_id}")
+
+            # 1. Begin
+            stage = "begin"
+            cmd_begin: dict[str, Any] = {"cmd": "fw_update_begin", "size": total}
+            if board == BOARD_ESP32:
+                cmd_begin["board"] = "esp32"
+            self._ser.send_obj(cmd_begin)
+
+            rsp = self._wait_response(
+                "fw_update_begin",
+                timeout=_CMD_TIMEOUT,
+                operation_id=operation_id,
+                stage=stage,
+            )
+            if not rsp or not rsp.get("ok"):
+                err = rsp.get("error", "unknown") if rsp else "no_response"
+                raise RuntimeError(f"fw_update_begin failed: {err}")
+
+            # 2. Send data chunks
+            stage = "data"
             while offset < total:
                 chunk = firmware[offset:offset + OTA_CHUNK_SIZE]
                 b64 = base64.b64encode(chunk).decode("ascii")
+                cmd_data: dict[str, Any] = {"cmd": "fw_update_data", "data": b64}
+                if board == BOARD_ESP32:
+                    cmd_data["board"] = "esp32"
+                self._ser.send_obj(cmd_data)
 
-                last_err = ""
-                for attempt in range(1, _OTA_CHUNK_RETRIES + 1):
-                    cmd_data: dict[str, Any] = {"cmd": "fw_update_data", "data": b64}
-                    if board == BOARD_ESP32:
-                        cmd_data["board"] = "esp32"
-                    self._ser.send_obj(cmd_data)
-
-                    rsp = self._wait_response("fw_update_data", timeout=_CMD_TIMEOUT)
-                    if rsp and rsp.get("ok"):
-                        break
-                    last_err = rsp.get("error", "unknown") if rsp else "no_response"
-                    log.warning(
-                        "OTA chunk at offset %d failed (attempt %d/%d): %s",
-                        offset, attempt, _OTA_CHUNK_RETRIES, last_err,
-                    )
-                    if attempt < _OTA_CHUNK_RETRIES:
-                        time.sleep(_OTA_CHUNK_RETRY_DELAY * attempt)
-                else:
+                rsp = self._wait_response(
+                    "fw_update_data",
+                    timeout=_CMD_TIMEOUT,
+                    operation_id=operation_id,
+                    stage=f"{stage}@{offset}",
+                )
+                if not rsp or not rsp.get("ok"):
+                    err = rsp.get("error", "unknown") if rsp else "no_response"
                     raise RuntimeError(
-                        f"fw_update_data failed at offset {offset} after "
-                        f"{_OTA_CHUNK_RETRIES} attempts: {last_err}"
+                        f"fw_update_data failed at offset {offset}: {err}. "
+                        "Per-chunk retry is disabled because the OTA protocol is not idempotent."
                     )
 
                 offset += len(chunk)
                 if progress_cb:
                     progress_cb(offset, total)
-        except Exception:
+        except Exception as exc:
             # Abort on any failure.
+            stage = f"{stage}-abort"
             try:
                 abort_cmd: dict[str, Any] = {"cmd": "fw_update_abort"}
                 if board == BOARD_ESP32:
                     abort_cmd["board"] = "esp32"
                 self._ser.send_obj(abort_cmd)
             except Exception:
-                pass
+                log.warning("Failed to send OTA abort: op=%s board=%s", operation_id, board, exc_info=True)
+
+            self._handle_flash_failure(
+                operation_id=operation_id,
+                board=board,
+                stage=stage,
+                expected_version=expected_version,
+                firmware_size=total,
+                firmware_sha256=firmware_sha256,
+                offset=offset,
+                error=exc,
+            )
             raise
 
         # 3. Finalize
-        cmd_end: dict[str, Any] = {"cmd": "fw_update_end"}
-        if board == BOARD_ESP32:
-            cmd_end["board"] = "esp32"
-        self._ser.send_obj(cmd_end)
+        try:
+            stage = "end"
+            cmd_end: dict[str, Any] = {"cmd": "fw_update_end"}
+            if board == BOARD_ESP32:
+                cmd_end["board"] = "esp32"
+            self._ser.send_obj(cmd_end)
 
-        rsp = self._wait_response("fw_update_end", timeout=_END_TIMEOUT)
-        if not rsp or not rsp.get("ok"):
-            err = rsp.get("error", "unknown") if rsp else "no_response"
-            raise RuntimeError(f"fw_update_end failed: {err}")
+            rsp = self._wait_response(
+                "fw_update_end",
+                timeout=_END_TIMEOUT,
+                operation_id=operation_id,
+                stage=stage,
+            )
+            if not rsp or not rsp.get("ok"):
+                err = rsp.get("error", "unknown") if rsp else "no_response"
+                if expected_version:
+                    verified = self._verify_version_after_flash(
+                        board,
+                        expected_version,
+                        operation_id=operation_id,
+                        stage="verify-after-end-failure",
+                    )
+                    if verified:
+                        log.warning(
+                            "OTA end response was not clean, but version verified: "
+                            "op=%s board=%s version=%s err=%s",
+                            operation_id,
+                            board,
+                            expected_version,
+                            err,
+                        )
+                        return
+                raise RuntimeError(f"fw_update_end failed: {err}")
 
-        log.info("OTA flash complete for %s — device will reboot", board)
+            if expected_version and not self._verify_version_after_flash(
+                board,
+                expected_version,
+                operation_id=operation_id,
+                stage="verify-after-success",
+            ):
+                raise RuntimeError(
+                    f"Flash completed but {board} did not report version {expected_version} after reboot"
+                )
+        except Exception as exc:
+            self._handle_flash_failure(
+                operation_id=operation_id,
+                board=board,
+                stage=stage,
+                expected_version=expected_version,
+                firmware_size=total,
+                firmware_sha256=firmware_sha256,
+                offset=offset,
+                error=exc,
+            )
+            raise
 
-    def _wait_response(self, expected_rsp: str, timeout: float = 10) -> dict[str, Any] | None:
+        log.info("OTA flash complete for %s — device will reboot (op=%s)", board, operation_id)
+
+    def _flush_rx_queue(self, *, reason: str) -> int:
+        if not hasattr(self._ser, "drain_rx_queue"):
+            return 0
+        drained = self._ser.drain_rx_queue(limit=_QUEUE_DRAIN_LIMIT)
+        if drained:
+            log.debug(
+                "Drained %d stale RX line(s) before %s: %s",
+                len(drained),
+                reason,
+                "; ".join(line.raw for line in drained[-8:]),
+            )
+        return len(drained)
+
+    def _verify_version_after_flash(
+        self,
+        board: str,
+        expected_version: str,
+        *,
+        operation_id: str,
+        stage: str,
+    ) -> bool:
+        wanted = _normalise_version(expected_version)
+        for attempt in range(1, _VERIFY_RETRIES + 1):
+            time.sleep(_VERIFY_DELAY)
+            try:
+                version = self.get_version(board)
+            except Exception:
+                log.debug(
+                    "Version verify attempt %d/%d failed: op=%s board=%s stage=%s",
+                    attempt,
+                    _VERIFY_RETRIES,
+                    operation_id,
+                    board,
+                    stage,
+                    exc_info=True,
+                )
+                continue
+
+            normalised = _normalise_version(version)
+            log.info(
+                "Version verify attempt %d/%d: op=%s board=%s reported=%s expected=%s",
+                attempt,
+                _VERIFY_RETRIES,
+                operation_id,
+                board,
+                version,
+                expected_version,
+            )
+            if normalised == wanted:
+                return True
+        return False
+
+    def _handle_flash_failure(
+        self,
+        *,
+        operation_id: str,
+        board: str,
+        stage: str,
+        expected_version: str | None,
+        firmware_size: int,
+        firmware_sha256: str,
+        offset: int,
+        error: Exception,
+    ) -> None:
+        report_path = _write_ota_failure_report(
+            {
+                "timestamp": datetime.now().isoformat(),
+                "operation_id": operation_id,
+                "board": board,
+                "stage": stage,
+                "expected_version": expected_version,
+                "firmware_size": firmware_size,
+                "firmware_sha256": firmware_sha256,
+                "last_confirmed_offset": offset,
+                "connection_lost": bool(getattr(self._ser, "connection_lost", False)),
+                "error_type": type(error).__name__,
+                "error_message": str(error),
+                "recent_serial_history": _history_to_lines(self._ser),
+            }
+        )
+        log.exception(
+            "OTA flash failed: op=%s board=%s stage=%s offset=%d/%d report=%s",
+            operation_id,
+            board,
+            stage,
+            offset,
+            firmware_size,
+            report_path or "<none>",
+        )
+
+    def _wait_response(
+        self,
+        expected_rsp: str,
+        timeout: float = 10,
+        *,
+        operation_id: str = "",
+        stage: str = "",
+        response_filter: Callable[[dict[str, Any]], bool] | None = None,
+    ) -> dict[str, Any] | None:
         """Drain RX queue looking for a JSON response matching expected_rsp."""
         deadline = time.monotonic() + timeout
+        unexpected: list[str] = []
         while time.monotonic() < deadline:
+            if getattr(self._ser, "connection_lost", False):
+                log.error(
+                    "Serial connection lost while waiting for %s: op=%s stage=%s",
+                    expected_rsp,
+                    operation_id,
+                    stage,
+                )
+                return None
             try:
                 line = self._ser.rx.get(timeout=0.1)
             except Exception:
                 continue
+
             if line.parsed and line.parsed.get("rsp") == expected_rsp:
+                if response_filter and not response_filter(line.parsed):
+                    unexpected.append(f"rejected:{line.raw}")
+                    continue
+                log.debug(
+                    "Received expected response: op=%s stage=%s rsp=%s raw=%s",
+                    operation_id,
+                    stage,
+                    expected_rsp,
+                    line.raw,
+                )
                 return line.parsed
+
+            if line.raw:
+                unexpected.append(line.raw)
+
+        recent_serial = _history_to_lines(self._ser)
+        log.error(
+            "Timeout waiting for %s: op=%s stage=%s timeout=%.1fs unexpected=%s recent_serial=%s",
+            expected_rsp,
+            operation_id,
+            stage,
+            timeout,
+            unexpected[-8:],
+            recent_serial[-12:],
+        )
         return None
 
 
@@ -490,6 +747,13 @@ class FwUpdater:
             raise RuntimeError("No firmware update available.")
 
         boards = result["boards"]
+        log.info(
+            "Beginning coordinated firmware update: target=%s current_s3=%s current_esp32=%s boards=%s",
+            result["version"],
+            s3_ver,
+            esp32_ver,
+            ", ".join(boards.keys()),
+        )
         for board, binfo in boards.items():
             if progress_cb:
                 progress_cb(f"Downloading {binfo['asset_name']}…", 0)
@@ -504,11 +768,41 @@ class FwUpdater:
                 progress_cb(f"Flashing {board}…", 0)
             flasher.flash(
                 board, app_data,
+                expected_version=result["version"],
                 progress_cb=lambda done, tot, _b=board: (
                     progress_cb(f"Flashing {_b}…", int(done * 100 / tot))
                     if progress_cb else None
                 ),
             )
+
+        final_versions = {
+            BOARD_S3: flasher.get_version(BOARD_S3),
+            BOARD_ESP32: flasher.get_version(BOARD_ESP32),
+        }
+        target = _normalise_version(result["version"])
+        missing = [board for board, version in final_versions.items() if not version]
+        if missing:
+            raise RuntimeError(
+                "Firmware update finished but could not verify version from: "
+                + ", ".join(missing)
+            )
+        mismatched = {
+            board: version
+            for board, version in final_versions.items()
+            if _normalise_version(version) != target
+        }
+        if mismatched:
+            raise RuntimeError(
+                "Firmware update finished but versions are out of sync: "
+                + ", ".join(f"{board}={version}" for board, version in mismatched.items())
+            )
+
+        log.info(
+            "Firmware update sync verified: target=%s s3=%s esp32=%s",
+            result["version"],
+            final_versions[BOARD_S3],
+            final_versions[BOARD_ESP32],
+        )
         if progress_cb:
             progress_cb("Done", 100)
 
@@ -527,6 +821,7 @@ class FwUpdater:
 
         import pathlib
         data = pathlib.Path(path).read_bytes()
+        log.info("Flashing firmware from local file: path=%s board=%s size=%d", path, board, len(data))
         # If the file looks like a merged binary (has bootloader header before
         # the app offset), extract the app portion.
         if len(data) > _APP_OFFSET:

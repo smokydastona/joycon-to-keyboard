@@ -132,13 +132,14 @@ The helper app writes structured logs to disk for debugging.
 
 | Folder | Contents |
 |---|---|
-| `logs/` | Daily rotating application log (`helper.log`). Records serial traffic, errors, theme loading, connect/disconnect events. |
+| `logs/` | Daily rotating application log (`helper.log`). Records serial traffic, OTA activity, retries/timeouts, errors, theme loading, and connect/disconnect events. Failed firmware flashes also write `ota_failure_*.json` reports here with board, stage, offset, and recent serial history. |
 | `crash-logs/` | Timestamped crash dumps (`crash_YYYYMMDD_HHMMSS.log`) written on unhandled exceptions. |
 
 Both folders are created next to the installed application (next to the `.exe` when frozen, or next to the `helper-app/` package when running from source).
 
 - **Auto-cleanup**: files older than 15 days are deleted on each startup.
 - **No personal data**: logs contain only application-level events (serial traffic, errors, platform info). No user paths, environment variables, or identifying data are recorded.
+- **Debug bundle**: Settings → Export Debug Bundle includes current settings, the current profile, application logs, and crash logs so OTA failures can be reviewed later.
 
 ## Auto-update
 
@@ -146,5 +147,6 @@ When running as a packaged `.exe`, the app checks the [GitHub Releases](https://
 
 - If an update is available, the version label in the sidebar changes to **"Update to X.Y.Z"**.
 - Clicking updates downloads the new `.exe`, swaps it in place, and prompts you to restart.
+- After relaunch, pending firmware is flashed over the existing ESP32-S3 serial connection, and the ESP32 host is updated through that same bridge path so both boards can be verified against the same release version.
 - When running from source (not frozen), only a notification is shown — no auto-install.
 - The check uses an unauthenticated GET to the public GitHub API. No personal data is sent.

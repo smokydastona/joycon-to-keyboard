@@ -7,6 +7,7 @@ import queue
 import struct
 import threading
 import time
+from collections import deque
 from dataclasses import dataclass
 from typing import Any, ClassVar
 
@@ -55,6 +56,14 @@ class SerialLine:
     parsed: dict[str, Any] | None
 
 
+@dataclass
+class SerialHistoryEntry:
+    timestamp: float
+    direction: str
+    raw: str
+    parsed: dict[str, Any] | None
+
+
 class SerialClient:
     def __init__(self) -> None:
         self._ser: serial.Serial | None = None
@@ -63,6 +72,7 @@ class SerialClient:
         self._connection_lost = threading.Event()
         # Bounded queue: drop oldest events if the consumer can't keep up.
         self.rx: queue.Queue[SerialLine] = queue.Queue(maxsize=512)
+        self._history: deque[SerialHistoryEntry] = deque(maxlen=256)
 
     @property
     def is_connected(self) -> bool:
@@ -77,6 +87,7 @@ class SerialClient:
         self.disconnect()
         self._stop.clear()
         self._connection_lost.clear()
+        self._history.clear()
         log.info("Opening serial port %s @ %d", port, baud)
         self._ser = serial.Serial(port=port, baudrate=baud, timeout=0.1)
         self._rx_thread = threading.Thread(target=self._rx_loop, name="serial-rx", daemon=True)
@@ -104,6 +115,8 @@ class SerialClient:
             raise RuntimeError("Serial port not open")
         try:
             self._ser.write(line.encode("utf-8"))
+            self._record_history("tx", line.rstrip("\n"), obj)
+            log.debug("Serial TX JSON: %s", self._trim_for_log(line.rstrip("\n")))
         except Exception as exc:
             log.error("Serial write failed: %s", exc, exc_info=True)
             self._connection_lost.set()
@@ -118,10 +131,46 @@ class SerialClient:
             raise RuntimeError("Serial port not open")
         try:
             self._ser.write(text.encode("utf-8"))
+            self._record_history("tx", text.rstrip("\n"), None)
+            log.debug("Serial TX text: %s", self._trim_for_log(text.rstrip("\n")))
         except Exception as exc:
             log.error("Serial write failed: %s", exc, exc_info=True)
             self._connection_lost.set()
             raise
+
+    def drain_rx_queue(self, *, limit: int | None = None) -> list[SerialLine]:
+        """Drain pending RX lines from the queue and return them oldest-first."""
+        drained: list[SerialLine] = []
+        max_items = limit if limit is not None else self.rx.maxsize
+        while len(drained) < max_items:
+            with contextlib.suppress(queue.Empty):
+                drained.append(self.rx.get_nowait())
+                continue
+            break
+        return drained
+
+    def snapshot_history(self, *, limit: int = 50) -> list[SerialHistoryEntry]:
+        """Return the most recent TX/RX history entries oldest-first."""
+        if limit <= 0:
+            return []
+        history = list(self._history)
+        return history[-limit:]
+
+    @staticmethod
+    def _trim_for_log(text: str, *, limit: int = 240) -> str:
+        if len(text) <= limit:
+            return text
+        return f"{text[:limit]}...<+{len(text) - limit} chars>"
+
+    def _record_history(self, direction: str, raw: str, parsed: dict[str, Any] | None) -> None:
+        self._history.append(
+            SerialHistoryEntry(
+                timestamp=time.time(),
+                direction=direction,
+                raw=raw,
+                parsed=parsed,
+            )
+        )
 
     # ------------------------------------------------------------------
     # Binary config-block transport
@@ -540,6 +589,8 @@ class SerialClient:
                         except Exception:
                             log.debug("JSON parse failed for line: %s", raw[:200])
                             parsed = None
+                    self._record_history("rx", raw, parsed)
+                    log.debug("Serial RX line: %s", self._trim_for_log(raw))
                     try:
                         self.rx.put_nowait(SerialLine(raw=raw, parsed=parsed))
                     except queue.Full:
