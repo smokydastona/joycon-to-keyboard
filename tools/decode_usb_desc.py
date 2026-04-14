@@ -7,10 +7,15 @@ path = sys.argv[1] if len(sys.argv) > 1 else r'ci-artifacts-pid4031/esp32s3_usb_
 with open(path, 'rb') as f:
     data = f.read()
 
-# Config descriptor starts with: 09 02 <len_lo> <len_hi> <num_ifaces> 01 00 80 <power>
-# wTotalLength=0x0096=150, bNumInterfaces=5
-pattern = bytes([0x09, 0x02, 0x96, 0x00, 0x05, 0x01, 0x00, 0x80])
-pos = data.find(pattern)
+# Config descriptor: find any 09 02 <len_lo> <len_hi> <num_ifaces> 01 00 80 <power>
+# Search for any config descriptor (bLength=9, bDescType=2, bConfigValue=1, bmAttrib=0x80)
+pos = -1
+for i in range(len(data) - 9):
+    if data[i] == 0x09 and data[i+1] == 0x02 and data[i+5] == 0x01 and data[i+7] == 0x80:
+        total_len = data[i+2] | (data[i+3] << 8)
+        if 100 <= total_len <= 300:
+            pos = i
+            break
 if pos < 0:
     print("Config descriptor not found")
     sys.exit(1)
