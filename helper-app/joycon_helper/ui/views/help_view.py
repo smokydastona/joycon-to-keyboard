@@ -499,7 +499,7 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "  For first-time flash, use the Web Flasher in Chrome/Edge.\n"
                 "  OTA updates after first install should happen through Bind Bandit while connected to the ESP32-S3.\n"
                 "  If an OTA update fails, open Settings → Export Anonymized Debug Bundle and keep the generated ZIP plus the latest helper.log / ota_failure_*.json files.\n"
-                "  If you want to report it upstream, use Settings → Open GitHub Debug Issue to open a prefilled issue page and then attach the anonymized ZIP manually.\n"
+                "  If you want to report it upstream, use Settings → Open GitHub Debug Issue to open the repo's debug-report issue template with the generated summary prefilled, then attach the anonymized ZIP manually.\n"
                 "  ESP32: Hold BOOT while tapping RESET to enter download mode only for recovery or first-time flash.\n"
                 "  ESP32-S3 (Nano ESP32): Double-tap RESET for download mode only for recovery or first-time flash.\n"
                 "  Check that you select the correct COM port for each board."
@@ -525,7 +525,7 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "## Debugging update failures\n"
                 "If an update fails, use Settings → Export Anonymized Debug Bundle. The ZIP includes\n"
                 "sanitized app logs, crash logs, diagnostics, and firmware OTA failure reports.\n"
-                "You can then use Settings → Open GitHub Debug Issue to open a prefilled issue page\n"
+                "You can then use Settings → Open GitHub Debug Issue to open the repo's debug-report template\n"
                 "and attach the anonymized ZIP manually if you want to report it."
             ),
             False,

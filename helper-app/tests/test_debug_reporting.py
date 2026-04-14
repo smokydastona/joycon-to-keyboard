@@ -147,4 +147,5 @@ def test_build_issue_url_targets_repo_issue_creation(monkeypatch) -> None:
     report, _bundle = build_debug_bundle_bytes(DebugContext(main_window=None, settings=None))
     issue_url = build_issue_url(report)
     assert "/issues/new?" in issue_url
+    assert "template=debug-report.md" in issue_url
     assert "debug-report" in issue_url

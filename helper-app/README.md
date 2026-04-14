@@ -140,7 +140,7 @@ Both folders are created next to the installed application (next to the `.exe` w
 - **Auto-cleanup**: files older than 15 days are deleted on each startup.
 - **No personal data**: logs contain only application-level events (serial traffic, errors, platform info). No user paths, environment variables, or identifying data are recorded.
 - **Anonymized debug bundle**: Settings → Export Anonymized Debug Bundle writes a ZIP with sanitized settings, profile state, diagnostics, application logs, crash logs, and a prebuilt GitHub issue summary.
-- **GitHub issue flow**: Settings → Open GitHub Debug Issue creates the same anonymized bundle, then opens a prefilled GitHub issue page so the user can choose whether to submit it.
+- **GitHub issue flow**: Settings → Open GitHub Debug Issue creates the same anonymized bundle, then opens the repo's dedicated debug-report issue template with the generated summary prefilled so the user can choose whether to submit it.
 
 ## Auto-update
 

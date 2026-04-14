@@ -357,6 +357,7 @@ def build_issue_url(report: DebugReport) -> str:
     body = build_issue_markdown(report)
     query = urllib.parse.urlencode(
         {
+            "template": "debug-report.md",
             "title": title,
             "body": body,
             "labels": "debug-report",
