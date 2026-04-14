@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
     QFileDialog,
+    QFormLayout,
     QFrame,
     QGroupBox,
     QHBoxLayout,
@@ -207,25 +208,41 @@ class DevicesView(QWidget):
         self._m913_live_timer: QTimer | None = None
         self._m913_reader_dev: Any = None
 
+        # Joy-Con battery label registry (populated in _build_joycon_tab)
+        self._joycon_battery_labels: dict[str, QLabel] = {}
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
+        # Empty state shown when no devices are connected
+        self._empty_label = QLabel(
+            "No devices connected.\n\n"
+            "Open Mission Control and click ＋ Add Device to connect a device."
+        )
+        self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_label.setWordWrap(True)
+        self._empty_label.setStyleSheet(
+            f"color: {self._main.theme.color('text_secondary')}; font-size: 13pt;")
+        layout.addWidget(self._empty_label)
+
+        # Dynamic tab widget — tabs are added/removed as devices connect/disconnect
         self._tabs = QTabWidget()
+        self._tabs.hide()
         layout.addWidget(self._tabs)
 
-        # M913 tab
+        # device_id → tab QWidget (tracks what is visible in self._tabs)
+        self._device_tabs: dict[str, QWidget] = {}
+
+        # Pre-build M913 and Razer tab widgets (added to _tabs on demand)
         self._m913_tab = QScrollArea()
         self._m913_tab.setWidgetResizable(True)
         self._m913_tab.setFrameShape(QScrollArea.Shape.NoFrame)
         self._build_m913_tab()
-        self._tabs.addTab(self._m913_tab, "🖱 M913 Keypad")
 
-        # Razer tab
         self._razer_tab = QScrollArea()
         self._razer_tab.setWidgetResizable(True)
         self._razer_tab.setFrameShape(QScrollArea.Shape.NoFrame)
         self._build_razer_tab()
-        self._tabs.addTab(self._razer_tab, "🐍 Razer Mouse")
 
         self._init_default_profiles()
 
@@ -1850,7 +1867,19 @@ class DevicesView(QWidget):
 
     # -----------------------------------------------------------------
     def device_event(self, obj: dict) -> None:
-        pass
+        evt = obj.get("evt")
+        if evt == "battery":
+            try:
+                raw_id = int(obj.get("device_id", 0))
+                level = int(obj.get("level", -1))
+            except (TypeError, ValueError):
+                return
+            if 0 <= level <= 4:
+                jc_id = f"joycon-{'L' if raw_id == 0 else 'R'}"
+                lbl = self._joycon_battery_labels.get(jc_id)
+                if lbl:
+                    bars = "▂▄▆█"[:level] + "░" * (4 - level)
+                    lbl.setText(f"{bars}  {level}/4")
 
     def profile_loaded(self, slot: int, profile: dict) -> None:
         pass
@@ -1860,3 +1889,96 @@ class DevicesView(QWidget):
 
     def apply_theme(self, theme: ThemeEngine) -> None:
         pass
+
+    # =================================================================
+    # Dynamic device tab management
+    # =================================================================
+
+    def _update_empty_state(self) -> None:
+        has_tabs = self._tabs.count() > 0
+        self._tabs.setVisible(has_tabs)
+        self._empty_label.setVisible(not has_tabs)
+
+    def _build_joycon_tab(self, entry: Any) -> QScrollArea:
+        """Build a Joy-Con info tab widget for *entry*."""
+        widget = QWidget()
+        lay = QVBoxLayout(widget)
+        lay.setContentsMargins(16, 16, 16, 16)
+        lay.setSpacing(12)
+
+        title = QLabel(entry.name)
+        title.setFont(QFont(
+            self._main.theme.typo("font_family_decorative"),
+            self._main.theme.typo("font_size_title"),
+            QFont.Weight.Bold,
+        ))
+        lay.addWidget(title)
+
+        from ..widgets.card import Card
+        info_card = Card(self._main.theme)
+        info_lay = QFormLayout(info_card)
+        info_lay.addRow("Device ID:", QLabel(entry.id))
+        info_lay.addRow("BT Address:", QLabel(entry.bda or "—"))
+        bat_lbl = QLabel("—")
+        info_lay.addRow("Battery:", bat_lbl)
+        lay.addWidget(info_card)
+
+        note = QLabel(
+            "Joy-Con key mapping is configured in Blueprint Layout.\n"
+            "Battery and latency are shown on the Mission Control dashboard."
+        )
+        note.setWordWrap(True)
+        note.setStyleSheet(
+            f"color: {self._main.theme.color('text_secondary')};")
+        lay.addWidget(note)
+        lay.addStretch()
+
+        self._joycon_battery_labels[entry.id] = bat_lbl
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setWidget(widget)
+        return scroll
+
+    def select_device(self, device_id: str) -> None:
+        """Switch to the tab for *device_id* (called from Dashboard Configure button)."""
+        tab = self._device_tabs.get(device_id)
+        if tab is not None and self._tabs.indexOf(tab) >= 0:
+            self._tabs.setCurrentWidget(tab)
+
+    def device_connected(self, entry: Any) -> None:
+        """Add a tab for the newly connected device."""
+        did = entry.id
+        if did in self._device_tabs:
+            return  # already shown
+        if entry.type == "joycon":
+            tab_widget = self._build_joycon_tab(entry)
+            tab_title = f"🎮 {entry.name}"
+        elif entry.type == "m913":
+            tab_widget = self._m913_tab
+            tab_title = "🖱 M913 Keypad"
+        elif entry.type == "razer":
+            tab_widget = self._razer_tab
+            tab_title = "🐍 Razer Mouse"
+        else:
+            return
+        self._device_tabs[did] = tab_widget
+        self._tabs.addTab(tab_widget, tab_title)
+        self._update_empty_state()
+
+    def device_disconnected(self, device_id: str) -> None:
+        """Remove the tab for *device_id*."""
+        tab = self._device_tabs.pop(device_id, None)
+        if tab is not None:
+            idx = self._tabs.indexOf(tab)
+            if idx >= 0:
+                self._tabs.removeTab(idx)
+            self._joycon_battery_labels.pop(device_id, None)
+        self._update_empty_state()
+
+    def connection_changed(self, connected: bool) -> None:
+        """Remove ESP32-BT Joy-Con tabs when serial disconnects."""
+        if not connected:
+            for did in [k for k in list(self._device_tabs) if k.startswith("joycon-")]:
+                self.device_disconnected(did)

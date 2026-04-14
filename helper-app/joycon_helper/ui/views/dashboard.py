@@ -1,7 +1,13 @@
-"""Dashboard view — connection status, quick actions, slot overview.
+"""Dashboard view — ESP32 host status, connected-device list, quick actions.
 
-The first view users see.  Shows connection state, BT devices,
-battery, latency, and a card grid with quick-action buttons.
+Replaces the old card-grid dashboard.  Content:
+
+* **ESP32 Host** card — serial connection state, firmware version, latency.
+* **Connected Devices** list — one card per connected device showing name,
+  type icon, battery level and latency.  An "Add Device" button opens the
+  :class:`~joycon_helper.ui.widgets.add_device_dialog.AddDeviceDialog`.
+* **Quick Actions** bar — Ping, Toggle Overlay.
+* **Device Log** — re-uses the MainWindow log widget (read-only).
 """
 from __future__ import annotations
 
@@ -11,37 +17,148 @@ from typing import TYPE_CHECKING
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import (
-    QGridLayout,
+    QFrame,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QPushButton,
     QScrollArea,
+    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
 
-from ..dashboard_summary import (
-    build_battery_briefing,
-    build_profile_briefing,
-)
 from ..theme import ThemeEngine
 from ..widgets.card import Card
-from ..widgets.live_input_visualizer import LiveInputVisualizerWidget
 
 if TYPE_CHECKING:
+    from ...device_cache import DeviceEntry
     from ..main_window import MainWindow
 
 log = logging.getLogger("joycon_helper.ui.views.dashboard")
 
+# ---------------------------------------------------------------------------
+# Battery helpers
+# ---------------------------------------------------------------------------
+
+_BATTERY_BARS = ["▂___", "▂▂__", "▂▂▂_", "▂▂▂▂", "████"]
+_BATTERY_COLORS = ["#ff4444", "#ff8800", "#ffcc00", "#88dd00", "#44cc44"]
+
+
+def _battery_text(level: int | None) -> tuple[str, str]:
+    """Return (text, colour) for a battery level 0-4 or None."""
+    if level is None:
+        return "—", ""
+    level = max(0, min(4, level))
+    return _BATTERY_BARS[level], _BATTERY_COLORS[level]
+
+
+# ---------------------------------------------------------------------------
+# Per-device card widget
+# ---------------------------------------------------------------------------
+
+class _DeviceCard(Card):
+    """Compact card showing one connected device's status."""
+
+    _TYPE_ICONS = {
+        "joycon": "🎮",
+        "m913":   "🖱",
+        "razer":  "🐍",
+    }
+
+    def __init__(self, entry: "DeviceEntry", main: "MainWindow") -> None:
+        super().__init__(main.theme)
+        self._entry = entry
+        self._main = main
+
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(10, 8, 10, 8)
+        lay.setSpacing(12)
+
+        # Icon + name block
+        info_col = QVBoxLayout()
+        icon = self._TYPE_ICONS.get(entry.type, "📦")
+        name_label = QLabel(f"{icon}  {entry.name}")
+        name_label.setFont(QFont(main.theme.typo("font_family"), 11, QFont.Weight.Bold))
+        info_col.addWidget(name_label)
+
+        src_text = "ESP32 Bluetooth" if entry.source == "esp32-bt" else "PC USB"
+        if entry.bda:
+            src_text += f"  ·  {entry.bda}"
+        detail = QLabel(src_text)
+        detail.setStyleSheet(f"color: {main.theme.color('text_secondary')};")
+        info_col.addWidget(detail)
+        lay.addLayout(info_col, 1)
+
+        # Battery
+        batt_col = QVBoxLayout()
+        batt_col.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._batt_label = QLabel("—")
+        self._batt_label.setFont(QFont(main.theme.typo("mono_family"), 10))
+        self._batt_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        batt_col.addWidget(QLabel("Battery"))
+        batt_col.addWidget(self._batt_label)
+        lay.addLayout(batt_col)
+
+        # Latency (BT devices only)
+        if entry.source == "esp32-bt":
+            lat_col = QVBoxLayout()
+            lat_col.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self._latency_label: QLabel | None = QLabel("— ms")
+            self._latency_label.setFont(QFont(main.theme.typo("mono_family"), 10))
+            self._latency_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lat_col.addWidget(QLabel("Latency"))
+            lat_col.addWidget(self._latency_label)
+            lay.addLayout(lat_col)
+        else:
+            self._latency_label = None
+
+        # Configure button
+        cfg_btn = QPushButton("Configure")
+        cfg_btn.setFixedWidth(90)
+        cfg_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        cfg_btn.clicked.connect(self._go_configure)
+        lay.addWidget(cfg_btn)
+
+        self._refresh_battery()
+
+    def _go_configure(self) -> None:
+        from ..main_window import NAV_DEVICES
+        dv = self._main._views[NAV_DEVICES]
+        if dv is not None and hasattr(dv, "select_device"):
+            dv.select_device(self._entry.id)
+        self._main._nav_to(NAV_DEVICES)
+
+    def _refresh_battery(self) -> None:
+        text, color = _battery_text(self._entry.battery)
+        self._batt_label.setText(text)
+        if color:
+            self._batt_label.setStyleSheet(f"color: {color};")
+        else:
+            self._batt_label.setStyleSheet("")
+
+    def update_battery(self, level: int) -> None:
+        self._entry.battery = level
+        self._refresh_battery()
+
+    def update_latency(self, latency_ms: float) -> None:
+        self._entry.latency_ms = latency_ms
+        if self._latency_label is not None:
+            self._latency_label.setText(f"{latency_ms:.1f} ms")
+
+
+# ---------------------------------------------------------------------------
+# DashboardView
+# ---------------------------------------------------------------------------
 
 class DashboardView(QScrollArea):
-    """Dashboard: overview cards, quick actions, connection status."""
+    """Dashboard: ESP32 status, connected devices, quick actions, device log."""
 
-    def __init__(self, main: MainWindow) -> None:
+    def __init__(self, main: "MainWindow") -> None:
         super().__init__()
         self._main = main
-        self._battery_levels: dict[int, int] = {}
+        self._device_cards: dict[str, _DeviceCard] = {}  # device_id → card
+
         self.setWidgetResizable(True)
         self.setFrameShape(QScrollArea.Shape.NoFrame)
 
@@ -52,14 +169,16 @@ class DashboardView(QScrollArea):
         self.setWidget(container)
 
         self._build_header()
-        self._build_status_cards()
+        self._build_esp32_status()
+        self._build_connected_devices()
         self._build_quick_actions()
-        self._build_profile_briefing()
-        self._build_device_preview()
         self._build_device_log()
         self._layout.addStretch()
 
-    # -----------------------------------------------------------------
+    # ------------------------------------------------------------------
+    # Layout builders
+    # ------------------------------------------------------------------
+
     def _build_header(self) -> None:
         header = QLabel("Mission Control")
         header.setFont(QFont(
@@ -68,227 +187,214 @@ class DashboardView(QScrollArea):
             QFont.Weight.Bold,
         ))
         self._layout.addWidget(header)
-
-        subtitle = QLabel("Connection overview and quick actions")
+        subtitle = QLabel("Device status and connections")
         subtitle.setStyleSheet(f"color: {self._main.theme.color('text_secondary')};")
         self._layout.addWidget(subtitle)
 
-    # -----------------------------------------------------------------
-    def _build_status_cards(self) -> None:
-        grid = QGridLayout()
-        grid.setSpacing(12)
+    def _build_esp32_status(self) -> None:
+        group = QGroupBox("ESP32 Host")
+        row = QHBoxLayout(group)
+        row.setSpacing(24)
 
-        # Connection card
-        self._conn_card = Card(self._main.theme)
-        conn_lay = QVBoxLayout(self._conn_card)
-        conn_lay.addWidget(QLabel("🔌  Connection"))
+        # Connection indicator
+        conn_col = QVBoxLayout()
+        conn_col.addWidget(QLabel("🔌  Serial"))
         self._conn_status = QLabel("Disconnected")
-        self._conn_status.setFont(QFont(self._main.theme.typo("font_family"), 12, QFont.Weight.Bold))
-        conn_lay.addWidget(self._conn_status)
+        self._conn_status.setFont(QFont(
+            self._main.theme.typo("font_family"), 11, QFont.Weight.Bold))
+        conn_col.addWidget(self._conn_status)
         self._conn_port = QLabel("No port selected")
         self._conn_port.setStyleSheet(f"color: {self._main.theme.color('text_secondary')};")
-        conn_lay.addWidget(self._conn_port)
-        grid.addWidget(self._conn_card, 0, 0)
+        conn_col.addWidget(self._conn_port)
+        row.addLayout(conn_col)
 
-        # Bluetooth card
-        self._bt_card = Card(self._main.theme)
-        bt_lay = QVBoxLayout(self._bt_card)
-        bt_lay.addWidget(QLabel("📡  Bluetooth"))
-        self._bt_status_label = QLabel("—")
-        self._bt_status_label.setFont(QFont(self._main.theme.typo("font_family"), 12, QFont.Weight.Bold))
-        bt_lay.addWidget(self._bt_status_label)
-        self._bt_sides = QLabel("Left: ✗   Right: ✗")
-        self._bt_sides.setStyleSheet(f"color: {self._main.theme.color('text_secondary')};")
-        bt_lay.addWidget(self._bt_sides)
-        grid.addWidget(self._bt_card, 0, 1)
+        # Separator
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.VLine)
+        sep.setFrameShadow(QFrame.Shadow.Sunken)
+        row.addWidget(sep)
 
-        # Battery card
-        self._batt_card = Card(self._main.theme)
-        batt_lay = QVBoxLayout(self._batt_card)
-        batt_lay.addWidget(QLabel("🔋  Battery"))
-        self._batt_level = QLabel("—")
-        self._batt_level.setFont(QFont(self._main.theme.typo("font_family"), 12, QFont.Weight.Bold))
-        batt_lay.addWidget(self._batt_level)
-        self._batt_detail = QLabel("Left — | Right —")
-        self._batt_detail.setStyleSheet(f"color: {self._main.theme.color('text_secondary')};")
-        batt_lay.addWidget(self._batt_detail)
-        grid.addWidget(self._batt_card, 0, 2)
+        # Firmware version
+        fw_col = QVBoxLayout()
+        fw_col.addWidget(QLabel("💾  Firmware"))
+        self._fw_version = QLabel("—")
+        self._fw_version.setFont(QFont(
+            self._main.theme.typo("font_family"), 11, QFont.Weight.Bold))
+        fw_col.addWidget(self._fw_version)
+        row.addLayout(fw_col)
 
-        # Latency card
-        self._lat_card = Card(self._main.theme)
-        lat_lay = QVBoxLayout(self._lat_card)
-        lat_lay.addWidget(QLabel("⏱  Latency"))
+        # Separator
+        sep2 = QFrame()
+        sep2.setFrameShape(QFrame.Shape.VLine)
+        sep2.setFrameShadow(QFrame.Shadow.Sunken)
+        row.addWidget(sep2)
+
+        # Latency
+        lat_col = QVBoxLayout()
+        lat_col.addWidget(QLabel("⏱  Latency"))
         self._lat_value = QLabel("— ms")
-        self._lat_value.setFont(QFont(self._main.theme.typo("font_family"), 12, QFont.Weight.Bold))
-        lat_lay.addWidget(self._lat_value)
-        grid.addWidget(self._lat_card, 0, 3)
+        self._lat_value.setFont(QFont(
+            self._main.theme.typo("font_family"), 11, QFont.Weight.Bold))
+        lat_col.addWidget(self._lat_value)
+        row.addLayout(lat_col)
 
-        self._layout.addLayout(grid)
+        row.addStretch()
+        self._layout.addWidget(group)
 
-    # -----------------------------------------------------------------
+    def _build_connected_devices(self) -> None:
+        header_row = QHBoxLayout()
+        grp_label = QLabel("Connected Devices")
+        grp_label.setFont(QFont(
+            self._main.theme.typo("font_family"), 12, QFont.Weight.Bold))
+        header_row.addWidget(grp_label)
+        header_row.addStretch()
+        add_btn = QPushButton("＋  Add Device")
+        add_btn.setProperty("accent", True)
+        add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        add_btn.clicked.connect(self._open_add_device)
+        header_row.addWidget(add_btn)
+        self._layout.addLayout(header_row)
+
+        # Container for device cards (populated dynamically)
+        self._devices_container = QWidget()
+        self._devices_layout = QVBoxLayout(self._devices_container)
+        self._devices_layout.setContentsMargins(0, 0, 0, 0)
+        self._devices_layout.setSpacing(8)
+
+        self._empty_label = QLabel("No devices connected.  Press  ＋ Add Device  to connect.")
+        self._empty_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._empty_label.setStyleSheet(
+            f"color: {self._main.theme.color('text_secondary')}; "
+            "padding: 24px;"
+        )
+        self._devices_layout.addWidget(self._empty_label)
+        self._layout.addWidget(self._devices_container)
+
     def _build_quick_actions(self) -> None:
         group = QGroupBox("Quick Actions")
         lay = QHBoxLayout(group)
         lay.setSpacing(8)
 
-        actions = [
+        for label, cb in [
             ("Ping", self._main._cmd_ping),
-            ("Read Profile", self._main._cmd_read_profile),
-            ("Upload Profile", self._main._cmd_write_profile),
             ("Toggle Overlay", self._main.toggle_overlay),
-        ]
-        for label, callback in actions:
+        ]:
             btn = QPushButton(label)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.clicked.connect(callback)
+            btn.clicked.connect(cb)
             lay.addWidget(btn)
-
-        self._scan_btn = QPushButton("🔍 Scan for Joy-Con")
-        self._scan_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._scan_btn.clicked.connect(self._main._cmd_bt_scan)
-        self._scan_btn.setEnabled(self._main.bridge.is_connected)
-        lay.addWidget(self._scan_btn)
 
         lay.addStretch()
         self._layout.addWidget(group)
 
-    # -----------------------------------------------------------------
-    def _build_device_preview(self) -> None:
-        group = QGroupBox("Device Preview")
-        lay = QVBoxLayout(group)
-
-        self._visualizer = LiveInputVisualizerWidget(self._main)
-        lay.addWidget(self._visualizer)
-        self._layout.addWidget(group)
-
-    def _build_profile_briefing(self) -> None:
-        group = QGroupBox("Active Loadout")
-        layout = QVBoxLayout(group)
-        layout.setSpacing(10)
-
-        top = QGridLayout()
-        top.setSpacing(12)
-
-        self._slot_card = Card(self._main.theme)
-        slot_lay = QVBoxLayout(self._slot_card)
-        slot_lay.addWidget(QLabel("🎯  Active Slot"))
-        self._slot_label = QLabel("Slot 0")
-        self._slot_label.setFont(QFont(self._main.theme.typo("font_family"), 12, QFont.Weight.Bold))
-        slot_lay.addWidget(self._slot_label)
-        top.addWidget(self._slot_card, 0, 0)
-
-        self._profile_card = Card(self._main.theme)
-        profile_lay = QVBoxLayout(self._profile_card)
-        profile_lay.addWidget(QLabel("🗂  Loadout"))
-        self._profile_name = QLabel("🎒 General")
-        self._profile_name.setFont(QFont(self._main.theme.typo("font_family"), 12, QFont.Weight.Bold))
-        profile_lay.addWidget(self._profile_name)
-        top.addWidget(self._profile_card, 0, 1)
-
-        self._counts_card = Card(self._main.theme)
-        counts_lay = QVBoxLayout(self._counts_card)
-        counts_lay.addWidget(QLabel("📦  Composition"))
-        self._profile_counts = QLabel("0 mapped | 0 macro(s) | 0 layer(s) | 0 chord(s)")
-        self._profile_counts.setWordWrap(True)
-        self._profile_counts.setFont(QFont(self._main.theme.typo("font_family"), 11, QFont.Weight.Bold))
-        counts_lay.addWidget(self._profile_counts)
-        top.addWidget(self._counts_card, 0, 2)
-
-        layout.addLayout(top)
-
-        self._profile_details = QLabel()
-        self._profile_details.setWordWrap(True)
-        self._profile_details.setStyleSheet(f"color: {self._main.theme.color('text_secondary')};")
-        layout.addWidget(self._profile_details)
-
-        self._profile_preview = QLabel()
-        self._profile_preview.setWordWrap(True)
-        layout.addWidget(self._profile_preview)
-
-        self._layout.addWidget(group)
-        self._refresh_profile_briefing(self._main._slot, self._main._profile)
-
-    def _refresh_battery_briefing(self) -> None:
-        briefing = build_battery_briefing(self._battery_levels)
-        self._batt_level.setText(briefing["headline"])
-        self._batt_detail.setText(briefing["details"])
-
-    # -----------------------------------------------------------------
     def _build_device_log(self) -> None:
         group = QGroupBox("Device Log")
         lay = QVBoxLayout(group)
-        # Re-parent the log widget owned by MainWindow into this group
         log_widget = self._main._log_text
         log_widget.setMinimumHeight(150)
         lay.addWidget(log_widget)
         self._layout.addWidget(group)
 
-    def _refresh_profile_briefing(self, slot: int, profile: dict) -> None:
-        briefing = build_profile_briefing(profile, slot)
-        self._slot_label.setText(briefing["slot"])
-        self._profile_name.setText(briefing["name"])
-        self._profile_counts.setText(briefing["counts"])
-        self._profile_details.setText(briefing["details"])
-        self._profile_preview.setText(briefing["preview"])
+    # ------------------------------------------------------------------
+    # Add Device dialog
+    # ------------------------------------------------------------------
 
-    # -----------------------------------------------------------------
-    # Event handlers
-    # -----------------------------------------------------------------
+    def _open_add_device(self) -> None:
+        from ..widgets.add_device_dialog import AddDeviceDialog
+        dlg = AddDeviceDialog(self._main, self._main._device_cache)
+        dlg.device_added.connect(self._on_device_added_via_dialog)
+        self._main._add_device_dialog = dlg
+        dlg.exec()
+        self._main._add_device_dialog = None
+
+    def _on_device_added_via_dialog(self, entry: "DeviceEntry") -> None:
+        entry.connected = True
+        self._main._device_cache.mark_connected(entry.id, True)
+        self._main._connected_devices[entry.id] = entry
+        self._add_or_update_card(entry)
+        self._main._notify_views("device_connected", entry=entry)
+
+    # ------------------------------------------------------------------
+    # Device card management
+    # ------------------------------------------------------------------
+
+    def _add_or_update_card(self, entry: "DeviceEntry") -> None:
+        if entry.id in self._device_cards:
+            return
+        self._empty_label.setVisible(False)
+        card = _DeviceCard(entry, self._main)
+        self._device_cards[entry.id] = card
+        self._devices_layout.addWidget(card)
+
+    def _remove_card(self, device_id: str) -> None:
+        card = self._device_cards.pop(device_id, None)
+        if card is not None:
+            self._devices_layout.removeWidget(card)
+            card.setParent(None)
+            card.deleteLater()
+        if not self._device_cards:
+            self._empty_label.setVisible(True)
+
+    # ------------------------------------------------------------------
+    # View protocol (called by MainWindow._notify_views)
+    # ------------------------------------------------------------------
+
+    def device_connected(self, entry: "DeviceEntry") -> None:
+        self._add_or_update_card(entry)
+
+    def device_disconnected(self, device_id: str) -> None:
+        self._remove_card(device_id)
 
     def device_event(self, obj: dict) -> None:
         evt = obj.get("evt")
-        self._visualizer.handle_device_event(obj)
-
-        if evt == "bt_status":
-            state = str(obj.get("state", "—"))
-            self._bt_status_label.setText(state.capitalize())
-            left = "✓" if self._main._bt_connected_left else "✗"
-            right = "✓" if self._main._bt_connected_right else "✗"
-            self._bt_sides.setText(f"Left: {left}   Right: {right}")
 
         if evt == "battery":
-            device_id = obj.get("device_id")
+            device_id_int = obj.get("device_id")
             level = obj.get("level")
-            if isinstance(device_id, int) and isinstance(level, int):
-                self._battery_levels[device_id] = level
-                self._refresh_battery_briefing()
+            if not isinstance(device_id_int, int) or not isinstance(level, int):
+                return
+            side = "R" if device_id_int == 1 else "L"
+            cache_id = f"joycon-{side}"
+            card = self._device_cards.get(cache_id)
+            if card:
+                card.update_battery(level)
 
-        if obj.get("rsp") == "pong":
+        elif obj.get("rsp") == "pong":
             lat = self._main._latency_ms
             if lat is not None:
                 self._lat_value.setText(f"{lat:.1f} ms")
+                for card in self._device_cards.values():
+                    if card._entry.source == "esp32-bt":
+                        card.update_latency(lat)
 
-    def profile_loaded(self, slot: int, profile: dict) -> None:
-        self._refresh_profile_briefing(slot, profile)
-
-    def profile_updated(self, profile: dict) -> None:
-        self._refresh_profile_briefing(self._main._slot, profile)
+        if obj.get("rsp") == "fw_version":
+            if obj.get("ok") and obj.get("board") == "esp32s3":
+                self._fw_version.setText(obj.get("version", "—"))
 
     def connection_changed(self, connected: bool) -> None:
         c = self._main.theme.theme["colors"]
-        self._visualizer.connection_changed(connected)
         if connected:
             self._conn_status.setText("Connected")
             self._conn_status.setStyleSheet(f"color: {c['success']};")
             port = self._main._port_combo.currentData() or ""
             self._conn_port.setText(port)
+            self._main.send_cmd({"cmd": "fw_version"})
         else:
             self._conn_status.setText("Disconnected")
             self._conn_status.setStyleSheet(f"color: {c['danger']};")
             self._conn_port.setText("No port selected")
-            self._battery_levels.clear()
-            self._refresh_battery_briefing()
-        self._scan_btn.setEnabled(connected)
+            self._fw_version.setText("—")
+            self._lat_value.setText("— ms")
+            for did in list(self._device_cards):
+                self._remove_card(did)
 
     def apply_theme(self, theme: ThemeEngine) -> None:
         c = theme.theme["colors"]
-        self._visualizer.apply_theme(theme)
-        self._profile_details.setStyleSheet(f"color: {theme.color('text_secondary')};")
-        self._batt_detail.setStyleSheet(f"color: {theme.color('text_secondary')};")
-        self._conn_status.setStyleSheet("")
+        self._conn_port.setStyleSheet(f"color: {theme.color('text_secondary')};")
+        self._empty_label.setStyleSheet(
+            f"color: {theme.color('text_secondary')}; padding: 24px;"
+        )
         if self._main.bridge.is_connected:
-            self._conn_status.setText("Connected")
             self._conn_status.setStyleSheet(f"color: {c['success']};")
         else:
-            self._conn_status.setText("Disconnected")
             self._conn_status.setStyleSheet(f"color: {c['danger']};")

@@ -44,6 +44,7 @@ from PyQt6.QtWidgets import (
 from .._version import __version__
 from ..app_switcher import AppSwitcher, load_rules
 from ..default_profiles import get_default_profile
+from ..device_cache import DeviceCache, DeviceEntry
 from .assets import AssetManager
 from .serial_bridge import SerialBridge
 from .theme import ThemeEngine
@@ -104,6 +105,12 @@ class MainWindow(QMainWindow):
         self._active_key_ids: set = set()
         self._bt_connected_left = False
         self._bt_connected_right = False
+
+        # Device tracking (new)
+        self._device_cache = DeviceCache()
+        self._bda_name_map: dict[str, str] = {}  # bda → name from found/reconnecting events
+        self._connected_devices: dict[str, DeviceEntry] = {}  # device_id → entry
+        self._add_device_dialog: object | None = None  # AddDeviceDialog when open
 
         # Undo / redo (centralized for all profile changes)
         self._undo_stack: list[str] = []
@@ -424,6 +431,7 @@ class MainWindow(QMainWindow):
         Toast.info(self, "Serial disconnected")
         # Clear stale key state so overlay/views don't show phantom presses.
         self._active_key_ids.clear()
+        self._bda_name_map.clear()
         self._notify_views("connection_changed", connected=False)
 
     def _on_connection_error(self, msg: str) -> None:
@@ -472,24 +480,51 @@ class MainWindow(QMainWindow):
         if evt == "bt_status":
             state = str(obj.get("state", "-"))
             name = obj.get("name")
+            bda: str = str(obj.get("bda") or "")
             self._bt_status = state
-            if state == "connected":
-                side = None
-                if isinstance(name, str):
-                    if "(L)" in name:
-                        side = "L"
-                    elif "(R)" in name:
-                        side = "R"
+
+            # Forward to Add Device dialog while it is open
+            if self._add_device_dialog is not None:
+                try:
+                    self._add_device_dialog.handle_bt_status(obj)  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+
+            # Track BDA → display name from found / reconnecting events
+            if name and bda and state in ("found", "reconnecting"):
+                self._bda_name_map[bda] = str(name)
+
+            if state == "connected" and bda:
+                resolved_name = self._bda_name_map.get(bda, "Joy-Con")
+                side = "R" if "(R)" in resolved_name else "L"
+                device_id = DeviceCache.make_joycon_id(side)
+                entry = DeviceEntry(
+                    id=device_id,
+                    type="joycon",
+                    source="esp32-bt",
+                    name=resolved_name,
+                    bda=bda,
+                )
+                entry.connected = True
+                self._device_cache.add_or_update(entry)
+                self._connected_devices[device_id] = entry
+                # Keep legacy flags for existing consumers
                 if side == "L":
                     self._bt_connected_left = True
-                elif side == "R":
+                else:
                     self._bt_connected_right = True
+                self._notify_views("device_connected", entry=entry)
+
             elif state == "disconnected":
                 self._bt_connected_left = False
                 self._bt_connected_right = False
                 self._battery_level = None
                 self._battery_levels.clear()
                 self._status_bar.clear_battery()
+                for did in [k for k, v in list(self._connected_devices.items())
+                             if v.source == "esp32-bt"]:
+                    self._connected_devices.pop(did, None)
+                    self._notify_views("device_disconnected", device_id=did)
 
         # Mapped key events
         if evt == "mapped_key":
