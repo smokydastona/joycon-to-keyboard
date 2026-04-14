@@ -43,13 +43,11 @@ body {
   background-size: auto, 26px 26px, 26px 26px, auto;
 }
 
-.page-shell {
-  width: min(1480px, calc(100vw - 32px));
-  margin: 16px auto;
+.simple-shell {
+  width: min(940px, calc(100vw - 24px));
+  margin: 12px auto;
   display: grid;
-  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
-  gap: 20px;
-  align-items: start;
+  gap: 16px;
 }
 
 .panel {
@@ -57,26 +55,6 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-soft);
-}
-
-.app-rail {
-  position: sticky;
-  top: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.brand-block,
-.rail-panel {
-  padding: 20px 20px 18px;
-}
-
-.brand-block {
-  background:
-    linear-gradient(160deg, rgba(74, 168, 255, 0.12), transparent 34%),
-    linear-gradient(180deg, rgba(7, 17, 31, 0.98), rgba(13, 32, 64, 0.98));
-  border-color: var(--border-light);
 }
 
 .eyebrow {
@@ -87,158 +65,70 @@ body {
   margin-bottom: 10px;
 }
 
-.brand-block h1,
-.hero h2,
+.hero h1,
 .section-heading h3 {
   font-family: "Aptos Display", "Segoe UI Variable Display", "Trebuchet MS", sans-serif;
   letter-spacing: 0.01em;
 }
 
-.brand-block h1 {
-  font-size: clamp(2rem, 4vw, 2.7rem);
-  line-height: 1.02;
-  margin-bottom: 14px;
-}
-
-.brand-block h1 span {
-  display: block;
-  color: var(--accent);
-}
-
-.lead-copy,
-.hero p,
+.hero-copy,
 .card p,
-.boot-note,
-.board-example,
-.steps ol,
-.notes ul,
-.link-stack a,
+.mini-steps ol,
+.help-note,
+.help-block ul,
+.card p,
 .unsupported,
 .footer {
   color: var(--muted);
 }
 
-.lead-copy {
-  line-height: 1.6;
-  font-size: 0.98rem;
-}
-
-.rail-panel h2 {
-  color: var(--text);
-  font-size: 1rem;
-  margin-bottom: 12px;
-}
-
-.rail-list {
-  list-style: decimal;
-  padding-left: 20px;
-  display: grid;
-  gap: 10px;
-  color: var(--muted);
-}
-
-.compact-panel {
-  background: linear-gradient(180deg, rgba(7, 17, 31, 0.95), rgba(11, 26, 47, 0.95));
-}
-
-.link-stack {
-  display: grid;
-  gap: 10px;
-}
-
-.link-stack a,
-.steps a,
+.help-note a,
 .footer a,
-.notes a {
+.mini-steps a {
   color: var(--accent);
   text-decoration: none;
 }
 
-.link-stack a:hover,
-.steps a:hover,
+.help-note a:hover,
 .footer a:hover,
-.notes a:hover {
+.mini-steps a:hover {
   color: var(--accent-hover);
 }
 
-.status-grid {
-  display: grid;
-  gap: 10px;
-}
-
-.status-chip {
-  padding: 12px 14px;
-  background: rgba(28, 46, 74, 0.85);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-sm);
-}
-
-.status-label {
-  display: block;
-  color: var(--text-secondary);
-  font-size: 0.72rem;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  margin-bottom: 6px;
-}
-
-.status-value {
-  color: var(--text);
-  font-weight: 700;
-}
-
-.workspace {
-  display: grid;
-  gap: 20px;
-}
-
 .hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(240px, 0.85fr);
-  gap: 18px;
-  padding: 24px 28px;
+  padding: 24px;
   border-radius: var(--radius-lg);
   background:
     linear-gradient(160deg, rgba(74, 168, 255, 0.12), transparent 30%),
     linear-gradient(180deg, rgba(12, 31, 59, 0.98), rgba(14, 30, 54, 0.98));
 }
 
-.hero h2 {
-  font-size: clamp(1.7rem, 3.2vw, 2.5rem);
+.hero h1 {
+  font-size: clamp(2rem, 4vw, 2.8rem);
   line-height: 1.08;
   margin-bottom: 12px;
 }
 
-.hero p {
+.hero-copy {
   line-height: 1.65;
   font-size: 1rem;
+  max-width: 680px;
 }
 
-.hero-badges {
-  display: grid;
-  gap: 12px;
-  align-content: start;
+.quick-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
 }
 
-.hero-badge {
+.quick-pill {
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: rgba(7, 17, 31, 0.78);
   border: 1px solid var(--border-light);
-  background: rgba(7, 17, 31, 0.8);
-  border-radius: var(--radius-md);
-  padding: 16px;
-}
-
-.hero-badge-label {
-  display: block;
-  margin-bottom: 8px;
   color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 0.75rem;
-}
-
-.hero-badge strong {
-  color: var(--text);
-  font-size: 1rem;
+  font-size: 0.82rem;
 }
 
 .unsupported {
@@ -253,98 +143,42 @@ body {
   color: var(--warning);
 }
 
-.boot-guide {
-  padding: 22px 24px;
+.mini-steps,
+.help,
+.diagnostics-panel,
+.footer,
+.card {
+  padding: 20px;
 }
 
-.warning-panel {
-  border-color: rgba(247, 227, 106, 0.55);
-  box-shadow: 0 0 0 1px rgba(247, 227, 106, 0.08), var(--shadow-soft);
-}
-
-.section-heading {
-  margin-bottom: 16px;
-}
-
+.mini-steps h2,
+.help summary,
+.card h2,
 .section-heading h3 {
-  font-size: 1.35rem;
-  line-height: 1.2;
+  color: var(--text);
 }
 
-.boot-callout-grid,
-.boards,
-.notes-grid {
+.mini-steps h2 {
+  font-size: 1.05rem;
+  margin-bottom: 12px;
+}
+
+.mini-steps ol {
+  padding-left: 20px;
+  display: grid;
+  gap: 8px;
+  line-height: 1.6;
+}
+
+.boards {
   display: grid;
   gap: 18px;
-}
-
-.boot-callout-grid,
-.boards,
-.notes-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.boot-callout {
-  background: rgba(7, 17, 31, 0.66);
-  border: 1px solid var(--border-light);
-  border-radius: var(--radius-md);
-  padding: 18px;
-}
-
-.boot-callout h4,
-.card h2,
-.steps h3 {
+.card h2 {
   font-size: 1.08rem;
   margin-bottom: 8px;
-}
-
-.board-example {
-  font-size: 0.88rem;
-  line-height: 1.55;
-  margin-bottom: 14px;
-}
-
-.boot-steps {
-  display: grid;
-  gap: 10px;
-}
-
-.boot-step {
-  display: grid;
-  grid-template-columns: 28px 1fr;
-  gap: 10px;
-  align-items: start;
-  color: var(--text);
-  line-height: 1.5;
-}
-
-.boot-num {
-  width: 28px;
-  height: 28px;
-  display: grid;
-  place-items: center;
-  border-radius: 999px;
-  background: var(--warning);
-  color: var(--warning-ink);
-  font-weight: 800;
-  font-size: 0.84rem;
-}
-
-.boot-note {
-  margin-top: 14px;
-  line-height: 1.55;
-}
-
-.final-note {
-  margin-top: 18px;
-}
-
-.panel-card,
-.steps,
-.notes,
-.diagnostics-panel,
-.footer {
-  padding: 22px 24px;
 }
 
 .card {
@@ -375,22 +209,6 @@ body {
 
 .card p {
   line-height: 1.65;
-}
-
-.card-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.meta-pill {
-  padding: 8px 10px;
-  border-radius: 999px;
-  background: rgba(7, 17, 31, 0.8);
-  border: 1px solid var(--border-light);
-  color: var(--text-secondary);
-  font-size: 0.78rem;
-  letter-spacing: 0.04em;
 }
 
 .card-reminder {
@@ -428,44 +246,45 @@ body {
   transform: translateY(0);
 }
 
-.steps ol {
-  padding-left: 22px;
-  display: grid;
-  gap: 12px;
-  line-height: 1.7;
-}
-
-.steps strong,
-.notes strong,
-.boot-step strong {
-  color: var(--text);
-}
-
-.notes details {
+.help details {
   background: transparent;
 }
 
-.notes summary {
+.help summary {
   cursor: pointer;
-  color: var(--text);
   font-weight: 700;
-  margin-bottom: 14px;
+  font-size: 1rem;
 }
 
-.notes ul {
-  padding-left: 20px;
-  line-height: 1.75;
+.help-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.help-block {
+  background: rgba(7, 17, 31, 0.66);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+}
+
+.help-block h3 {
+  font-size: 0.95rem;
+  margin-bottom: 8px;
+}
+
+.help-block ul {
+  padding-left: 18px;
   display: grid;
   gap: 8px;
+  line-height: 1.6;
 }
 
-.notes code {
-  font-family: "Cascadia Code", Consolas, monospace;
-  background: rgba(7, 17, 31, 0.9);
-  border: 1px solid var(--border-light);
-  color: var(--text-secondary);
-  border-radius: 6px;
-  padding: 2px 6px;
+.help-note {
+  margin-top: 14px;
+  line-height: 1.6;
 }
 
 .diagnostics-panel {
@@ -510,49 +329,33 @@ body {
 }
 
 @media (max-width: 1100px) {
-  .page-shell {
-    grid-template-columns: 1fr;
-  }
-
-  .app-rail {
-    position: static;
-  }
-
-  .hero {
-    grid-template-columns: 1fr;
+  .simple-shell {
+    width: min(940px, calc(100vw - 16px));
   }
 }
 
 @media (max-width: 800px) {
-  .page-shell {
+  .simple-shell {
     width: min(100vw - 16px, 100%);
     margin: 8px auto;
     gap: 14px;
   }
 
-  .boot-callout-grid,
   .boards,
-  .notes-grid {
+  .help-grid {
     grid-template-columns: 1fr;
   }
 
-  .brand-block,
-  .rail-panel,
   .hero,
-  .boot-guide,
-  .panel-card,
-  .steps,
-  .notes,
+  .mini-steps,
+  .help,
+  .card,
   .diagnostics-panel,
   .footer {
     padding: 18px;
   }
 
-  .brand-block h1 {
+  .hero h1 {
     font-size: 1.85rem;
-  }
-
-  .hero h2 {
-    font-size: 1.65rem;
   }
 }

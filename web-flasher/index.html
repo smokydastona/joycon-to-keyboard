@@ -11,219 +11,105 @@
   ></script>
 </head>
 <body>
-  <div class="page-shell">
-    <aside class="app-rail">
-      <div class="brand-block panel">
-        <p class="eyebrow">Bind Bandit ecosystem</p>
-        <h1>Bind Bandit <span>Web Flasher</span></h1>
-        <p class="lead-copy">
-          Initial provisioning for the same two-board hardware bridge the desktop app manages later.
-        </p>
+  <main class="simple-shell">
+    <section class="hero panel">
+      <p class="eyebrow">First-time setup</p>
+      <h1>Bind Bandit Web Flasher</h1>
+      <p class="hero-copy">
+        Flash the two boards once, in order: <strong>ESP32-S3 first</strong>, then <strong>ESP32</strong>.
+        After that, use the desktop app for normal updates.
+      </p>
+      <div class="quick-row">
+        <span class="quick-pill">Use Chrome or Edge</span>
+        <span class="quick-pill">Flash order: S3 -> ESP32</span>
       </div>
+    </section>
 
-      <section class="rail-panel panel">
-        <h2>Flight plan</h2>
-        <ol class="rail-list">
-          <li>Flash the ESP32-S3 USB keyboard bridge first.</li>
-          <li>Flash the ESP32 Bluetooth host second.</li>
-          <li>Wire both boards together and launch Bind Bandit.</li>
-          <li>Use the helper app for future OTA updates and diagnostics.</li>
-        </ol>
-      </section>
+    <div class="unsupported panel" id="unsupported">
+      Your browser does not support Web Serial. Use <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong> on desktop.
+    </div>
 
-      <section class="rail-panel panel compact-panel">
-        <h2>Release links</h2>
-        <div class="link-stack">
-          <a href="https://github.com/smokydastona/joycon-to-keyboard/releases/latest" target="_blank" rel="noopener">Latest release</a>
-          <a href="https://github.com/smokydastona/joycon-to-keyboard/blob/main/docs/wiring.md" target="_blank" rel="noopener">Wiring guide</a>
-          <a href="https://github.com/smokydastona/joycon-to-keyboard" target="_blank" rel="noopener">Repository</a>
+    <section class="mini-steps panel">
+      <h2>Quick steps</h2>
+      <ol>
+        <li>Put the board in download mode.</li>
+        <li>Click the matching install button.</li>
+        <li>Pick the board's serial port.</li>
+        <li>Repeat for the second board.</li>
+      </ol>
+    </section>
+
+    <section class="boards">
+      <article class="card panel">
+        <div class="card-head">
+          <span class="chip">Step 1</span>
+          <h2>ESP32-S3</h2>
         </div>
-      </section>
+        <p>The USB keyboard bridge that plugs into the PC.</p>
+        <p class="card-reminder">Double-tap RESET, then install.</p>
+        <esp-web-install-button manifest="manifest-esp32s3.json">
+          <button slot="activate">Install ESP32-S3</button>
+        </esp-web-install-button>
+      </article>
 
-      <section class="rail-panel panel compact-panel">
-        <h2>Platform status</h2>
-        <div class="status-grid">
-          <div class="status-chip">
-            <span class="status-label">Browser</span>
-            <span class="status-value">Chrome or Edge</span>
-          </div>
-          <div class="status-chip">
-            <span class="status-label">Update path</span>
-            <span class="status-value">Web first, OTA after</span>
-          </div>
+      <article class="card panel">
+        <div class="card-head">
+          <span class="chip">Step 2</span>
+          <h2>ESP32</h2>
         </div>
-      </section>
-    </aside>
+        <p>The Bluetooth host that talks to the Joy-Con.</p>
+        <p class="card-reminder">Hold BOOT, tap RESET, release BOOT, then install.</p>
+        <esp-web-install-button manifest="manifest-esp32.json">
+          <button slot="activate">Install ESP32</button>
+        </esp-web-install-button>
+      </article>
+    </section>
 
-    <main class="workspace">
-      <section class="hero panel">
-        <div class="hero-copy">
-          <p class="eyebrow">Initial provisioning</p>
-          <h2>Flash the same hardware pipeline the desktop app expects.</h2>
-          <p>
-            This page uses the same visual language as Bind Bandit: blueprint surfaces, sand secondary text,
-            and bright action accents. Use it once for first-time flashing, then stay in the helper app for
-            profiles, diagnostics, and OTA firmware updates.
-          </p>
-        </div>
-        <div class="hero-badges">
-          <div class="hero-badge">
-            <span class="hero-badge-label">Board order</span>
-            <strong>ESP32-S3 then ESP32</strong>
-          </div>
-          <div class="hero-badge">
-            <span class="hero-badge-label">Connection model</span>
-            <strong>USB bridge + Bluetooth host</strong>
-          </div>
-        </div>
-      </section>
-
-      <div class="unsupported panel" id="unsupported">
-        Your browser does not support Web Serial. Use <strong>Google Chrome</strong> or <strong>Microsoft Edge</strong> on desktop.
-      </div>
-
-      <section class="boot-guide panel warning-panel">
-        <div class="section-heading">
-          <p class="eyebrow">Download mode</p>
-          <h3>Before you click Install, put the board in bootloader mode.</h3>
-        </div>
-
-        <div class="boot-callout-grid">
-          <div class="boot-callout">
-            <h4>ESP32 (Bluetooth Host)</h4>
-            <p class="board-example">NodeMCU-32S, ESP-WROOM-32, or any board with both BOOT and RESET buttons.</p>
-            <div class="boot-steps">
-              <div class="boot-step"><span class="boot-num">1</span><span>Plug the board into your PC via USB.</span></div>
-              <div class="boot-step"><span class="boot-num">2</span><span><strong>Hold BOOT</strong> and keep holding it.</span></div>
-              <div class="boot-step"><span class="boot-num">3</span><span>Tap <strong>RESET</strong> once, then release <strong>BOOT</strong>.</span></div>
-              <div class="boot-step"><span class="boot-num">4</span><span>Click <strong>Install ESP32</strong> and pick the matching CP210x or CH340 port.</span></div>
-            </div>
-          </div>
-
-          <div class="boot-callout">
-            <h4>ESP32-S3 (USB Keyboard)</h4>
-            <p class="board-example">Arduino Nano ESP32 and other native USB boards use the double-reset method.</p>
-            <div class="boot-steps">
-              <div class="boot-step"><span class="boot-num">1</span><span>Plug the board into your PC via USB-C.</span></div>
-              <div class="boot-step"><span class="boot-num">2</span><span><strong>Double-tap RESET</strong> quickly, within about 300 ms.</span></div>
-              <div class="boot-step"><span class="boot-num">3</span><span>A <em>new</em> COM port appears. That is the ROM bootloader.</span></div>
-              <div class="boot-step"><span class="boot-num">4</span><span>Click <strong>Install ESP32-S3</strong> and pick that new port.</span></div>
-            </div>
-            <p class="boot-note">
-              Tip: note your existing COM ports before double-tapping RESET. The newly appearing port is the one you want.
-            </p>
-          </div>
-        </div>
-
-        <p class="boot-note final-note">
-          After flashing finishes, press RESET once, or unplug and reconnect, to boot the new firmware.
-        </p>
-      </section>
-
-      <section class="boards">
-        <article class="card panel panel-card">
-          <div class="card-head">
-            <span class="chip">Step 1</span>
-            <h2>ESP32-S3 - USB Keyboard Bridge</h2>
-          </div>
-          <p>
-            The board that connects to the PC. It enumerates as a USB HID keyboard and exposes the serial link the helper app uses.
-          </p>
-          <div class="card-meta">
-            <span class="meta-pill">USB to PC</span>
-            <span class="meta-pill">Flash first</span>
-            <span class="meta-pill">Double-reset boot mode</span>
-          </div>
-          <p class="card-reminder">Double-tap RESET first, then start installation.</p>
-          <esp-web-install-button manifest="manifest-esp32s3.json">
-            <button slot="activate">Connect and Install ESP32-S3</button>
-          </esp-web-install-button>
-        </article>
-
-        <article class="card panel panel-card">
-          <div class="card-head">
-            <span class="chip">Step 2</span>
-            <h2>ESP32 - Bluetooth Host</h2>
-          </div>
-          <p>
-            The wireless controller host that talks Bluetooth Classic to the Joy-Con and forwards framed UART events to the ESP32-S3.
-          </p>
-          <div class="card-meta">
-            <span class="meta-pill">Bluetooth Classic</span>
-            <span class="meta-pill">Flash second</span>
-            <span class="meta-pill">BOOT + RESET</span>
-          </div>
-          <p class="card-reminder">Hold BOOT, tap RESET, release BOOT, then start installation.</p>
-          <esp-web-install-button manifest="manifest-esp32.json">
-            <button slot="activate">Connect and Install ESP32</button>
-          </esp-web-install-button>
-        </article>
-      </section>
-
-      <section class="steps panel">
-        <div class="section-heading">
-          <p class="eyebrow">Workflow</p>
-          <h3>What happens after you click Install</h3>
-        </div>
-        <ol>
-          <li><strong>Enter download mode</strong> using the board-specific instructions above.</li>
-          <li><strong>Click the matching install button</strong> for the board you are provisioning.</li>
-          <li><strong>Select the serial port</strong> that matches the bootloader state you just entered.</li>
-          <li>ESP Web Tools erases flash and writes the latest shipped firmware image.</li>
-          <li><strong>Repeat for the second board</strong>, then wire both boards together per
-            <a href="https://github.com/smokydastona/joycon-to-keyboard/blob/main/docs/wiring.md" target="_blank" rel="noopener">docs/wiring.md</a>.</li>
-          <li>Download <strong>Bind Bandit</strong> from the
-            <a href="https://github.com/smokydastona/joycon-to-keyboard/releases/latest" target="_blank" rel="noopener">latest release</a>
-            for mapping, diagnostics, and future OTA firmware updates.</li>
-        </ol>
-      </section>
-
-      <div class="notes-grid">
-        <section class="notes panel">
-          <details open>
-            <summary>Notes and troubleshooting</summary>
+    <section class="help panel">
+      <details>
+        <summary>Need help entering boot mode or picking a port?</summary>
+        <div class="help-grid">
+          <div class="help-block">
+            <h3>ESP32-S3</h3>
             <ul>
-              <li><strong>Browser support:</strong> Web Serial requires Chrome 89+ or Edge 89+ on desktop. Safari, Firefox, and mobile browsers are not supported.</li>
-              <li><strong>Erase all flash</strong> is enabled by default for a clean first-time install. That wipes NVS state, which you will reconfigure in the helper app.</li>
-              <li><strong>ESP32-S3 first:</strong> Flash the S3 board first because it is the front-facing USB side of the bridge.</li>
-              <li><strong>ESP32 boot mode:</strong> Hold <code>BOOT</code>, tap <code>RESET</code>, release <code>BOOT</code>. The COM port usually stays the same.</li>
-              <li><strong>ESP32-S3 boot mode:</strong> Double-tap <code>RESET</code>. A <em>new</em> port appears; select that one.</li>
-              <li><strong>If boot mode keeps failing:</strong> try a different USB cable, a different port, and repeat the reset timing exactly.</li>
-              <li><strong>OTA updates:</strong> Once both boards are provisioned, future firmware updates happen in Bind Bandit. You should not need to come back here for normal upgrades.</li>
+              <li>Plug in over USB-C.</li>
+              <li>Double-tap RESET quickly.</li>
+              <li>Pick the new COM port that appears.</li>
             </ul>
-          </details>
-        </section>
-
-        <section class="notes panel">
-          <details>
-            <summary>Which serial port should I pick?</summary>
+          </div>
+          <div class="help-block">
+            <h3>ESP32</h3>
             <ul>
-              <li><strong>ESP32-S3 native USB:</strong> boot mode creates a different USB device than normal runtime. Pick the new port that appears after the double-reset sequence.</li>
-              <li><strong>ESP32 with CP2102 or CH340:</strong> the COM port is usually the same in runtime and boot mode. Pick the port associated with that USB-UART bridge.</li>
-              <li><strong>No port appears:</strong> verify the cable supports data, and install the correct CP210x or CH340 driver if your board uses a USB-UART bridge.</li>
-              <li><strong>Practical check:</strong> unplug the board, note the current port list, then reconnect it in boot mode and choose the newly added or matching port.</li>
+              <li>Hold BOOT.</li>
+              <li>Tap RESET once.</li>
+              <li>Release BOOT and use the usual CP210x or CH340 port.</li>
             </ul>
-          </details>
-        </section>
-      </div>
-
-      <section class="notes panel diagnostics-panel" id="diag-section" hidden>
-        <div class="section-heading">
-          <p class="eyebrow">Diagnostics</p>
-          <h3>Pre-flight checks</h3>
+          </div>
         </div>
-        <pre id="diag-log"></pre>
-      </section>
+        <p class="help-note">
+          If no port appears, try a data-capable USB cable, a different USB port, or see the
+          <a href="https://github.com/smokydastona/joycon-to-keyboard/blob/main/docs/wiring.md" target="_blank" rel="noopener">wiring guide</a>
+          and the <a href="https://github.com/smokydastona/joycon-to-keyboard/releases/latest" target="_blank" rel="noopener">latest release</a>.
+        </p>
+      </details>
+    </section>
 
-      <footer class="footer panel">
-        <a href="https://github.com/smokydastona/joycon-to-keyboard" target="_blank" rel="noopener">
-          smokydastona/joycon-to-keyboard
-        </a>
-        <span class="footer-divider"></span>
-        <a href="https://esphome.github.io/esp-web-tools/" target="_blank" rel="noopener">Powered by ESP Web Tools</a>
-      </footer>
-    </main>
-  </div>
+    <section class="notes panel diagnostics-panel" id="diag-section" hidden>
+      <div class="section-heading">
+        <p class="eyebrow">Diagnostics</p>
+        <h3>Pre-flight checks</h3>
+      </div>
+      <pre id="diag-log"></pre>
+    </section>
+
+    <footer class="footer panel">
+      <a href="https://github.com/smokydastona/joycon-to-keyboard" target="_blank" rel="noopener">
+        smokydastona/joycon-to-keyboard
+      </a>
+      <span class="footer-divider"></span>
+      <a href="https://esphome.github.io/esp-web-tools/" target="_blank" rel="noopener">Powered by ESP Web Tools</a>
+    </footer>
+  </main>
 
   <script>
     if (!("serial" in navigator)) {
