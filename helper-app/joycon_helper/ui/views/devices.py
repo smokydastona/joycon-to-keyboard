@@ -10,7 +10,10 @@ import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from PyQt6.QtCore import QObject, QSize, Qt, pyqtSignal
+import json
+import zipfile
+
+from PyQt6.QtCore import QObject, QSettings, QSize, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtWidgets import (
     QButtonGroup,
@@ -19,6 +22,8 @@ from PyQt6.QtWidgets import (
     QComboBox,
     QDialog,
     QFileDialog,
+    QFrame,
+    QGridLayout,
     QGroupBox,
     QHBoxLayout,
     QInputDialog,
@@ -37,8 +42,10 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from ..constants import INCEDIUS_HOTSPOTS, M913_HOTSPOTS
 from ..theme import ThemeEngine
 from ..widgets.card import Card
+from ..widgets.hotspot_canvas import HotspotCanvas
 
 if TYPE_CHECKING:
     from ..main_window import MainWindow
@@ -191,6 +198,15 @@ class DevicesView(QWidget):
         self._m913_profile: Any = None
         self._razer_profile: Any = None
 
+        # M913 UI widgets populated in _build_m913_tab
+        self._m913_canvas: HotspotCanvas | None = None
+        self._m913_hw_group: QButtonGroup | None = None
+        self._m913_dpi_indicator_frames: list[QFrame] = []
+        self._m913_dpi_name_edits: list[QLineEdit] = []
+        self._m913_dpi_color_btns: list[QPushButton] = []
+        self._m913_live_apply_chk: QCheckBox | None = None
+        self._m913_live_timer: QTimer | None = None
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
@@ -245,13 +261,17 @@ class DevicesView(QWidget):
         ))
         lay.addWidget(header)
 
-        # Device image
-        self._m913_image = QLabel()
-        self._m913_image.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # Interactive canvas (replaces static image)
+        theme_key = "dark" if self._main.theme.is_dark else "default"
+        self._m913_canvas = HotspotCanvas(self._main.theme, self)
         pm = self._main.assets.load_pixmap("m913_none.png", QSize(400, 300))
         if pm:
-            self._m913_image.setPixmap(pm)
-        lay.addWidget(self._m913_image)
+            self._m913_canvas.set_background(pm)
+        self._m913_canvas.set_hotspots(
+            M913_HOTSPOTS.get(theme_key, M913_HOTSPOTS["default"]))
+        self._m913_canvas.hotspot_clicked.connect(self._m913_canvas_hotspot_clicked)
+        self._m913_canvas.hotspot_hovered.connect(self._m913_canvas_hotspot_hovered)
+        lay.addWidget(self._m913_canvas)
 
         # Connection bar
         conn_card = Card(self._main.theme)
@@ -272,40 +292,94 @@ class DevicesView(QWidget):
         conn_lay.addWidget(self._m913_status)
         lay.addWidget(conn_card)
 
-        # Profile name + sister slot + layout
-        profile_row = QHBoxLayout()
+        # Profile name + hardware slot (P1/P2) + sister slot
+        profile_card = Card(self._main.theme)
+        profile_row = QHBoxLayout(profile_card)
         profile_row.addWidget(QLabel("Profile name:"))
         self._m913_prof_name = QLineEdit("Default")
         self._m913_prof_name.setFixedWidth(200)
         profile_row.addWidget(self._m913_prof_name)
         profile_row.addSpacing(16)
+        profile_row.addWidget(QLabel("Hardware slot:"))
+        self._m913_hw_group = QButtonGroup(self)
+        p1_rb = QRadioButton("P1")
+        p1_rb.setChecked(True)
+        p1_rb.setToolTip("Save to onboard profile slot 1 (hold DPI button to switch)")
+        self._m913_hw_group.addButton(p1_rb, 1)
+        profile_row.addWidget(p1_rb)
+        p2_rb = QRadioButton("P2")
+        p2_rb.setToolTip("Save to onboard profile slot 2 (hold DPI button to switch)")
+        self._m913_hw_group.addButton(p2_rb, 2)
+        profile_row.addWidget(p2_rb)
+        profile_row.addSpacing(16)
         profile_row.addWidget(QLabel("Sister slot:"))
         self._m913_sister_combo = QComboBox()
-        self._m913_sister_combo.setToolTip("Link this M913 to a Joy-Con profile slot so they switch together")
+        self._m913_sister_combo.setToolTip(
+            "Link this M913 to a Joy-Con profile slot so they switch together")
         self._m913_sister_combo.addItems(
             ["None", "Slot 0", "Slot 1", "Slot 2", "Slot 3"])
         profile_row.addWidget(self._m913_sister_combo)
         profile_row.addStretch()
-        lay.addLayout(profile_row)
+        lay.addWidget(profile_card)
 
-        # DPI settings (5 stages with enable checkboxes)
+        # DPI settings (5 stages with indicator, name, color, enable, spin, slider)
         dpi_group = QGroupBox("DPI Settings (5 stages)")
         dpi_lay = QVBoxLayout(dpi_group)
-        self._m913_dpi_spins: list[QSpinBox] = []
-        self._m913_dpi_checks: list[QCheckBox] = []
+        self._m913_dpi_spins = []
+        self._m913_dpi_checks = []
+        self._m913_dpi_indicator_frames = []
+        self._m913_dpi_name_edits = []
+        self._m913_dpi_color_btns = []
         defaults = [800, 1600, 3200, 6400, 16000]
+        stage_default_colors = ["#00ff00", "#0088ff", "#8800ff", "#ff8800", "#ff0000"]
         for i in range(5):
             row = QHBoxLayout()
+
+            # Active-stage indicator (colored bar on the left)
+            indicator = QFrame()
+            indicator.setFixedSize(4, 22)
+            indicator.setStyleSheet("background: transparent; border-radius: 2px;")
+            self._m913_dpi_indicator_frames.append(indicator)
+            row.addWidget(indicator)
+
+            # Enable checkbox
             chk = QCheckBox(f"Stage {i + 1}:")
             chk.setChecked(True)
+            chk.toggled.connect(self._m913_live_apply_trigger)
             self._m913_dpi_checks.append(chk)
             row.addWidget(chk)
+
+            # Stage name (editable label)
+            name_edit = QLineEdit(f"Stage {i + 1}")
+            name_edit.setFixedWidth(70)
+            name_edit.setPlaceholderText("Name…")
+            name_edit.setToolTip("Stage label shown in the canvas and UI")
+            name_edit.textChanged.connect(self._m913_live_apply_trigger)
+            self._m913_dpi_name_edits.append(name_edit)
+            row.addWidget(name_edit)
+
+            # Stage color button
+            color_btn = QPushButton()
+            color_btn.setFixedSize(22, 22)
+            c = stage_default_colors[i]
+            color_btn.setStyleSheet(
+                f"background: {c}; border: 1px solid #555; border-radius: 4px;")
+            color_btn.setToolTip("Pick DPI stage indicator color")
+            color_btn.clicked.connect(
+                lambda _checked, idx=i: self._m913_pick_stage_color(idx))
+            self._m913_dpi_color_btns.append(color_btn)
+            row.addWidget(color_btn)
+
+            # DPI spinbox
             spin = QSpinBox()
             spin.setRange(100, 16000)
             spin.setSingleStep(100)
             spin.setValue(defaults[i])
+            spin.valueChanged.connect(self._m913_live_apply_trigger)
             self._m913_dpi_spins.append(spin)
             row.addWidget(spin)
+
+            # DPI slider
             slider = QSlider(Qt.Orientation.Horizontal)
             slider.setRange(100, 16000)
             slider.setSingleStep(100)
@@ -313,6 +387,7 @@ class DevicesView(QWidget):
             slider.valueChanged.connect(spin.setValue)
             spin.valueChanged.connect(slider.setValue)
             row.addWidget(slider)
+
             dpi_lay.addLayout(row)
         lay.addWidget(dpi_group)
 
@@ -328,6 +403,7 @@ class DevicesView(QWidget):
             "wave", "reactive", "ripple", "starlight", "breath_single",
         ])
         self._m913_led_mode.setCurrentText("steady")
+        self._m913_led_mode.currentIndexChanged.connect(self._m913_live_apply_trigger)
         led_row1.addWidget(self._m913_led_mode)
         led_row1.addSpacing(16)
         led_row1.addWidget(QLabel("Speed (1-5):"))
@@ -335,6 +411,7 @@ class DevicesView(QWidget):
         self._m913_led_speed.setRange(1, 5)
         self._m913_led_speed.setValue(3)
         self._m913_led_speed.setToolTip("Animation speed for the selected LED effect")
+        self._m913_led_speed.valueChanged.connect(self._m913_live_apply_trigger)
         led_row1.addWidget(self._m913_led_speed)
         led_row1.addStretch()
         led_lay.addLayout(led_row1)
@@ -343,6 +420,7 @@ class DevicesView(QWidget):
         led_row2.addWidget(QLabel("Color:"))
         self._m913_led_color_edit = QLineEdit("00ff00")
         self._m913_led_color_edit.setFixedWidth(80)
+        self._m913_led_color_edit.textChanged.connect(self._m913_live_apply_trigger)
         led_row2.addWidget(self._m913_led_color_edit)
         self._m913_led_color_swatch = QLabel("  ")
         self._m913_led_color_swatch.setFixedSize(24, 24)
@@ -358,6 +436,7 @@ class DevicesView(QWidget):
         self._m913_led_brightness.setRange(0, 255)
         self._m913_led_brightness.setValue(255)
         self._m913_led_brightness.setToolTip("LED brightness level (0=off, 255=max)")
+        self._m913_led_brightness.valueChanged.connect(self._m913_live_apply_trigger)
         led_row2.addWidget(self._m913_led_brightness)
         led_row2.addStretch()
         led_lay.addLayout(led_row2)
@@ -371,6 +450,7 @@ class DevicesView(QWidget):
             rb = QRadioButton(f"{hz} Hz")
             if hz == 1000:
                 rb.setChecked(True)
+            rb.toggled.connect(self._m913_live_apply_trigger)
             self._m913_poll_group.addButton(rb, hz)
             poll_lay.addWidget(rb)
         poll_lay.addStretch()
@@ -405,6 +485,7 @@ class DevicesView(QWidget):
                 f"Action for {_M913_BUTTON_LABELS.get(_bname, _bname)}. "
                 "Select from list or type a combo like 'ctrl+c'."
             )
+            _bcombo.currentTextChanged.connect(self._m913_live_apply_trigger)
             self._btn_action_widgets[_bname] = _bcombo
             _brow.addWidget(_bcombo, 1)
             btn_container_lay.addLayout(_brow)
@@ -413,38 +494,83 @@ class DevicesView(QWidget):
         btn_map_lay.addWidget(btn_scroll)
         lay.addWidget(btn_map_group)
 
-        # Action buttons
+        # Action buttons — 3 rows
         actions_group = QGroupBox("Actions")
-        actions_lay = QHBoxLayout(actions_group)
+        actions_vlay = QVBoxLayout(actions_group)
+
+        # Row 1: core config buttons
+        row1 = QHBoxLayout()
         apply_btn = QPushButton("Apply Config")
         apply_btn.setProperty("accent", True)
         apply_btn.clicked.connect(self._m913_apply_config)
-        actions_lay.addWidget(apply_btn)
+        row1.addWidget(apply_btn)
         save_btn = QPushButton("Save Profile")
         save_btn.clicked.connect(self._m913_save_profile)
-        actions_lay.addWidget(save_btn)
+        row1.addWidget(save_btn)
         load_btn = QPushButton("Load Profile")
         load_btn.clicked.connect(self._m913_load_profile)
-        actions_lay.addWidget(load_btn)
+        row1.addWidget(load_btn)
         del_btn = QPushButton("Delete Profile")
         del_btn.setProperty("danger", True)
         del_btn.clicked.connect(self._m913_delete_profile)
-        actions_lay.addWidget(del_btn)
-        actions_lay.addSpacing(16)
+        row1.addWidget(del_btn)
+        row1.addSpacing(16)
         ini_export_btn = QPushButton("Export INI")
         ini_export_btn.clicked.connect(self._m913_export_ini)
-        actions_lay.addWidget(ini_export_btn)
+        row1.addWidget(ini_export_btn)
         ini_import_btn = QPushButton("Import INI")
         ini_import_btn.clicked.connect(self._m913_import_ini)
-        actions_lay.addWidget(ini_import_btn)
-        actions_lay.addSpacing(16)
+        row1.addWidget(ini_import_btn)
+        row1.addSpacing(16)
         diag_btn = QPushButton("Diagnostics…")
         diag_btn.clicked.connect(self._m913_diag_popup)
-        actions_lay.addWidget(diag_btn)
+        row1.addWidget(diag_btn)
         macros_btn = QPushButton("Manage Macros…")
         macros_btn.clicked.connect(self._m913_macros_popup)
-        actions_lay.addWidget(macros_btn)
-        actions_lay.addStretch()
+        row1.addWidget(macros_btn)
+        row1.addStretch()
+        actions_vlay.addLayout(row1)
+
+        # Row 2: live-apply + factory reset
+        row2 = QHBoxLayout()
+        self._m913_live_apply_chk = QCheckBox("Live Apply")
+        self._m913_live_apply_chk.setToolTip(
+            "Automatically send config to connected device 1.5 s after any change")
+        _prefs = QSettings("BindBandit", "m913_prefs")
+        self._m913_live_apply_chk.setChecked(
+            _prefs.value("live_apply", False, bool))
+        self._m913_live_apply_chk.toggled.connect(self._m913_live_apply_toggled)
+        row2.addWidget(self._m913_live_apply_chk)
+
+        self._m913_live_timer = QTimer(self)
+        self._m913_live_timer.setSingleShot(True)
+        self._m913_live_timer.setInterval(1500)
+        self._m913_live_timer.timeout.connect(self._m913_apply_config)
+
+        row2.addSpacing(24)
+        factory_btn = QPushButton("Factory Reset…")
+        factory_btn.setProperty("danger", True)
+        factory_btn.setToolTip("Restore all settings to M913 factory defaults")
+        factory_btn.clicked.connect(self._m913_factory_reset)
+        row2.addWidget(factory_btn)
+        row2.addStretch()
+        actions_vlay.addLayout(row2)
+
+        # Row 3: profile bundle export/import
+        row3 = QHBoxLayout()
+        export_bundle_btn = QPushButton("Export Bundle…")
+        export_bundle_btn.setToolTip(
+            "Save all saved M913 profiles to a single .bindbandit archive")
+        export_bundle_btn.clicked.connect(self._m913_export_bundle)
+        row3.addWidget(export_bundle_btn)
+        import_bundle_btn = QPushButton("Import Bundle…")
+        import_bundle_btn.setToolTip(
+            "Load M913 profiles from a .bindbandit archive")
+        import_bundle_btn.clicked.connect(self._m913_import_bundle)
+        row3.addWidget(import_bundle_btn)
+        row3.addStretch()
+        actions_vlay.addLayout(row3)
+
         lay.addWidget(actions_group)
 
         lay.addStretch()
@@ -640,13 +766,16 @@ class DevicesView(QWidget):
                     f"color: {self._main.theme.color('success')};")
                 pm = self._main.assets.load_pixmap(
                     "m913_connected.png", QSize(400, 300))
-                if pm:
-                    self._m913_image.setPixmap(pm)
+                if pm and self._m913_canvas:
+                    self._m913_canvas.set_background(pm)
             else:
                 self._m913_status.setText("No M913 devices found")
                 self._m913_status.setStyleSheet(
                     f"color: {self._main.theme.color('danger')};")
-        except Exception as e:
+                pm = self._main.assets.load_pixmap(
+                    "m913_none.png", QSize(400, 300))
+                if pm and self._m913_canvas:
+                    self._m913_canvas.set_background(pm)        except Exception as e:
             self._m913_status.setText(f"Error: {e}")
             log.error("M913 detect failed: %s", e, exc_info=True)
 
@@ -673,8 +802,33 @@ class DevicesView(QWidget):
             return
         p = self._m913_profile
         p.name = self._m913_prof_name.text().strip() or "Default"
+
+        # Hardware profile slot (P1 / P2)
+        if self._m913_hw_group:
+            hw_id = self._m913_hw_group.checkedId()
+            if hw_id > 0:
+                p.hardware_profile = hw_id
+
         p.dpi_values = [s.value() for s in self._m913_dpi_spins]
         p.dpi_enabled = [c.isChecked() for c in self._m913_dpi_checks]
+
+        # Stage names
+        p.stage_names = [e.text() or f"Stage {i + 1}"
+                         for i, e in enumerate(self._m913_dpi_name_edits)]
+
+        # Stage colors (extracted from button stylesheets)
+        colors = []
+        for btn in self._m913_dpi_color_btns:
+            ss = btn.styleSheet()
+            c = "#00ff00"
+            for part in ss.split(";"):
+                part = part.strip()
+                if part.startswith("background:"):
+                    c = part.split(":", 1)[-1].strip()
+                    break
+            colors.append(c)
+        p.stage_colors = colors
+
         p.led_mode = self._m913_led_mode.currentText()
         try:
             p.led_color = int(
@@ -703,11 +857,32 @@ class DevicesView(QWidget):
         if not self._m913_profile:
             return
         p = self._m913_profile
+
         self._m913_prof_name.setText(p.name)
+
+        # Hardware slot (P1 / P2)
+        if self._m913_hw_group:
+            hw_btn = self._m913_hw_group.button(p.hardware_profile)
+            if hw_btn:
+                hw_btn.setChecked(True)
+
         for i in range(min(5, len(p.dpi_values))):
             self._m913_dpi_spins[i].setValue(p.dpi_values[i])
         for i in range(min(5, len(p.dpi_enabled))):
             self._m913_dpi_checks[i].setChecked(p.dpi_enabled[i])
+
+        # Stage names
+        for i, name_edit in enumerate(self._m913_dpi_name_edits):
+            if i < len(p.stage_names):
+                name_edit.setText(p.stage_names[i])
+
+        # Stage colors
+        for i, color_btn in enumerate(self._m913_dpi_color_btns):
+            if i < len(p.stage_colors):
+                c = p.stage_colors[i]
+                color_btn.setStyleSheet(
+                    f"background: {c}; border: 1px solid #555; border-radius: 4px;")
+
         self._m913_led_mode.setCurrentText(p.led_mode)
         self._m913_led_color_edit.setText(f"{p.led_color:06x}")
         self._m913_led_color_swatch.setStyleSheet(
@@ -722,6 +897,7 @@ class DevicesView(QWidget):
             self._m913_sister_combo.setCurrentText(f"Slot {p.sister_slot}")
         else:
             self._m913_sister_combo.setCurrentIndex(0)
+
         # Button mappings
         for btn_name, combo in self._btn_action_widgets.items():
             action = p.buttons.get(btn_name, "none")
@@ -730,6 +906,9 @@ class DevicesView(QWidget):
                 combo.setCurrentIndex(idx)
             else:
                 combo.setEditText(action)
+
+        # Refresh canvas labels
+        self._m913_canvas_refresh_labels()
 
     def _m913_pick_led_color(self) -> None:
         cur = self._m913_led_color_edit.text().strip().lstrip("#")
@@ -878,6 +1057,198 @@ class DevicesView(QWidget):
             self._main._log_line(f"[M913] Imported INI: {path}")
         except Exception as e:
             self._m913_status.setText(f"Import error: {e}")
+
+    def _m913_canvas_hotspot_clicked(self, name: str) -> None:
+        """Handle a click on a hotspot in the M913 canvas — open an action picker."""
+        # scroll_up / scroll_down are non-configurable display-only hotspots
+        if name in ("scroll_up", "scroll_down"):
+            return
+        combo = self._btn_action_widgets.get(name)
+        if combo is None:
+            return
+        current = combo.currentText()
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(f"Assign action — {_M913_BUTTON_LABELS.get(name, name)}")
+        dlg_lay = QVBoxLayout(dlg)
+        dlg_lay.addWidget(QLabel(f"Choose action for <b>{_M913_BUTTON_LABELS.get(name, name)}</b>:"))
+        action_combo = QComboBox()
+        action_combo.setEditable(True)
+        action_combo.addItems(_M913_ACTION_CHOICES)
+        action_combo.setCurrentText(current)
+        dlg_lay.addWidget(action_combo)
+        btns = QHBoxLayout()
+        ok_btn = QPushButton("OK")
+        ok_btn.setProperty("accent", True)
+        ok_btn.clicked.connect(dlg.accept)
+        cancel_btn = QPushButton("Cancel")
+        cancel_btn.clicked.connect(dlg.reject)
+        btns.addWidget(ok_btn)
+        btns.addWidget(cancel_btn)
+        dlg_lay.addLayout(btns)
+
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            new_action = action_combo.currentText().strip()
+            if new_action:
+                idx = combo.findText(new_action)
+                if idx >= 0:
+                    combo.setCurrentIndex(idx)
+                else:
+                    combo.setEditText(new_action)
+                self._m913_canvas_refresh_labels()
+
+    def _m913_canvas_hotspot_hovered(self, name: str) -> None:
+        """Handle hover event from canvas — no additional action needed (canvas handles tooltip)."""
+        pass
+
+    def _m913_canvas_refresh_labels(self) -> None:
+        """Push current button-action mapping to the canvas as overlay labels."""
+        if self._m913_canvas is None:
+            return
+        labels: dict[str, str] = {}
+        for btn_name, combo in self._btn_action_widgets.items():
+            labels[btn_name] = combo.currentText()
+        self._m913_canvas.set_mapping_labels(labels)
+
+    def _m913_set_active_stage(self, idx: int) -> None:
+        """Visually highlight the active DPI stage indicator frame."""
+        for i, frame in enumerate(self._m913_dpi_indicator_frames):
+            if i == idx and i < len(self._m913_dpi_color_btns):
+                # Extract color from the stage color button's stylesheet
+                ss = self._m913_dpi_color_btns[i].styleSheet()
+                c = "#00ff00"
+                for part in ss.split(";"):
+                    part = part.strip()
+                    if part.startswith("background:"):
+                        c = part.split(":", 1)[-1].strip()
+                        break
+                frame.setStyleSheet(
+                    f"background: {c}; border-radius: 2px;")
+            else:
+                frame.setStyleSheet("background: transparent; border-radius: 2px;")
+
+    def _m913_pick_stage_color(self, idx: int) -> None:
+        """Open a color dialog and update the DPI stage color button."""
+        if idx >= len(self._m913_dpi_color_btns):
+            return
+        btn = self._m913_dpi_color_btns[idx]
+        ss = btn.styleSheet()
+        cur_color = "#00ff00"
+        for part in ss.split(";"):
+            part = part.strip()
+            if part.startswith("background:"):
+                cur_color = part.split(":", 1)[-1].strip()
+                break
+        try:
+            initial = QColor(cur_color)
+        except Exception:
+            initial = QColor("#00ff00")
+        color = QColorDialog.getColor(initial, self, f"Stage {idx + 1} Color")
+        if color.isValid():
+            c = color.name()
+            btn.setStyleSheet(
+                f"background: {c}; border: 1px solid #555; border-radius: 4px;")
+
+    def _m913_live_apply_toggled(self, checked: bool) -> None:
+        """Save live-apply preference and stop timer when disabled."""
+        prefs = QSettings("BindBandit", "m913_prefs")
+        prefs.setValue("live_apply", checked)
+        if not checked and self._m913_live_timer:
+            self._m913_live_timer.stop()
+
+    def _m913_live_apply_trigger(self) -> None:
+        """Restart the live-apply debounce timer if live apply is on and device is connected."""
+        if (self._m913_live_apply_chk
+                and self._m913_live_apply_chk.isChecked()
+                and self._m913_devices
+                and self._m913_live_timer):
+            self._m913_live_timer.start()
+
+    def _m913_factory_reset(self) -> None:
+        """Restore all M913 profile settings to factory defaults."""
+        if QMessageBox.question(
+            self, "Factory Reset",
+            "Reset all M913 settings to factory defaults?\n"
+            "This will not affect saved profile files.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            mod = _get_m913_mod()
+            self._m913_profile = mod.M913Profile()
+            # Apply FACTORY_DEFAULTS values into the new profile
+            fd = mod.FACTORY_DEFAULTS
+            self._m913_profile.dpi_values = list(fd.dpi_values)
+            self._m913_profile.dpi_enabled = list(fd.dpi_enabled)
+            self._m913_profile.led_mode = fd.led_mode
+            self._m913_profile.led_color = fd.led_color
+            self._m913_profile.led_brightness = fd.led_brightness
+            self._m913_profile.led_speed = fd.led_speed
+            self._m913_profile.polling_rate = fd.polling_rate
+            self._m913_profile.buttons = dict(fd.buttons)
+            self._m913_profile.stage_names = list(fd.stage_names)
+            self._m913_profile.stage_colors = list(fd.stage_colors)
+            self._m913_profile.hardware_profile = fd.hardware_profile
+            self._m913_ui_from_profile()
+            self._m913_status.setText("Settings reset to factory defaults")
+        except Exception as e:
+            self._m913_status.setText(f"Reset error: {e}")
+
+    def _m913_export_bundle(self) -> None:
+        """Export all saved M913 profiles to a single .bindbandit archive."""
+        try:
+            mod = _get_m913_mod()
+            saved = mod.list_saved_profiles()
+        except Exception as e:
+            self._m913_status.setText(f"Export error: {e}")
+            return
+        if not saved:
+            self._m913_status.setText("No saved M913 profiles to export")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Export M913 Bundle",
+            "m913_profiles.bindbandit",
+            "BindBandit Bundle (*.bindbandit);;All files (*)")
+        if not path:
+            return
+        try:
+            with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
+                for name in saved:
+                    profile = mod.load_profile(name)
+                    data = json.dumps(profile.to_dict(), indent=2)
+                    safe_name = name.replace("/", "_").replace("\\", "_")
+                    zf.writestr(f"m913/{safe_name}.json", data)
+            self._m913_status.setText(
+                f"Exported {len(saved)} profile(s) → {path}")
+            self._main._log_line(f"[M913] Bundle exported: {path}")
+        except Exception as e:
+            self._m913_status.setText(f"Export error: {e}")
+            log.error("M913 bundle export failed: %s", e, exc_info=True)
+
+    def _m913_import_bundle(self) -> None:
+        """Load M913 profiles from a .bindbandit archive."""
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Import M913 Bundle", "",
+            "BindBandit Bundle (*.bindbandit);;All files (*)")
+        if not path:
+            return
+        try:
+            mod = _get_m913_mod()
+            count = 0
+            with zipfile.ZipFile(path, "r") as zf:
+                for entry in zf.namelist():
+                    if not entry.startswith("m913/") or not entry.endswith(".json"):
+                        continue
+                    data = json.loads(zf.read(entry).decode("utf-8"))
+                    profile = mod.M913Profile.from_dict(data)
+                    mod.save_profile(profile)
+                    count += 1
+            self._m913_status.setText(
+                f"Imported {count} profile(s) from bundle")
+            self._main._log_line(f"[M913] Bundle imported: {path}")
+        except Exception as e:
+            self._m913_status.setText(f"Import error: {e}")
+            log.error("M913 bundle import failed: %s", e, exc_info=True)
 
     def _m913_diag_popup(self) -> None:
         dlg = QDialog(self)

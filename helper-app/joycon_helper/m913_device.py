@@ -15,7 +15,9 @@ import contextlib
 import json
 import logging
 import os
+import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -371,6 +373,16 @@ del _mi, _cksum
 MOUSE_ACTIONS.update(MACRO_ACTIONS)
 # Rebuild ALL_ACTIONS after adding macros
 ALL_ACTIONS = sorted(MOUSE_ACTIONS.keys())
+
+# ---------------------------------------------------------------------------
+# Commit-to-flash packet (from m913-ctl — required after every config session)
+# Send twice at end of apply_profile() or settings won't persist after reboot.
+# Checksum: (0x55 - (0x08 + 0x04)) & 0xFF = 0x49
+# ---------------------------------------------------------------------------
+_COMMIT_PACKET = bytearray([
+    0x08, 0x04, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x49,
+])
 
 
 # ===================================================================
@@ -933,6 +945,21 @@ def build_macro_packets(slot_num: int, macro: MacroSlot) -> list[bytearray]:
     return result
 
 
+def build_profile_select_packet(slot: int) -> bytearray:
+    """Build a hardware-profile select packet.
+
+    ``slot``: 1 = P1 (first onboard slot), 2 = P2 (second onboard slot).
+    Checksum: (0x55 - (0x08 + 0x05 + slot)) & 0xFF.
+    """
+    slot = max(1, min(2, slot))
+    p = bytearray(PACKET_SIZE)
+    p[0] = 0x08
+    p[1] = 0x05
+    p[3] = slot
+    p[16] = compute_checksum(p)
+    return p
+
+
 # ===================================================================
 # Device info & profile data classes
 # ===================================================================
@@ -996,6 +1023,19 @@ class M913Profile:
         default_factory=lambda: dict(DEFAULT_INCEDIUS_MAP)
     )
 
+    # Which onboard hardware profile slot to target (1=P1, 2=P2)
+    hardware_profile: int = 1
+
+    # Per-stage display names (shown in the UI DPI rows, not sent to device)
+    stage_names: list[str] = field(
+        default_factory=lambda: ["Stage 1", "Stage 2", "Stage 3", "Stage 4", "Stage 5"]
+    )
+
+    # Per-stage accent colors for the active-stage indicator (CSS hex strings)
+    stage_colors: list[str] = field(
+        default_factory=lambda: ["#00ff00", "#0088ff", "#8800ff", "#ff8800", "#ff0000"]
+    )
+
     def to_dict(self) -> dict:
         macros_out: dict[str, Any] = {}
         for slot_num, ms in self.macros.items():
@@ -1020,6 +1060,9 @@ class M913Profile:
             "macros": macros_out,
             "sister_slot": self.sister_slot,
             "incedius_map": dict(self.incedius_map),
+            "hardware_profile": self.hardware_profile,
+            "stage_names": list(self.stage_names),
+            "stage_colors": list(self.stage_colors),
         }
 
     @classmethod
@@ -1060,6 +1103,13 @@ class M913Profile:
                 if k in INCEDIUS_SIDE_KEYS and v in INCEDIUS_LABEL_CHOICES:
                     merged[k] = v
             p.incedius_map = merged
+        p.hardware_profile = max(1, min(2, int(d.get("hardware_profile", 1))))
+        raw_names = d.get("stage_names")
+        if isinstance(raw_names, list) and len(raw_names) == 5:
+            p.stage_names = [str(n) for n in raw_names]
+        raw_colors = d.get("stage_colors")
+        if isinstance(raw_colors, list) and len(raw_colors) == 5:
+            p.stage_colors = [str(c) for c in raw_colors]
         return p
 
     def save(self, path: str) -> None:
@@ -1075,6 +1125,27 @@ class M913Profile:
             return cls.from_dict(json.load(f))
 
 
+# Factory defaults — the M913 out-of-box configuration.
+# Used by the UI reset button; also a safe baseline for new profiles.
+FACTORY_DEFAULTS = M913Profile(
+    name="Factory Defaults",
+    buttons={
+        "left": "left", "right": "right", "middle": "middle", "fire": "fire",
+        "side1": "none", "side2": "none", "side3": "none", "side4": "none",
+        "side5": "none", "side6": "none", "side7": "none", "side8": "none",
+        "side9": "none", "side10": "none", "side11": "none", "side12": "none",
+    },
+    dpi_values=[800, 1600, 3200, 6400, 16000],
+    dpi_enabled=[True, True, True, True, True],
+    led_mode="rainbow",
+    led_color=0x00FF00,
+    led_brightness=255,
+    led_speed=3,
+    polling_rate=1000,
+    hardware_profile=1,
+)
+
+
 # ===================================================================
 # Device communication
 # ===================================================================
@@ -1085,6 +1156,8 @@ class M913Device:
     def __init__(self) -> None:
         self._dev: Any = None
         self._info: M913DeviceInfo | None = None
+        self._reader_thread: threading.Thread | None = None
+        self._reader_stop = threading.Event()
 
     @property
     def is_open(self) -> bool:
@@ -1191,6 +1264,16 @@ class M913Device:
         """Apply a full profile to the device. Returns (sent, errors)."""
         sent = 0
         errors = 0
+
+        # Select hardware profile slot (P1 or P2) before writing config
+        try:
+            s, e = self._send_packets([build_profile_select_packet(profile.hardware_profile)])
+            sent += s
+            errors += e
+        except Exception as ex:
+            log.error("Profile select failed: %s", ex)
+            errors += 1
+
         # Buttons
         try:
             s, e = self.apply_buttons(profile.buttons)
@@ -1238,9 +1321,105 @@ class M913Device:
                 log.error("Macro config failed: %s", ex)
                 errors += 1
 
+        # Commit-to-flash: required for settings to survive power cycle.
+        # Send twice as observed in m913-ctl reference implementation.
+        for _commit_idx in range(2):
+            try:
+                s, e = self._send_packets([bytearray(_COMMIT_PACKET)])
+                sent += s
+                errors += e
+            except Exception as ex:
+                log.error("Commit packet %d failed: %s", _commit_idx + 1, ex)
+                errors += 1
+
         log.info("Profile '%s' applied: %d packets sent, %d errors",
                  profile.name, sent, errors)
         return sent, errors
+
+    # ── Input reader (DPI stage tracking) ───────────────────────
+
+    def start_input_reader(
+        self,
+        on_stage_change: Callable[[int], None],
+        enabled_stages: list[bool] | None = None,
+    ) -> None:
+        """Start a background thread that polls Interface 0 for DPI stage changes.
+
+        ``on_stage_change``: called with the 0-based index of the newly active
+        stage whenever the DPI-cycle button is pressed.
+        ``enabled_stages``: list of 5 booleans; determines how many stages to
+        cycle through.  Defaults to all enabled.
+        """
+        self.stop_input_reader()
+        if not HID_AVAILABLE or self._info is None:
+            log.debug("M913 input reader skipped: hidapi not available or device not open")
+            return
+
+        enabled = enabled_stages or [True] * 5
+        num_enabled = max(1, sum(1 for e in enabled if e))
+        self._reader_stop.clear()
+
+        def _reader() -> None:
+            dev2: Any = None
+            try:
+                dev2 = _hid.device()
+                # Interface 0 carries the standard HID mouse reports
+                opened = False
+                for pid in M913_PIDS:
+                    try:
+                        devs = _hid.enumerate(M913_VID, pid)
+                    except Exception:
+                        continue
+                    for d in devs:
+                        if d.get("interface_number") == 0:
+                            path = d.get("path")
+                            if path:
+                                try:
+                                    dev2.open_path(path)
+                                    opened = True
+                                    break
+                                except Exception:
+                                    pass
+                    if opened:
+                        break
+                if not opened:
+                    log.warning("M913 input reader: could not open interface 0")
+                    return
+
+                active_stage = 0
+                while not self._reader_stop.is_set():
+                    try:
+                        data = dev2.read(8, 50)  # 50 ms timeout
+                    except Exception:
+                        break
+                    if data and len(data) >= 2:
+                        # Standard M913 HID mouse report:
+                        # byte[0] = report_id, byte[1] = button bitmap
+                        # bit 4 (0x10) = DPI-cycle button pressed
+                        btn_byte = data[1] if len(data) > 1 else 0
+                        if btn_byte & 0x10:
+                            active_stage = (active_stage + 1) % num_enabled
+                            try:
+                                on_stage_change(active_stage)
+                            except Exception:
+                                pass
+            except Exception as ex:
+                log.debug("M913 input reader exception: %s", ex)
+            finally:
+                if dev2 is not None:
+                    with contextlib.suppress(Exception):
+                        dev2.close()
+            log.debug("M913 input reader thread stopped")
+
+        self._reader_thread = threading.Thread(target=_reader, daemon=True, name="m913-reader")
+        self._reader_thread.start()
+
+    def stop_input_reader(self) -> None:
+        """Stop the input reader thread (blocks up to 1 second)."""
+        self._reader_stop.set()
+        if self._reader_thread is not None:
+            self._reader_thread.join(timeout=1.0)
+            self._reader_thread = None
 
     def apply_buttons(self, buttons: dict[str, str]) -> tuple[int, int]:
         """Apply button mappings. Returns (sent, errors)."""
@@ -1451,6 +1630,15 @@ def export_ini(profile: M913Profile, path: str) -> None:
     # Polling
     cp.set(section, "polling_rate", str(profile.polling_rate))
 
+    # Stage names and colors (UI metadata)
+    for i in range(5):
+        cp.set(section, f"stage{i + 1}_name",
+               profile.stage_names[i] if i < len(profile.stage_names) else f"Stage {i + 1}")
+        cp.set(section, f"stage{i + 1}_color",
+               profile.stage_colors[i] if i < len(profile.stage_colors) else "#00ff00")
+    # Hardware profile slot (P1 = 1, P2 = 2)
+    cp.set(section, "hardware_profile", str(profile.hardware_profile))
+
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         cp.write(f)
@@ -1501,6 +1689,21 @@ def import_ini(path: str) -> M913Profile:
         parts = cp.get(section, "dpi_enabled").split(",")
         for i, tok in enumerate(parts[:5]):
             p.dpi_enabled[i] = tok.strip() == "1"
+
+    # Stage names
+    for i in range(5):
+        key = f"stage{i + 1}_name"
+        if cp.has_option(section, key) and i < len(p.stage_names):
+            p.stage_names[i] = cp.get(section, key)
+    # Stage colors
+    for i in range(5):
+        key = f"stage{i + 1}_color"
+        if cp.has_option(section, key) and i < len(p.stage_colors):
+            p.stage_colors[i] = cp.get(section, key)
+    # Hardware profile
+    if cp.has_option(section, "hardware_profile"):
+        with contextlib.suppress(ValueError):
+            p.hardware_profile = max(1, min(2, int(cp.get(section, "hardware_profile"))))
 
     # LED
     p.led_mode = cp.get(section, "led_mode", fallback=p.led_mode)
