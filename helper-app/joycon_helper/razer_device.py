@@ -947,13 +947,9 @@ class RazerDevice:
 # ===================================================================
 
 def get_profiles_dir() -> Path:
-    if os.name == "nt":
-        base = Path(os.environ.get("APPDATA", ""))
-    else:
-        base = Path.home() / ".config"
-    d = base / "BindBandit" / "razer"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    from .user_data import razer_profiles_dir
+
+    return razer_profiles_dir()
 
 
 def list_saved_profiles() -> list[str]:

@@ -589,7 +589,34 @@ def _sections() -> list[tuple[str, str, bool]]:
             False,
         ),
         (
-            "📋 Quick Reference",
+            "� Data & Profiles",
+            (
+                "Bind Bandit stores all user data in a persistent folder that "
+                "survives app updates and reinstalls:\n\n"
+                "## Data folder location\n"
+                "  Windows:  %APPDATA%\\BindBandit\\\n"
+                "  Linux/macOS:  ~/.config/BindBandit/\n\n"
+                "## What's stored\n"
+                "  profiles/          — Per-slot Joy-Con mapping profiles (auto-saved)\n"
+                "  m913/              — M913 keypad profiles & device registry\n"
+                "  razer/             — Razer mouse profiles & device registry\n"
+                "  device_cache.json  — Remembered devices (quick reconnect list)\n"
+                "  app_profiles.json  — App-switcher rules (auto-switch by game)\n"
+                "  state.json         — Session state (last slot, COM port, etc.)\n\n"
+                "## Auto-save behavior\n"
+                "  Your active profile slot and mappings are saved to disk automatically "
+                "whenever you make a change. On the next launch, the app restores your "
+                "last active slot, COM port, and all per-slot profiles — so you pick up "
+                "exactly where you left off.\n\n"
+                "## Migration\n"
+                "  If you're upgrading from an older version, existing device_cache.json "
+                "and app_profiles.json files are automatically migrated into the new "
+                "data folder on first launch."
+            ),
+            False,
+        ),
+        (
+            "�📋 Quick Reference",
             (
                 "## Keyboard shortcuts (helper app)\n"
                 "  Ctrl+Z — Undo profile change\n"

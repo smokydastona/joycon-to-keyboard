@@ -15,6 +15,10 @@ def _run() -> None:
 
     from joycon_helper.ui.assets import register_app_fonts
     from joycon_helper.ui.main_window import MainWindow
+    from joycon_helper.user_data import migrate_legacy_files
+
+    # Ensure persistent data directory exists and migrate legacy files.
+    migrate_legacy_files()
 
     app = QApplication(sys.argv)
     app.setApplicationName("Bind Bandit")

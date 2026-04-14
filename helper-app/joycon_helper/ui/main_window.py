@@ -45,6 +45,7 @@ from .._version import __version__
 from ..app_switcher import AppSwitcher, load_rules
 from ..default_profiles import get_default_profile
 from ..device_cache import DeviceCache, DeviceEntry
+from ..user_data import load_slot_profile, load_state, save_slot_profile, save_state
 from .assets import AssetManager
 from .serial_bridge import SerialBridge
 from .theme import ThemeEngine
@@ -160,6 +161,9 @@ class MainWindow(QMainWindow):
 
         # Pending firmware (downloaded during last app update)
         QTimer.singleShot(1500, self._check_pending_firmware)
+
+        # Restore session state from last run (slot, profiles, last port)
+        self._restore_session_state()
 
         log.info("MainWindow initialized (v%s)", __version__)
 
@@ -598,10 +602,19 @@ class MainWindow(QMainWindow):
         self.send_cmd({"cmd": "bt_connect"})
 
     def _on_slot_changed(self, index: int) -> None:
+        # Persist outgoing slot's profile
+        if self._profile:
+            save_slot_profile(self._slot, self._profile)
         self._slot = index
         self._status_bar.set_slot(index)
-        # When no device is connected, load the built-in default for this slot
-        if not self.bridge.is_connected:
+        # Restore saved profile for this slot, fall back to built-in default
+        saved = load_slot_profile(index)
+        if saved:
+            self._skip_undo = True
+            self._profile = saved
+            self._notify_views("profile_updated", profile=saved)
+            self._skip_undo = False
+        elif not self.bridge.is_connected:
             self.set_profile(get_default_profile(index))
         self._notify_views("slot_changed", slot=index)
         self._update_tray_slot_checks()
@@ -636,6 +649,55 @@ class MainWindow(QMainWindow):
         # Restart auto-save timer (debounced — waits for 2 s of inactivity)
         if self.bridge.is_connected:
             self._autosave_timer.start()
+        # Persist the profile for this slot to disk
+        save_slot_profile(self._slot, profile)
+
+    # -----------------------------------------------------------------
+    # Session state persistence
+    # -----------------------------------------------------------------
+
+    def _restore_session_state(self) -> None:
+        """Restore slot, profile, and last COM port from the previous session."""
+        state = load_state()
+        if not state:
+            return
+
+        # Restore active slot
+        saved_slot = state.get("last_slot")
+        if isinstance(saved_slot, int) and 0 <= saved_slot <= 3:
+            self._slot = saved_slot
+            self._slot_combo.setCurrentIndex(saved_slot)
+
+        # Restore the profile for the active slot (prefer on-disk copy)
+        profile = load_slot_profile(self._slot)
+        if profile:
+            self._skip_undo = True
+            self._profile = profile
+            self._notify_views("profile_updated", profile=profile)
+            self._skip_undo = False
+
+        # Restore last COM port selection
+        last_port = state.get("last_port")
+        if isinstance(last_port, str) and last_port:
+            idx = self._port_combo.findText(last_port)
+            if idx >= 0:
+                self._port_combo.setCurrentIndex(idx)
+            else:
+                # Port isn't in the list (yet); add it so auto-connect can try
+                self._port_combo.addItem(last_port)
+                self._port_combo.setCurrentIndex(self._port_combo.count() - 1)
+
+        log.info("Restored session state: slot=%s, port=%s", saved_slot, last_port)
+
+    def _save_session_state(self) -> None:
+        """Persist current session state so the next launch picks up where we left off."""
+        state = load_state()
+        state["last_slot"] = self._slot
+        state["last_port"] = self._port_combo.currentText() or ""
+        # Save the current profile for the active slot
+        if self._profile:
+            save_slot_profile(self._slot, self._profile)
+        save_state(state)
 
     # -----------------------------------------------------------------
     # Undo / Redo (centralized)
@@ -1044,6 +1106,7 @@ class MainWindow(QMainWindow):
 
     def _real_quit(self) -> None:
         """Perform full cleanup and quit the application."""
+        self._save_session_state()
         self._app_switcher.stop()
         # Release any HID device handles held by the Devices view.
         devices_view = self._views[NAV_DEVICES] if self._views else None

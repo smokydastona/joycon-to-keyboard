@@ -90,11 +90,12 @@ def _get_foreground_title() -> str | None:
         return None
 
 
-# Config file path (next to the helper app data)
+# Config file path (in persistent data directory)
 def _rules_path() -> Path:
     """Return the path to the app-switcher rules JSON file."""
-    # Store next to the executable or in the current working directory.
-    return Path.cwd() / "app_profiles.json"
+    from .user_data import app_rules_path
+
+    return app_rules_path()
 
 
 def list_running_processes() -> list[tuple[str, str]]:

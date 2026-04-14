@@ -104,16 +104,9 @@ class DeviceCache:
 
     @staticmethod
     def _default_path() -> str:
-        try:
-            from PyQt6.QtCore import QStandardPaths
-            dirs = QStandardPaths.standardLocations(
-                QStandardPaths.StandardLocation.AppDataLocation
-            )
-            base = dirs[0] if dirs else os.path.expanduser("~")
-        except Exception:
-            base = os.path.expanduser("~")
-        os.makedirs(base, exist_ok=True)
-        return os.path.join(base, "device_cache.json")
+        from .user_data import device_cache_path
+
+        return str(device_cache_path())
 
     def _load(self) -> None:
         try:

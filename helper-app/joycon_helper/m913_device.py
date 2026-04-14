@@ -1510,13 +1510,9 @@ class M913Device:
 
 def get_profiles_dir() -> Path:
     """Get the M913 profiles directory (per-user, created if needed)."""
-    if os.name == "nt":
-        base = Path(os.environ.get("APPDATA", ""))
-    else:
-        base = Path.home() / ".config"
-    d = base / "BindBandit" / "m913"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+    from .user_data import m913_profiles_dir
+
+    return m913_profiles_dir()
 
 
 def list_saved_profiles() -> list[str]:
