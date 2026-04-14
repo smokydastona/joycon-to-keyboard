@@ -157,7 +157,7 @@ async function flashS3ThroughHost(port, firmwareBytes) {
       compress: true,
       reportProgress(_fileIndex, written, total) {
         const percent = total > 0 ? (written / total) * 100 : 0;
-        setStatus(`Flashing ESP32-S3 through host... ${percent.toFixed(1)}%`, percent);
+        setStatus(`Installing ESP32-S3... ${percent.toFixed(1)}%`, percent);
       },
     });
   } finally {
@@ -189,7 +189,7 @@ async function runHostAssistedInstall() {
   }
 
   installButton.disabled = true;
-  setStatus("Downloading ESP32-S3 firmware image...", 2);
+  setStatus("Downloading ESP32-S3 firmware...", 2);
 
   let port;
 
@@ -197,7 +197,7 @@ async function runHostAssistedInstall() {
     const firmwareBytes = await fetchBinary(S3_FIRMWARE_PATH);
     dlog(`Loaded S3 firmware image (${(firmwareBytes.length / 1024).toFixed(1)} KB)`);
 
-    setStatus("Pick the ESP32 host serial port...", 5);
+    setStatus("Choose the ESP32 host serial port...", 5);
     port = await navigator.serial.requestPort();
 
     await withCommandSession(port, async (session) => {
@@ -217,15 +217,15 @@ async function runHostAssistedInstall() {
       }
     });
 
-    setStatus("Opening raw bridge to the Nano bootloader...", 12);
+    setStatus("Connecting to the Nano installer...", 12);
     await sleep(250);
 
     await flashS3ThroughHost(port, firmwareBytes);
 
-    setStatus("Leaving bridge mode and rebooting the Nano...", 96);
+    setStatus("Finishing up and restarting the Nano...", 96);
     await escapeHostBridge(port);
 
-    setStatus("ESP32-S3 install finished. Move USB to the Nano for normal use.", 100);
+    setStatus("ESP32-S3 install is complete. Move the USB cable to the Nano for normal use.", 100);
     dlog("Host-assisted S3 flash completed successfully.");
   } finally {
     if (port?.readable || port?.writable) {

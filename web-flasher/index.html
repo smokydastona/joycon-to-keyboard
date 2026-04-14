@@ -17,14 +17,14 @@
       <p class="eyebrow">First-time setup</p>
       <h1>Bind Bandit Web Flasher</h1>
       <p class="hero-copy">
-        Flash the <strong>ESP32 host</strong> first, wire the Nano installer leads, then let the
-        browser flash the <strong>ESP32-S3 through the host</strong>. After first install, use the
-        desktop app for normal updates.
+        First, flash the <strong>ESP32 host</strong>. Next, connect the two installer wires.
+        Then this page will install the <strong>ESP32-S3 through the host</strong> for you.
+        After that, use the desktop app for normal updates.
       </p>
       <div class="quick-row">
         <span class="quick-pill">Use Chrome or Edge</span>
-        <span class="quick-pill">Flash order: ESP32 -> host-assisted S3</span>
-        <span class="quick-pill">Extra wires: GPIO21 / GPIO22</span>
+        <span class="quick-pill">Order: ESP32 first, ESP32-S3 second</span>
+        <span class="quick-pill">Extra wires needed: GPIO21 and GPIO22</span>
       </div>
     </section>
 
@@ -39,10 +39,11 @@
           <h2>Flash the ESP32 host</h2>
         </div>
         <p>
-          Use the normal ESP Web Tools flow for the NodeMCU ESP32-WROOM-32. Enter download
-          mode with <strong>BOOT -> RESET -> release BOOT</strong>, then install the host firmware.
+          This is the NodeMCU ESP32 board. Put it into download mode by holding
+          <strong>BOOT</strong>, tapping <strong>RESET</strong>, then releasing <strong>BOOT</strong>.
+          After that, click the install button below.
         </p>
-        <p class="card-reminder">Do this first. The host becomes the Nano installer.</p>
+        <p class="card-reminder">Do this first. This board will install the Nano in Step 3.</p>
         <esp-web-install-button manifest="manifest-esp32.json">
           <button slot="activate">Install ESP32 Host</button>
         </esp-web-install-button>
@@ -54,8 +55,8 @@
           <h2>Add the installer wires</h2>
         </div>
         <p>
-          Keep the normal bridge wiring, then add two temporary or permanent installer leads so the
-          host can force the Nano into ROM download mode.
+          Leave the normal bridge wiring connected, then add the two extra wires below.
+          They let the ESP32 host start the Nano installer mode automatically.
         </p>
         <ul class="wire-list">
           <li><strong>GPIO17</strong> -> Nano <strong>D2 / GPIO5</strong></li>
@@ -65,7 +66,7 @@
           <li><strong>GND</strong> <-> <strong>GND</strong></li>
           <li>Nano <strong>VUSB OUT</strong> -> ESP32 <strong>5V / VIN</strong></li>
         </ul>
-        <p class="card-reminder">Keep both boards disconnected from the PC except for the host USB cable during this step.</p>
+        <p class="card-reminder">During setup, only the ESP32 host should be plugged into the PC.</p>
       </article>
 
       <article class="card panel install-card">
@@ -74,56 +75,56 @@
           <h2>Install the ESP32-S3 through the host</h2>
         </div>
         <p>
-          Connect to the host's USB serial port. The page will tell the host to pull Nano
-          <strong>GPIO0</strong> and <strong>RESET</strong>, then flash the merged S3 firmware over the existing UART bridge.
+          Click the button below and choose the ESP32 host COM port.
+          The page will use the host board to put the Nano into install mode and flash it for you.
         </p>
         <button class="primary-action" id="install-s3-via-host" type="button">Install ESP32-S3 Through Host</button>
-        <div class="install-status" id="install-status" aria-live="polite">Waiting for the host install step.</div>
+        <div class="install-status" id="install-status" aria-live="polite">Ready for Step 3.</div>
         <div class="progress-shell" aria-hidden="true">
           <div class="progress-bar" id="install-progress"></div>
         </div>
         <ol class="step-list">
-          <li>Plug the <strong>ESP32 host</strong> into USB after flashing it.</li>
-          <li>Click the button above and pick the host COM port.</li>
-          <li>Wait for the page to prepare the Nano, flash it, then release it back into run mode.</li>
-          <li>Move the USB cable to the Nano ESP32-S3 for normal use.</li>
+          <li>Unplug and replug the <strong>ESP32 host</strong> after Step 1 finishes.</li>
+          <li>Click the button above and choose the host COM port.</li>
+          <li>Wait while the page installs the Nano automatically.</li>
+          <li>When it finishes, move the USB cable to the Nano ESP32-S3 for normal use.</li>
         </ol>
       </article>
     </section>
 
     <section class="help panel">
       <details>
-        <summary>Need help with wiring, COM ports, or fallback flashing?</summary>
+        <summary>Need help with wiring, ports, or recovery?</summary>
         <div class="help-grid">
           <div class="help-block">
             <h3>Host COM port</h3>
             <ul>
               <li>After Step 1, unplug and replug the ESP32 host normally.</li>
-              <li>Pick the CP210x or CH340 serial port for the NodeMCU board.</li>
-              <li>The host prints lines beginning with <strong>BBI</strong> when it is ready.</li>
+              <li>Choose the CP210x or CH340 port for the NodeMCU board.</li>
+              <li>If you are not sure, unplug the board, check which port disappears, then plug it back in.</li>
             </ul>
           </div>
           <div class="help-block">
-            <h3>Fallback</h3>
+            <h3>Recovery option</h3>
             <ul>
-              <li>If host-assisted flashing fails, you can still flash the Nano directly.</li>
-              <li>Use USB-C, double-tap RESET, and install from the advanced fallback below.</li>
-              <li>The helper app still handles normal updates after first install.</li>
+              <li>If Step 3 fails, you can still flash the Nano directly.</li>
+              <li>Plug the Nano in with USB-C, double-tap RESET, then use the fallback button below.</li>
+              <li>After the first install, the helper app handles normal updates.</li>
             </ul>
           </div>
         </div>
         <details class="fallback-box">
-          <summary>Advanced fallback: flash the Nano ESP32-S3 directly</summary>
+          <summary>Fallback: flash the Nano ESP32-S3 directly</summary>
           <p>
-            Use this only if you cannot get the host-assisted path working. Double-tap the Nano
-            RESET button, then pick the Nano port directly.
+            Use this only if the host-assisted install does not work. Double-tap the Nano
+            RESET button, then choose the Nano port directly.
           </p>
           <esp-web-install-button manifest="manifest-esp32s3.json">
             <button slot="activate">Install ESP32-S3 Directly</button>
           </esp-web-install-button>
         </details>
         <p class="help-note">
-          If no port appears, try a data-capable USB cable, a different USB port, or see the
+          If no port appears, try a data-capable USB cable, try a different USB port, or see the
           <a href="https://github.com/smokydastona/joycon-to-keyboard/blob/main/docs/wiring.md" target="_blank" rel="noopener">wiring guide</a>
           and the <a href="https://github.com/smokydastona/joycon-to-keyboard/releases/latest" target="_blank" rel="noopener">latest release</a>.
         </p>
