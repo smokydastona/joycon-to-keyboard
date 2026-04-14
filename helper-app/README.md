@@ -132,14 +132,15 @@ The helper app writes structured logs to disk for debugging.
 
 | Folder | Contents |
 |---|---|
-| `logs/` | Daily rotating application log (`helper.log`). Records serial traffic, OTA activity, retries/timeouts, errors, theme loading, and connect/disconnect events. Failed firmware flashes also write `ota_failure_*.json` reports here with board, stage, offset, and recent serial history. |
-| `crash-logs/` | Timestamped crash dumps (`crash_YYYYMMDD_HHMMSS.log`) written on unhandled exceptions. |
+| `logs/` | Daily rotating application log (`helper.log`). Records serial traffic, OTA activity, retries/timeouts, errors, theme loading, and connect/disconnect events. Failed firmware flashes also write `ota_failure_*.json` reports here with board, stage, offset, and recent serial history. Log output is sanitized before writing to disk. |
+| `crash-logs/` | Timestamped crash dumps (`crash_YYYYMMDD_HHMMSS.log`) written on unhandled exceptions. Crash reports are sanitized before being saved. |
 
 Both folders are created next to the installed application (next to the `.exe` when frozen, or next to the `helper-app/` package when running from source).
 
 - **Auto-cleanup**: files older than 15 days are deleted on each startup.
 - **No personal data**: logs contain only application-level events (serial traffic, errors, platform info). No user paths, environment variables, or identifying data are recorded.
-- **Debug bundle**: Settings → Export Debug Bundle includes current settings, the current profile, application logs, and crash logs so OTA failures can be reviewed later.
+- **Anonymized debug bundle**: Settings → Export Anonymized Debug Bundle writes a ZIP with sanitized settings, profile state, diagnostics, application logs, crash logs, and a prebuilt GitHub issue summary.
+- **GitHub issue flow**: Settings → Open GitHub Debug Issue creates the same anonymized bundle, then opens a prefilled GitHub issue page so the user can choose whether to submit it.
 
 ## Auto-update
 

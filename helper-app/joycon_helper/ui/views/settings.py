@@ -398,10 +398,15 @@ class SettingsView(QScrollArea):
         form.addRow(self._cb_latency)
 
         # Debug bundle export
-        debug_btn = QPushButton("Export Debug Bundle")
-        debug_btn.setToolTip("Save logs, settings, and profile data to a ZIP file for support")
+        debug_btn = QPushButton("Export Anonymized Debug Bundle")
+        debug_btn.setToolTip("Save anonymized logs, diagnostics, settings, and profile data to a ZIP file")
         debug_btn.clicked.connect(self._export_debug_bundle)
         form.addRow(debug_btn)
+
+        issue_btn = QPushButton("Open GitHub Debug Issue")
+        issue_btn.setToolTip("Create an anonymized debug bundle and open a prefilled GitHub issue page")
+        issue_btn.clicked.connect(self._open_github_debug_issue)
+        form.addRow(issue_btn)
 
         # Onboarding reset
         onboard_btn = QPushButton("Show Onboarding Wizard")
@@ -482,46 +487,46 @@ class SettingsView(QScrollArea):
             QMessageBox.critical(self, "Import Error", str(exc))
 
     def _export_debug_bundle(self) -> None:
-        import json
-        import zipfile
-
         from PyQt6.QtWidgets import QFileDialog
 
-        from ...logger import crash_logs_dir, logs_dir
+        from ...debug_reporting import DebugContext, export_debug_bundle
+        from ..widgets.toast import Toast
 
         path, _ = QFileDialog.getSaveFileName(
-            self, "Export Debug Bundle", "bind_bandit_debug.zip",
+            self, "Export Anonymized Debug Bundle", "bind_bandit_debug.zip",
             "ZIP (*.zip)")
         if not path:
             return
         try:
-            with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as zf:
-                # Settings
-                settings_data = {}
-                for key in self._settings.allKeys():
-                    settings_data[key] = str(self._settings.value(key))
-                zf.writestr("settings.json",
-                            json.dumps(settings_data, indent=2, ensure_ascii=False))
-
-                # Current profile
-                profile = self._main.get_profile()
-                zf.writestr("current_profile.json",
-                            json.dumps(profile, indent=2, ensure_ascii=False))
-
-                # Application logs and crash dumps.
-                for source_dir, archive_prefix in (
-                    (logs_dir(), "logs"),
-                    (crash_logs_dir(), "crash-logs"),
-                ):
-                    if source_dir.is_dir():
-                        for entry in source_dir.iterdir():
-                            if entry.is_file():
-                                zf.write(entry, f"{archive_prefix}/{entry.name}")
-
-            from ..widgets.toast import Toast
-            Toast.success(self, f"Debug bundle saved to {os.path.basename(path)}")
+            export_debug_bundle(path, DebugContext(main_window=self._main, settings=self._settings))
+            Toast.success(self, f"Anonymized debug bundle saved to {os.path.basename(path)}")
         except Exception as exc:
             QMessageBox.critical(self, "Export Error", str(exc))
+
+    def _open_github_debug_issue(self) -> None:
+        import webbrowser
+
+        from PyQt6.QtWidgets import QFileDialog
+
+        from ...debug_reporting import DebugContext, build_issue_url, export_debug_bundle
+        from ..widgets.toast import Toast
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Anonymized Debug Bundle",
+            "bind_bandit_debug.zip",
+            "ZIP (*.zip)",
+        )
+        if not path:
+            return
+
+        try:
+            report = export_debug_bundle(path, DebugContext(main_window=self._main, settings=self._settings))
+            issue_url = build_issue_url(report)
+            webbrowser.open(issue_url)
+            Toast.success(self, f"GitHub issue page opened. Attach {os.path.basename(path)} to the new issue.")
+        except Exception as exc:
+            QMessageBox.critical(self, "GitHub Debug Issue", str(exc))
 
     def _reset_onboarding(self) -> None:
         self._settings.setValue("onboarding_done", False)

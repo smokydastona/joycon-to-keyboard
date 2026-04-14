@@ -20,6 +20,8 @@ from datetime import datetime
 from logging.handlers import TimedRotatingFileHandler
 from pathlib import Path
 
+from .debug_privacy import sanitize_text
+
 # ---------------------------------------------------------------------------
 # Directory helpers
 # ---------------------------------------------------------------------------
@@ -82,6 +84,12 @@ _LOG_DATE_FMT = "%Y-%m-%d %H:%M:%S"
 _initialised = False
 
 
+class _SanitizingFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        rendered = super().format(record)
+        return sanitize_text(rendered)
+
+
 def setup_logging(*, level: int = logging.DEBUG) -> logging.Logger:
     """Initialise application-wide logging.  Safe to call more than once."""
     global _initialised
@@ -102,19 +110,19 @@ def setup_logging(*, level: int = logging.DEBUG) -> logging.Logger:
         encoding="utf-8",
     )
     fh.setLevel(logging.DEBUG)
-    fh.setFormatter(logging.Formatter(_LOG_FORMAT, datefmt=_LOG_DATE_FMT))
+    fh.setFormatter(_SanitizingFormatter(_LOG_FORMAT, datefmt=_LOG_DATE_FMT))
     root.addHandler(fh)
 
     # ---- Console / stderr handler (INFO+) ----
     sh = logging.StreamHandler(sys.stderr)
     sh.setLevel(logging.INFO)
-    sh.setFormatter(logging.Formatter(_LOG_FORMAT, datefmt=_LOG_DATE_FMT))
+    sh.setFormatter(_SanitizingFormatter(_LOG_FORMAT, datefmt=_LOG_DATE_FMT))
     root.addHandler(sh)
 
     _initialised = True
 
     log = logging.getLogger("joycon_helper")
-    log.info("Logging initialised — log dir: %s", logs_dir())
+    log.info("Logging initialised")
     log.info("Platform: %s %s", platform.system(), platform.release())
     log.info("Python: %s", sys.version.split()[0])
     log.info("Frozen: %s", getattr(sys, "frozen", False))
@@ -141,7 +149,7 @@ def _write_crash_file(exc_type, exc_value, exc_tb) -> None:
             "",
         ]
         lines.extend(traceback.format_exception(exc_type, exc_value, exc_tb))
-        crash_file.write_text("".join(lines), encoding="utf-8")
+        crash_file.write_text(sanitize_text("\n".join(lines)), encoding="utf-8")
     except Exception:
         pass  # last resort — don't crash the crash handler
 

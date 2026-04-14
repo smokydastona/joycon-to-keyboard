@@ -468,6 +468,7 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "Bind Bandit verifies the reported firmware version after each flash. If a stage times out or returns an error,\n"
                 "the helper log records the failing board, stage, byte offset, and recent serial traffic. Failed OTA sessions also\n"
                 "write an ota_failure_*.json report into the logs folder for later diagnosis.\n\n"
+                "All exported debug bundles are anonymized before they are written or shared.\n\n"
                 "The update covers both the helper app and all firmware in one step.\n\n"
             ),
             False,
@@ -497,7 +498,8 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "## Firmware flash fails\n"
                 "  For first-time flash, use the Web Flasher in Chrome/Edge.\n"
                 "  OTA updates after first install should happen through Bind Bandit while connected to the ESP32-S3.\n"
-                "  If an OTA update fails, open Settings → Export Debug Bundle and keep the generated ZIP plus the latest helper.log / ota_failure_*.json files.\n"
+                "  If an OTA update fails, open Settings → Export Anonymized Debug Bundle and keep the generated ZIP plus the latest helper.log / ota_failure_*.json files.\n"
+                "  If you want to report it upstream, use Settings → Open GitHub Debug Issue to open a prefilled issue page and then attach the anonymized ZIP manually.\n"
                 "  ESP32: Hold BOOT while tapping RESET to enter download mode only for recovery or first-time flash.\n"
                 "  ESP32-S3 (Nano ESP32): Double-tap RESET for download mode only for recovery or first-time flash.\n"
                 "  Check that you select the correct COM port for each board."
@@ -521,9 +523,10 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "Click it to install the update and restart — firmware is updated\n"
                 "automatically after relaunch.\n\n"
                 "## Debugging update failures\n"
-                "If an update fails, use Settings → Export Debug Bundle. The ZIP includes\n"
-                "app logs and crash logs, and firmware OTA failures also leave ota_failure_*.json\n"
-                "reports in the logs folder with the board, stage, and recent serial history."
+                "If an update fails, use Settings → Export Anonymized Debug Bundle. The ZIP includes\n"
+                "sanitized app logs, crash logs, diagnostics, and firmware OTA failure reports.\n"
+                "You can then use Settings → Open GitHub Debug Issue to open a prefilled issue page\n"
+                "and attach the anonymized ZIP manually if you want to report it."
             ),
             False,
         ),
@@ -553,6 +556,8 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "### Developer tab\n"
                 "  Baud rate (must match firmware)\n"
                 "  Log level (DEBUG / INFO / WARNING / ERROR)\n"
+                "  Export Anonymized Debug Bundle\n"
+                "  Open GitHub Debug Issue\n"
                 "  Re-run the first-time Onboarding Wizard\n\n"
                 "## Overlay enhancements\n"
                 "The floating overlay (toggle with Ctrl+Shift+O or tray menu) now shows "
