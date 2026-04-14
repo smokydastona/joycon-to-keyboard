@@ -14,7 +14,6 @@ import configparser
 import contextlib
 import json
 import logging
-import os
 import threading
 import time
 from collections.abc import Callable
