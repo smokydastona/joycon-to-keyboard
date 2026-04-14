@@ -1015,6 +1015,10 @@ class MainWindow(QMainWindow):
     def _real_quit(self) -> None:
         """Perform full cleanup and quit the application."""
         self._app_switcher.stop()
+        # Release any HID device handles held by the Devices view.
+        devices_view = self._views[NAV_DEVICES] if self._views else None
+        if devices_view is not None and hasattr(devices_view, "cleanup"):
+            devices_view.cleanup()
         # Disconnect bridge signals to avoid callbacks during teardown.
         try:
             self.bridge.connected.disconnect(self._on_serial_connected)

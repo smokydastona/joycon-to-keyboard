@@ -6,6 +6,7 @@ Tkinter app.py M913 and Razer tabs.
 """
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import zipfile
@@ -204,6 +205,7 @@ class DevicesView(QWidget):
         self._m913_dpi_color_btns: list[QPushButton] = []
         self._m913_live_apply_chk: QCheckBox | None = None
         self._m913_live_timer: QTimer | None = None
+        self._m913_reader_dev: Any = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -750,7 +752,48 @@ class DevicesView(QWidget):
     # M913 Operations
     # =================================================================
 
+    # -----------------------------------------------------------------
+    # DPI stage input reader lifecycle
+    # -----------------------------------------------------------------
+
+    def _m913_stop_input_reader(self) -> None:
+        """Stop and release the background DPI-stage input reader."""
+        if self._m913_reader_dev is not None:
+            try:
+                self._m913_reader_dev.stop_input_reader()
+                self._m913_reader_dev.close()
+            except Exception:
+                pass
+            self._m913_reader_dev = None
+
+    def _m913_start_input_reader(self, device_index: int) -> None:
+        """Open the selected device and start polling for DPI-cycle presses."""
+        self._m913_stop_input_reader()
+        if device_index < 0 or device_index >= len(self._m913_devices):
+            return
+        try:
+            mod = _get_m913_mod()
+            enabled = (
+                list(self._m913_profile.dpi_enabled)
+                if self._m913_profile
+                else [True] * 5
+            )
+            rdev = mod.M913Device()
+            rdev.start_input_reader(self._m913_set_active_stage, enabled)
+            self._m913_reader_dev = rdev
+        except Exception as ex:
+            log.debug("M913 input reader could not start: %s", ex)
+
+    def cleanup(self) -> None:
+        """Release all held HID device handles. Called by MainWindow on quit."""
+        self._m913_stop_input_reader()
+
+    # -----------------------------------------------------------------
+    # Device detection / selection
+    # -----------------------------------------------------------------
+
     def _detect_m913(self) -> None:
+        self._m913_stop_input_reader()
         try:
             mod = _get_m913_mod()
             self._m913_devices = mod.M913Device.enumerate()
@@ -784,17 +827,20 @@ class DevicesView(QWidget):
         dev_info = self._m913_devices[index]
         reg = self._m913_registry.get(dev_info.device_id, {})
         linked = reg.get("profile")
+        loaded = False
         if linked:
             try:
                 mod = _get_m913_mod()
                 self._m913_profile = mod.load_profile(linked)
                 self._m913_ui_from_profile()
                 self._m913_status.setText(f"Loaded profile '{linked}'")
-                return
+                loaded = True
             except Exception:
                 pass
-        self._m913_status.setText(
-            f"Selected {dev_info.display_name} (no saved profile)")
+        if not loaded:
+            self._m913_status.setText(
+                f"Selected {dev_info.display_name} (no saved profile)")
+        self._m913_start_input_reader(index)
 
     def _m913_ui_to_profile(self) -> None:
         if not self._m913_profile:
@@ -1174,20 +1220,8 @@ class DevicesView(QWidget):
             return
         try:
             mod = _get_m913_mod()
-            self._m913_profile = mod.M913Profile()
-            # Apply FACTORY_DEFAULTS values into the new profile
-            fd = mod.FACTORY_DEFAULTS
-            self._m913_profile.dpi_values = list(fd.dpi_values)
-            self._m913_profile.dpi_enabled = list(fd.dpi_enabled)
-            self._m913_profile.led_mode = fd.led_mode
-            self._m913_profile.led_color = fd.led_color
-            self._m913_profile.led_brightness = fd.led_brightness
-            self._m913_profile.led_speed = fd.led_speed
-            self._m913_profile.polling_rate = fd.polling_rate
-            self._m913_profile.buttons = dict(fd.buttons)
-            self._m913_profile.stage_names = list(fd.stage_names)
-            self._m913_profile.stage_colors = list(fd.stage_colors)
-            self._m913_profile.hardware_profile = fd.hardware_profile
+            self._m913_profile = copy.deepcopy(mod.FACTORY_DEFAULTS)
+            self._m913_profile.name = self._m913_prof_name.text().strip() or "Default"
             self._m913_ui_from_profile()
             self._m913_status.setText("Settings reset to factory defaults")
         except Exception as e:
