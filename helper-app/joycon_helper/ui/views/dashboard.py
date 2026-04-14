@@ -12,7 +12,7 @@ Replaces the old card-grid dashboard.  Content:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
@@ -23,7 +23,6 @@ from PyQt6.QtWidgets import (
     QLabel,
     QPushButton,
     QScrollArea,
-    QSizePolicy,
     QVBoxLayout,
     QWidget,
 )
@@ -60,13 +59,13 @@ def _battery_text(level: int | None) -> tuple[str, str]:
 class _DeviceCard(Card):
     """Compact card showing one connected device's status."""
 
-    _TYPE_ICONS = {
+    _TYPE_ICONS: ClassVar[dict[str, str]] = {
         "joycon": "🎮",
         "m913":   "🖱",
         "razer":  "🐍",
     }
 
-    def __init__(self, entry: "DeviceEntry", main: "MainWindow") -> None:
+    def __init__(self, entry: DeviceEntry, main: MainWindow) -> None:
         super().__init__(main.theme)
         self._entry = entry
         self._main = main
@@ -154,7 +153,7 @@ class _DeviceCard(Card):
 class DashboardView(QScrollArea):
     """Dashboard: ESP32 status, connected devices, quick actions, device log."""
 
-    def __init__(self, main: "MainWindow") -> None:
+    def __init__(self, main: MainWindow) -> None:
         super().__init__()
         self._main = main
         self._device_cards: dict[str, _DeviceCard] = {}  # device_id → card
@@ -307,7 +306,7 @@ class DashboardView(QScrollArea):
         dlg.exec()
         self._main._add_device_dialog = None
 
-    def _on_device_added_via_dialog(self, entry: "DeviceEntry") -> None:
+    def _on_device_added_via_dialog(self, entry: DeviceEntry) -> None:
         entry.connected = True
         self._main._device_cache.mark_connected(entry.id, True)
         self._main._connected_devices[entry.id] = entry
@@ -318,7 +317,7 @@ class DashboardView(QScrollArea):
     # Device card management
     # ------------------------------------------------------------------
 
-    def _add_or_update_card(self, entry: "DeviceEntry") -> None:
+    def _add_or_update_card(self, entry: DeviceEntry) -> None:
         if entry.id in self._device_cards:
             return
         self._empty_label.setVisible(False)
@@ -339,7 +338,7 @@ class DashboardView(QScrollArea):
     # View protocol (called by MainWindow._notify_views)
     # ------------------------------------------------------------------
 
-    def device_connected(self, entry: "DeviceEntry") -> None:
+    def device_connected(self, entry: DeviceEntry) -> None:
         self._add_or_update_card(entry)
 
     def device_disconnected(self, device_id: str) -> None:
@@ -367,8 +366,7 @@ class DashboardView(QScrollArea):
                     if card._entry.source == "esp32-bt":
                         card.update_latency(lat)
 
-        if obj.get("rsp") == "fw_version":
-            if obj.get("ok") and obj.get("board") == "esp32s3":
+        if obj.get("rsp") == "fw_version" and obj.get("ok") and obj.get("board") == "esp32s3":
                 self._fw_version.setText(obj.get("version", "—"))
 
     def connection_changed(self, connected: bool) -> None:

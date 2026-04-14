@@ -28,7 +28,6 @@ from PyQt6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QRadioButton,
-    QStackedWidget,
     QTabWidget,
     QVBoxLayout,
     QWidget,
@@ -105,7 +104,7 @@ class AddDeviceDialog(QDialog):
 
     device_added = pyqtSignal(object)   # DeviceEntry
 
-    def __init__(self, main: "MainWindow", cache: DeviceCache) -> None:
+    def __init__(self, main: MainWindow, cache: DeviceCache) -> None:
         super().__init__(main)
         self._main = main
         self._cache = cache
@@ -339,8 +338,7 @@ class AddDeviceDialog(QDialog):
             self._bt_scan_btn.setEnabled(True)
             self.device_added.emit(entry)
 
-        elif state == "disconnected":
-            if self._bt_phase not in ("connected",):
+        elif state == "disconnected" and self._bt_phase not in ("connected",):
                 self._bt_on_timeout()
 
     def _bt_make_entry(self, name: str, bda: str) -> DeviceEntry:

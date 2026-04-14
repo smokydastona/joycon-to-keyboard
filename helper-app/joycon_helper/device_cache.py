@@ -13,7 +13,7 @@ import json
 import logging
 import os
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 log = logging.getLogger("joycon_helper.device_cache")
@@ -69,7 +69,7 @@ class DeviceEntry:
     # ------------------------------------------------------------------
     def touch(self) -> None:
         """Update last_seen to now (UTC)."""
-        self.last_seen = datetime.now(tz=timezone.utc).isoformat(timespec="seconds")
+        self.last_seen = datetime.now(tz=UTC).isoformat(timespec="seconds")
 
     def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
@@ -80,7 +80,7 @@ class DeviceEntry:
         return d
 
     @classmethod
-    def from_dict(cls, d: dict[str, Any]) -> "DeviceEntry":
+    def from_dict(cls, d: dict[str, Any]) -> DeviceEntry:
         known = {f.name for f in cls.__dataclass_fields__.values()}  # type: ignore[attr-defined]
         filtered = {k: v for k, v in d.items() if k in known}
         return cls(**filtered)

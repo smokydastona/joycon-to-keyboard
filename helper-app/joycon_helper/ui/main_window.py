@@ -485,10 +485,8 @@ class MainWindow(QMainWindow):
 
             # Forward to Add Device dialog while it is open
             if self._add_device_dialog is not None:
-                try:
+                with contextlib.suppress(Exception):
                     self._add_device_dialog.handle_bt_status(obj)  # type: ignore[attr-defined]
-                except Exception:
-                    pass
 
             # Track BDA → display name from found / reconnecting events
             if name and bda and state in ("found", "reconnecting"):
