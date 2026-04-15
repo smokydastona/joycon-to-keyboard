@@ -40,7 +40,11 @@ static buzzer_config_t buzzer_cfg_defaults(void) {
     buzzer_config_t d = {
         .enabled = true,
         .volume = (uint8_t)CONFIG_BIND_BANDIT_BUZZER_VOLUME,
+#ifdef CONFIG_BIND_BANDIT_BUZZER_DISCOVERY_TICK
         .discovery_tick = (bool)CONFIG_BIND_BANDIT_BUZZER_DISCOVERY_TICK,
+#else
+        .discovery_tick = false,
+#endif
         .tone_mask = allowed_tone_mask(),
     };
     if (d.volume > 100) {
