@@ -223,7 +223,7 @@ class SerialClient:
     _VALID_MODES = frozenset({
         "passthrough", "disabled", "disable", "remap", "macro", "remap_hid",
         "double_tap", "turbo", "sticky_mod", "sticky", "tap_hold",
-        "oneshot_mod", "oneshot", "auto_shift", "mouse_button",
+        "oneshot_mod", "oneshot", "auto_shift", "mouse_button", "gamepad_button",
         "sequential", "leader", "profile_switch",
     })
 
@@ -305,6 +305,7 @@ class SerialClient:
             "tap_hold": 8,
             "oneshot_mod": 9, "oneshot": 9,
             "auto_shift": 10, "mouse_button": 11,
+            "gamepad_button": 17,
             "sequential": 12, "leader": 13,
             "profile_switch": 14,
         }

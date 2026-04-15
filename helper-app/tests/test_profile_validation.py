@@ -88,7 +88,7 @@ class TestModeEnum:
         "passthrough", "disabled", "disable", "remap", "macro",
         "remap_hid", "tap_hold", "double_tap", "turbo",
         "sticky_mod", "sticky", "oneshot_mod", "oneshot",
-        "auto_shift", "mouse_button", "sequential", "leader",
+        "auto_shift", "mouse_button", "gamepad_button", "sequential", "leader",
         "profile_switch",
     ]
 

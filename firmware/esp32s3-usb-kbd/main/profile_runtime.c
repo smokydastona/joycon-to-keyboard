@@ -22,6 +22,7 @@
 
 #include "bridge_serial.h"
 #include "keymap.h"
+#include "usb_gamepad.h"
 #include "usb_kbd.h"
 #include "usb_mouse.h"
 #include "uart_proto.h"
@@ -111,6 +112,7 @@ typedef enum {
     MAP_PROFILE_SWITCH = 14,
     MAP_SNIPER = 15,
     MAP_DPI_CYCLE = 16,
+    MAP_GAMEPAD_BUTTON = 17,
 } map_mode_t;
 
 typedef struct {
@@ -149,6 +151,8 @@ typedef struct {
     uint16_t as_hold_ms;       // default 200
     // Mouse button fields (MAP_MOUSE_BUTTON)
     uint8_t mouse_button;      // MOUSE_BUTTON_LEFT=1, RIGHT=2, MIDDLE=4
+    // Gamepad button fields (MAP_GAMEPAD_BUTTON)
+    uint8_t gamepad_button;
     // Sequential fields (MAP_SEQUENTIAL)
     uint8_t seq_count;
     uint8_t seq_mods[8];
@@ -159,6 +163,47 @@ typedef struct {
     // Sniper fields (MAP_SNIPER)
     uint16_t sniper_sensitivity;  // override sensitivity while held
 } map_entry_t;
+
+
+static uint8_t parse_gamepad_button_code(cJSON *button_j)
+{
+    if (cJSON_IsNumber(button_j)) {
+        int value = button_j->valueint;
+        if (value >= USB_GAMEPAD_OUTPUT_A && value <= USB_GAMEPAD_OUTPUT_DPAD_RIGHT) {
+            return (uint8_t)value;
+        }
+        return 0;
+    }
+
+    if (!cJSON_IsString(button_j) || !button_j->valuestring) {
+        return 0;
+    }
+
+    const char *button = button_j->valuestring;
+    if (strcmp(button, "A") == 0) return USB_GAMEPAD_OUTPUT_A;
+    if (strcmp(button, "B") == 0) return USB_GAMEPAD_OUTPUT_B;
+    if (strcmp(button, "X") == 0) return USB_GAMEPAD_OUTPUT_X;
+    if (strcmp(button, "Y") == 0) return USB_GAMEPAD_OUTPUT_Y;
+    if (strcmp(button, "LB") == 0) return USB_GAMEPAD_OUTPUT_LB;
+    if (strcmp(button, "RB") == 0) return USB_GAMEPAD_OUTPUT_RB;
+    if (strcmp(button, "LT") == 0) return USB_GAMEPAD_OUTPUT_LT;
+    if (strcmp(button, "RT") == 0) return USB_GAMEPAD_OUTPUT_RT;
+    if (strcmp(button, "View") == 0) return USB_GAMEPAD_OUTPUT_VIEW;
+    if (strcmp(button, "Menu") == 0) return USB_GAMEPAD_OUTPUT_MENU;
+    if (strcmp(button, "LS") == 0) return USB_GAMEPAD_OUTPUT_L3;
+    if (strcmp(button, "RS") == 0) return USB_GAMEPAD_OUTPUT_R3;
+    if (strcmp(button, "Xbox") == 0) return USB_GAMEPAD_OUTPUT_XBOX;
+    if (strcmp(button, "Share") == 0) return USB_GAMEPAD_OUTPUT_SHARE;
+    if (strcmp(button, "P1") == 0) return USB_GAMEPAD_OUTPUT_P1;
+    if (strcmp(button, "P2") == 0) return USB_GAMEPAD_OUTPUT_P2;
+    if (strcmp(button, "P3") == 0) return USB_GAMEPAD_OUTPUT_P3;
+    if (strcmp(button, "P4") == 0) return USB_GAMEPAD_OUTPUT_P4;
+    if (strcmp(button, "DUp") == 0) return USB_GAMEPAD_OUTPUT_DPAD_UP;
+    if (strcmp(button, "DDown") == 0) return USB_GAMEPAD_OUTPUT_DPAD_DOWN;
+    if (strcmp(button, "DLeft") == 0) return USB_GAMEPAD_OUTPUT_DPAD_LEFT;
+    if (strcmp(button, "DRight") == 0) return USB_GAMEPAD_OUTPUT_DPAD_RIGHT;
+    return 0;
+}
 
 // --- Layer system ---
 
@@ -1343,6 +1388,15 @@ static void parse_mappings(cJSON *root) {
             continue;
         }
 
+        if (strcmp(type->valuestring, "gamepad_button") == 0) {
+            cJSON *btn_j = cJSON_GetObjectItemCaseSensitive(entry, "button");
+            uint8_t output = parse_gamepad_button_code(btn_j);
+            if (output == 0) continue;
+            s_map[key_id].mode = MAP_GAMEPAD_BUTTON;
+            s_map[key_id].gamepad_button = output;
+            continue;
+        }
+
         if (strcmp(type->valuestring, "sequential") == 0) {
             cJSON *outputs = cJSON_GetObjectItemCaseSensitive(entry, "outputs");
             if (!cJSON_IsArray(outputs)) continue;
@@ -2462,6 +2516,10 @@ static void dispatch_mapping(map_entry_t *m, bool pressed, uint16_t key_id) {
 
         case MAP_MOUSE_BUTTON:
             usb_mouse_button(m->mouse_button, pressed);
+            return;
+
+        case MAP_GAMEPAD_BUTTON:
+            usb_gamepad_set_virtual_button(m->gamepad_button, pressed);
             return;
 
         case MAP_SEQUENTIAL:

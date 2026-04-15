@@ -1,14 +1,16 @@
 """Mapping Editor Popup — rich per-button binding dialog.
 
 Launched when a hotspot is clicked/double-clicked on the canvas.  Provides
-categorised output selection (Keyboard, Mouse, Macro, Advanced), modifier
+categorised output selection (Keyboard, Mouse, Gamepad, Macro, Advanced), modifier
 checkboxes, turbo/toggle/sticky/tap-hold options, conflict warnings, and
 Apply/Cancel.
 """
 from __future__ import annotations
 
 import copy
+import json
 import logging
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from PyQt6.QtCore import Qt
@@ -50,6 +52,9 @@ from ...hid_keycodes import (
 )
 from ..constants import (
     _KEYCODE_TO_KBD_LABEL,
+    GAMEPAD_BUTTON_SHAPES,
+    GAMEPAD_HOTSPOTS,
+    GAMEPAD_WIDE,
     KBD_HOTSPOTS,
     KBD_LABEL_TO_KEYCODE,
     KBD_WIDE,
@@ -97,6 +102,77 @@ _MOUSE_HOTSPOT_TO_BTN: dict[str, tuple[int, str]] = {
     "scroll_up":   (6, "Scroll Up"),
     "scroll_down": (7, "Scroll Down"),
 }
+
+GAMEPAD_BUTTONS: list[tuple[str, str]] = [
+    ("A", "A"),
+    ("B", "B"),
+    ("X", "X"),
+    ("Y", "Y"),
+    ("LB", "LB"),
+    ("RB", "RB"),
+    ("LT", "LT"),
+    ("RT", "RT"),
+    ("View", "View"),
+    ("Menu", "Menu"),
+    ("Xbox", "Xbox"),
+    ("Share", "Share"),
+    ("L3", "LS"),
+    ("R3", "RS"),
+    ("D-Pad Up", "DUp"),
+    ("D-Pad Down", "DDown"),
+    ("D-Pad Left", "DLeft"),
+    ("D-Pad Right", "DRight"),
+    ("Paddle 1", "P1"),
+    ("Paddle 2", "P2"),
+    ("Paddle 3", "P3"),
+    ("Paddle 4", "P4"),
+]
+
+_GAMEPAD_HOTSPOT_TO_BTN: dict[str, tuple[str, str]] = {
+    name: (button_name, label) for label, button_name in GAMEPAD_BUTTONS for name in [button_name]
+}
+
+
+def _coerce_hotspot_list(raw: Any) -> list[tuple[str, float, float]] | None:
+    if not isinstance(raw, list):
+        return None
+
+    parsed: list[tuple[str, float, float]] = []
+    for item in raw:
+        if not isinstance(item, (list, tuple)) or len(item) != 3:
+            return None
+        name, x, y = item
+        if not isinstance(name, str):
+            return None
+        try:
+            parsed.append((name, float(x), float(y)))
+        except (TypeError, ValueError):
+            return None
+    return parsed
+
+
+def _load_saved_device_hotspots(device_name: str, fallback: list[tuple[str, float, float]]) -> list[tuple[str, float, float]]:
+    import os
+    import sys
+
+    candidates = [
+        os.path.join(os.path.dirname(sys.argv[0]), "hotspot_positions.json"),
+        os.path.join(os.getcwd(), "hotspot_positions.json"),
+    ]
+    for path in candidates:
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (json.JSONDecodeError, OSError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        hotspots = _coerce_hotspot_list(data.get(device_name))
+        if hotspots is not None:
+            return hotspots
+    return list(fallback)
 
 # Advanced binding types
 ADVANCED_TYPES: list[tuple] = [
@@ -204,6 +280,7 @@ class MappingPopup(QDialog):
         self._tabs = QTabWidget()
         self._build_keyboard_tab()
         self._build_mouse_tab()
+        self._build_gamepad_tab()
         self._build_macro_tab()
         self._build_advanced_tab()
         root.addWidget(self._tabs, 1)
@@ -460,9 +537,66 @@ class MappingPopup(QDialog):
 
         self._tabs.addTab(page, "\U0001F5B1  Mouse")
 
+    # =================================================================
+    # Gamepad tab
+    # =================================================================
+
+    def _build_gamepad_tab(self) -> None:
+        page = QWidget()
+        lay = QVBoxLayout(page)
+        lay.setContentsMargins(8, 8, 8, 8)
+        lay.setSpacing(8)
+
+        info = QLabel("Click a gamepad control on the image, or use the buttons below.")
+        info.setStyleSheet("color: grey; font-size: 12px;")
+        lay.addWidget(info)
+
+        theme = self._main.theme
+        theme_key = "dark" if theme.is_dark else "default"
+        self._gamepad_canvas = HotspotCanvas(theme, page)
+        self._gamepad_canvas.setMinimumHeight(260)
+        accent = theme.theme["colors"]["accent"]
+        self._gamepad_canvas.set_overlay_color(accent)
+        gamepad_hs = [
+            hotspot
+            for hotspot in _load_saved_device_hotspots(
+                "gamepad",
+                GAMEPAD_HOTSPOTS.get(theme_key, GAMEPAD_HOTSPOTS["default"]),
+            )
+            if hotspot[0] in _GAMEPAD_HOTSPOT_TO_BTN
+        ]
+        gamepad_pm = self._load_gamepad_pixmap(theme_key)
+        self._gamepad_canvas.set_hotspots(gamepad_hs)
+        self._gamepad_canvas.set_hotspot_shapes(GAMEPAD_BUTTON_SHAPES)
+        self._gamepad_canvas.set_wide_set(GAMEPAD_WIDE)
+        if gamepad_pm:
+            self._gamepad_canvas.set_background(gamepad_pm)
+        self._gamepad_canvas.hotspot_clicked.connect(self._on_gamepad_hotspot_clicked)
+        lay.addWidget(self._gamepad_canvas, 1)
+
+        self._gamepad_selected: str | None = None
+        self._gamepad_btns: dict[str, QPushButton] = {}
+        grid = QGridLayout()
+        grid.setSpacing(6)
+        for index, (label, button_name) in enumerate(GAMEPAD_BUTTONS):
+            btn = QPushButton(label)
+            btn.setFixedHeight(32)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.clicked.connect(
+                lambda checked, bn=button_name, lb=label: self._select_gamepad(bn, lb)
+            )
+            grid.addWidget(btn, index // 4, index % 4)
+            self._gamepad_btns[button_name] = btn
+        lay.addLayout(grid)
+
+        self._gamepad_label = QLabel("No gamepad control selected")
+        self._gamepad_label.setStyleSheet("font-size: 13px; font-weight: bold;")
+        lay.addWidget(self._gamepad_label)
+
+        self._tabs.addTab(page, "\U0001F3AE  Gamepad")
+
     def _load_mouse_pixmap(self, theme_key: str) -> QPixmap | None:
         """Load razer_none.png for the active theme."""
-        from pathlib import Path
         repo = Path(__file__).resolve().parents[4]
         candidates = [
             ("razer_none.png", theme_key),
@@ -474,6 +608,20 @@ class MappingPopup(QDialog):
             if pm:
                 return pm
         return self._main.assets.load_pixmap("razer_none.png")
+
+    def _load_gamepad_pixmap(self, theme_key: str) -> QPixmap | None:
+        """Load gamepad_none.png for the active theme."""
+        repo = Path(__file__).resolve().parents[4]
+        candidates = [
+            ("gamepad_none.png", theme_key),
+            ("gamepad_none.png", "default"),
+        ]
+        for fname, tk in candidates:
+            bg_root = repo / "docs" / "ui" / tk / "backgrounds"
+            pm = self._main.assets.load_pixmap(fname, extra_roots=[bg_root])
+            if pm:
+                return pm
+        return self._main.assets.load_pixmap("gamepad_none.png")
 
     def _on_mouse_hotspot_clicked(self, name: str) -> None:
         """Handle click on a mouse image hotspot."""
@@ -500,6 +648,27 @@ class MappingPopup(QDialog):
         )
         if hotspot_name and hasattr(self, "_mouse_canvas"):
             self._mouse_canvas.set_selected(hotspot_name)
+        self._update_preview()
+
+    def _on_gamepad_hotspot_clicked(self, name: str) -> None:
+        """Handle click on a gamepad image hotspot."""
+        entry = _GAMEPAD_HOTSPOT_TO_BTN.get(name)
+        if entry is None:
+            return
+        button_name, label = entry
+        self._select_gamepad(button_name, label)
+        self._gamepad_canvas.set_selected(name)
+
+    def _select_gamepad(self, button_name: str, label: str) -> None:
+        accent = self._main.theme.theme["colors"]["accent"]
+        for current_name, btn in self._gamepad_btns.items():
+            btn.setStyleSheet(
+                f"background: {accent}; color: #fff;" if current_name == button_name else ""
+            )
+        self._gamepad_selected = button_name
+        self._gamepad_label.setText(f"Selected: {label}")
+        if hasattr(self, "_gamepad_canvas"):
+            self._gamepad_canvas.set_selected(button_name)
         self._update_preview()
 
     # =================================================================
@@ -858,14 +1027,19 @@ class MappingPopup(QDialog):
                 return None
             return {"type": "mouse", "button": self._mouse_selected}
 
-        elif tab == 2:  # Macro
+        elif tab == 2:  # Gamepad
+            if self._gamepad_selected is None:
+                return None
+            return {"type": "gamepad_button", "button": self._gamepad_selected}
+
+        elif tab == 3:  # Macro
             idx = self._macro_combo.currentIndex()
             data = self._macro_combo.itemData(idx)
             if data is None:
                 return None
             return {"type": "macro", "macro_name": data.get("name", "Unnamed")}
 
-        elif tab == 3:  # Advanced
+        elif tab == 4:  # Advanced
             adv_idx = self._adv_type_combo.currentIndex()
             type_id = self._adv_type_combo.itemData(adv_idx)
             entry: dict[str, Any] = {"type": type_id}
@@ -939,8 +1113,15 @@ class MappingPopup(QDialog):
                         self._select_mouse(bid, label_text)
                         break
 
-        elif entry_type == "macro":
+        elif entry_type == "gamepad_button":
             self._tabs.setCurrentIndex(2)
+            button_name = self._entry.get("button")
+            if isinstance(button_name, str):
+                label = next((label_text for label_text, name in GAMEPAD_BUTTONS if name == button_name), button_name)
+                self._select_gamepad(button_name, label)
+
+        elif entry_type == "macro":
+            self._tabs.setCurrentIndex(3)
             macro_name = self._entry.get("macro_name", "")
             for i in range(self._macro_combo.count()):
                 data = self._macro_combo.itemData(i)
@@ -949,7 +1130,7 @@ class MappingPopup(QDialog):
                     break
 
         elif entry_type in {t[0] for t in ADVANCED_TYPES}:
-            self._tabs.setCurrentIndex(3)
+            self._tabs.setCurrentIndex(4)
             for i, (tid, _, _) in enumerate(ADVANCED_TYPES):
                 if tid == entry_type:
                     self._adv_type_combo.setCurrentIndex(i)
@@ -1017,7 +1198,7 @@ class MappingPopup(QDialog):
         if entry is None:
             QMessageBox.warning(
                 self, "Incomplete",
-                "Select a key, mouse button, macro, or advanced type before applying.",
+                "Select a key, mouse button, gamepad control, macro, or advanced type before applying.",
             )
             return
         self._result_entry = entry
@@ -1057,6 +1238,12 @@ class MappingPopup(QDialog):
                 if bid == entry.get("button"):
                     return f"Mouse: {label}"
             return "Mouse"
+        if t == "gamepad_button":
+            button_name = entry.get("button")
+            for label, name in GAMEPAD_BUTTONS:
+                if name == button_name:
+                    return f"Gamepad: {label}"
+            return f"Gamepad: {button_name}" if button_name else "Gamepad"
         if t == "macro":
             return f"Macro: {entry.get('macro_name', '?')}"
         if t == "disable":

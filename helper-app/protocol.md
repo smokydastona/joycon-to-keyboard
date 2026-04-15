@@ -155,6 +155,7 @@ Notes:
 | `oneshot` | One-shot modifier: press once to arm, next key press applies the modifier once, then auto-releases. Contains `mod` and `keycode`. See below. |
 | `auto_shift` | Quick tap sends normal key, hold past threshold sends shifted key. Contains `normal` and `shifted` sub-objects plus `hold_ms`. See below. |
 | `mouse_button` | Maps to a real USB HID mouse button. Contains `button` (1=left, 2=right, 4=middle). See below. |
+| `gamepad_button` | Maps to a real USB HID gamepad control. Contains `button` (`"A"`, `"B"`, `"X"`, `"Y"`, `"LB"`, `"RB"`, `"LT"`, `"RT"`, `"View"`, `"Menu"`, `"Xbox"`, `"Share"`, `"LS"`, `"RS"`, `"DUp"`, `"DDown"`, `"DLeft"`, `"DRight"`, `"P1"`, `"P2"`, `"P3"`, `"P4"`). See below. |
 | `sequential` | Cycles through a list of outputs on each press. Contains `outputs` array. See below. |
 | `leader` | Activates leader key mode: buffers subsequent presses and matches against `leader_sequences`. No extra fields. |
 | `profile_switch` | Switches the active profile slot and reloads. Contains `slot` (0–3). See below. |
@@ -325,6 +326,21 @@ Each press cycles to the next output in a list:
 | field | type | description |
 |-------|------|-------------|
 | `outputs` | array | 1–8 objects, each with `mod` and `keycode`. |
+
+### Gamepad button mapping
+
+Maps a controller button to a real USB HID gamepad control:
+
+```json
+{
+	"type": "gamepad_button",
+	"button": "A"
+}
+```
+
+| field | type | description |
+|-------|------|-------------|
+| `button` | string | Gamepad control name: `A`, `B`, `X`, `Y`, `LB`, `RB`, `LT`, `RT`, `View`, `Menu`, `Xbox`, `Share`, `LS`, `RS`, `DUp`, `DDown`, `DLeft`, `DRight`, `P1`, `P2`, `P3`, `P4`. |
 
 ### Leader mapping
 

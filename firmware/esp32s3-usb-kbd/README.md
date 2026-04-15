@@ -105,6 +105,7 @@ The profile system supports these mapping modes:
 - **oneshot** — one-shot modifier: arms on press, applies to the next key, then auto-releases
 - **auto_shift** — quick tap sends normal key, hold past threshold sends shifted key
 - **mouse_button** — maps a controller button to a USB HID mouse button (left/right/middle)
+- **gamepad_button** — maps a controller button to a USB HID gamepad control (ABXY, shoulders, paddles, d-pad, etc.)
 - **sequential** — cycles through a list of outputs on each press
 - **leader** — activates leader key mode: buffers subsequent key presses and matches against configured sequences
 - **profile_switch** — switches the active profile slot (0–3) and reloads

@@ -58,6 +58,53 @@ if TYPE_CHECKING:
 log = logging.getLogger("joycon_helper.ui.views.mapping")
 
 
+def _coerce_hotspot_list(raw: Any) -> list[tuple[str, float, float]] | None:
+    if not isinstance(raw, list):
+        return None
+
+    parsed: list[tuple[str, float, float]] = []
+    for item in raw:
+        if not isinstance(item, (list, tuple)) or len(item) != 3:
+            return None
+        name, x, y = item
+        if not isinstance(name, str):
+            return None
+        try:
+            parsed.append((name, float(x), float(y)))
+        except (TypeError, ValueError):
+            return None
+    return parsed
+
+
+def _find_startup_hotspot_positions() -> tuple[str, dict[str, list[tuple[str, float, float]]]] | None:
+    import os
+    import sys
+
+    candidates = [
+        os.path.join(os.path.dirname(sys.argv[0]), "hotspot_positions.json"),
+        os.path.join(os.getcwd(), "hotspot_positions.json"),
+    ]
+    for path in candidates:
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, encoding="utf-8") as fh:
+                data = json.load(fh)
+        except (json.JSONDecodeError, OSError):
+            continue
+        if not isinstance(data, dict):
+            continue
+
+        parsed: dict[str, list[tuple[str, float, float]]] = {}
+        for device_name, raw_hotspots in data.items():
+            hotspots = _coerce_hotspot_list(raw_hotspots)
+            if hotspots is not None:
+                parsed[device_name] = hotspots
+        if parsed:
+            return path, parsed
+    return None
+
+
 def _ensure_mappings(profile: dict) -> dict:
     if "mappings" not in profile:
         profile["mappings"] = {}
@@ -80,8 +127,12 @@ class MappingView(QWidget):
 
         # Per-skin editable position caches (survive skin switching)
         tk = "dark" if main.theme.is_dark else "default"
+        self._joycon_pos = list(KEYMAP_HOTSPOTS[tk])
         self._m913_stock_pos = list(M913_HOTSPOTS[tk])
         self._m913_incedius_pos = list(INCEDIUS_HOTSPOTS[tk])
+        self._mouse_pos = list(MOUSE_HOTSPOTS[tk])
+        self._gamepad_pos = list(GAMEPAD_HOTSPOTS[tk])
+        self._keyboard_pos = list(KBD_HOTSPOTS[tk])
 
         self._init_complete = False
 
@@ -407,22 +458,20 @@ class MappingView(QWidget):
     # -----------------------------------------------------------------
 
     def _load_hotspots(self) -> None:
-        tk = self._theme_key
-
         # Try loading saved positions from hotspot_positions.json
         self._try_load_saved_positions()
 
-        self._jc_canvas.set_hotspots(KEYMAP_HOTSPOTS[tk])
+        self._jc_canvas.set_hotspots(self._joycon_pos)
         self._jc_canvas.set_hotspot_shapes(JOYCON_BUTTON_SHAPES)
         # M913 uses the cached per-skin positions
         self._m913_canvas.set_hotspots(self._m913_stock_pos)
         self._m913_canvas.set_wide_set(M913_WIDE)
-        self._mouse_canvas.set_hotspots(MOUSE_HOTSPOTS[tk])
+        self._mouse_canvas.set_hotspots(self._mouse_pos)
         self._mouse_canvas.set_wide_set(MOUSE_WIDE)
-        self._gp_canvas.set_hotspots(GAMEPAD_HOTSPOTS[tk])
+        self._gp_canvas.set_hotspots(self._gamepad_pos)
         self._gp_canvas.set_hotspot_shapes(GAMEPAD_BUTTON_SHAPES)
         self._gp_canvas.set_wide_set(GAMEPAD_WIDE)
-        self._kbd_canvas.set_hotspots(KBD_HOTSPOTS[tk])
+        self._kbd_canvas.set_hotspots(self._keyboard_pos)
         self._kbd_canvas.set_wide_set(KBD_WIDE)
 
         # Joy-Con background
@@ -461,29 +510,18 @@ class MappingView(QWidget):
         exists next to the executable / working directory.  Updates the
         internal position caches so M913 and Incedius each keep their
         own coordinates."""
-        import os
-        import sys
+        result = _find_startup_hotspot_positions()
+        if result is None:
+            return
 
-        candidates = [
-            os.path.join(os.path.dirname(sys.argv[0]), "hotspot_positions.json"),
-            os.path.join(os.getcwd(), "hotspot_positions.json"),
-        ]
-        for p in candidates:
-            if not os.path.isfile(p):
-                continue
-            try:
-                with open(p, encoding="utf-8") as fh:
-                    data = json.load(fh)
-            except (json.JSONDecodeError, OSError):
-                continue
-            if not isinstance(data, dict):
-                continue
-            if "m913" in data:
-                self._m913_stock_pos = [(n, x, y) for n, x, y in data["m913"]]
-            if "incedius" in data:
-                self._m913_incedius_pos = [(n, x, y) for n, x, y in data["incedius"]]
-            log.info("Loaded hotspot positions from %s", p)
-            break
+        path, data = result
+        self._joycon_pos = list(data.get("joycon", self._joycon_pos))
+        self._m913_stock_pos = list(data.get("m913", self._m913_stock_pos))
+        self._m913_incedius_pos = list(data.get("incedius", self._m913_incedius_pos))
+        self._mouse_pos = list(data.get("mouse", self._mouse_pos))
+        self._gamepad_pos = list(data.get("gamepad", self._gamepad_pos))
+        self._keyboard_pos = list(data.get("keyboard", self._keyboard_pos))
+        log.info("Loaded hotspot positions from %s", path)
 
     # -----------------------------------------------------------------
     # Overlay helpers (pale composite + bright individual)
@@ -568,13 +606,12 @@ class MappingView(QWidget):
 
     def _device_list(self):
         """Return list of (canvas, hotspot_list) in tab order."""
-        tk = self._theme_key
         m913_hs = self._m913_incedius_pos if self._m913_skin == "Incedius" else self._m913_stock_pos
         return [
-            (self._jc_canvas, KEYMAP_HOTSPOTS[tk]),
+            (self._jc_canvas, self._joycon_pos),
             (self._m913_canvas, m913_hs),
-            (self._mouse_canvas, MOUSE_HOTSPOTS[tk]),
-            (self._gp_canvas, GAMEPAD_HOTSPOTS[tk]),
+            (self._mouse_canvas, self._mouse_pos),
+            (self._gp_canvas, self._gamepad_pos),
         ]
 
     def _active_canvas(self) -> HotspotCanvas:
@@ -961,8 +998,8 @@ class MappingView(QWidget):
 
         loaded: list[str] = []
         if "joycon" in data:
-            hs = [(n, x, y) for n, x, y in data["joycon"]]
-            self._jc_canvas.set_hotspots(hs)
+            self._joycon_pos = [(n, x, y) for n, x, y in data["joycon"]]
+            self._jc_canvas.set_hotspots(self._joycon_pos)
             loaded.append("Joy-Con")
         if "m913" in data:
             self._m913_stock_pos = [(n, x, y) for n, x, y in data["m913"]]
@@ -975,16 +1012,16 @@ class MappingView(QWidget):
                 self._m913_canvas.set_hotspots(self._m913_incedius_pos)
             loaded.append("M913 Incedius")
         if "mouse" in data:
-            hs = [(n, x, y) for n, x, y in data["mouse"]]
-            self._mouse_canvas.set_hotspots(hs)
+            self._mouse_pos = [(n, x, y) for n, x, y in data["mouse"]]
+            self._mouse_canvas.set_hotspots(self._mouse_pos)
             loaded.append("Mouse")
         if "gamepad" in data:
-            hs = [(n, x, y) for n, x, y in data["gamepad"]]
-            self._gp_canvas.set_hotspots(hs)
+            self._gamepad_pos = [(n, x, y) for n, x, y in data["gamepad"]]
+            self._gp_canvas.set_hotspots(self._gamepad_pos)
             loaded.append("Gamepad")
         if "keyboard" in data:
-            hs = [(n, x, y) for n, x, y in data["keyboard"]]
-            self._kbd_canvas.set_hotspots(hs)
+            self._keyboard_pos = [(n, x, y) for n, x, y in data["keyboard"]]
+            self._kbd_canvas.set_hotspots(self._keyboard_pos)
             loaded.append("Keyboard")
 
         self._refresh_mapping_visuals()
@@ -1163,12 +1200,12 @@ class MappingView(QWidget):
         mappings = profile.get("mappings", {})
         bound = sum(
             1 for v in mappings.values()
-            if isinstance(v, dict) and v.get("keycode") is not None
+            if isinstance(v, dict) and (v.get("keycode") is not None or v.get("type"))
         )
         macros = len(profile.get("macros", []))
         layers = len(profile.get("layers", []))
         chords = len(profile.get("chords", []))
-        parts = [f"{bound} key{'s' if bound != 1 else ''} bound"]
+        parts = [f"{bound} binding{'s' if bound != 1 else ''}"]
         if macros:
             parts.append(f"{macros} macro{'s' if macros != 1 else ''}")
         if layers:

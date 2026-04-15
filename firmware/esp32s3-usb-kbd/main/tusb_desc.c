@@ -83,20 +83,20 @@ static uint8_t const desc_hid_report_combined[] = {
     0xC0,              // End Collection (Application)
 
     // === Gamepad (Report ID = 2) ===
-    // 16 buttons + hat switch (4-bit + 4-bit pad) + X/Y/Rx/Ry axes (int16).
-    // Struct layout: buttons[2], hat_pad[1], x[2], y[2], rx[2], ry[2] = 11 bytes.
+    // 32 buttons + hat switch (4-bit + 4-bit pad) + X/Y/Rx/Ry axes (int16).
+    // Struct layout: buttons[4], hat_pad[1], x[2], y[2], rx[2], ry[2] = 13 bytes.
     0x05, 0x01,        // Usage Page (Generic Desktop)
     0x09, 0x05,        // Usage (Game Pad)
     0xA1, 0x01,        // Collection (Application)
       0x85, 0x02,      //   Report ID (2)
-      // 16 buttons
+    // 32 buttons
       0x05, 0x09,      //   Usage Page (Button)
       0x19, 0x01,      //   Usage Minimum (Button 1)
-      0x29, 0x10,      //   Usage Maximum (Button 16)
+    0x29, 0x20,      //   Usage Maximum (Button 32)
       0x15, 0x00,      //   Logical Minimum (0)
       0x25, 0x01,      //   Logical Maximum (1)
       0x75, 0x01,      //   Report Size (1)
-      0x95, 0x10,      //   Report Count (16)
+    0x95, 0x20,      //   Report Count (32)
       0x81, 0x02,      //   Input (Data, Var, Abs)
       // Hat switch (4 bits, null = 8)
       0x05, 0x01,      //   Usage Page (Generic Desktop)

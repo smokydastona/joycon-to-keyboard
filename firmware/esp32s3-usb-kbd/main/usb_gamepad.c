@@ -30,7 +30,7 @@
 
 typedef struct __attribute__((packed))
 {
-    uint16_t buttons;
+    uint32_t buttons;
     uint8_t hat; // low nibble hat (0..7), 8 = neutral; high nibble padding
     int16_t x;
     int16_t y;
@@ -53,12 +53,20 @@ static struct
 
     bool lb;
     bool rb;
+    bool lt;
+    bool rt;
 
     bool back;
     bool start;
 
     bool l3;
     bool r3;
+    bool xbox;
+    bool share;
+    bool p1;
+    bool p2;
+    bool p3;
+    bool p4;
 
     // Analog state.
     int16_t lx;
@@ -114,8 +122,9 @@ static void build_report(bind_bandit_gamepad_report_t *r)
 {
     memset(r, 0, sizeof(*r));
 
-    // Buttons (16).
-    // 0: A, 1: B, 2: X, 3: Y, 4: LB, 5: RB, 6: Back, 7: Start, 8: L3, 9: R3
+    // Buttons.
+    // 0:A 1:B 2:X 3:Y 4:LB 5:RB 6:LT 7:RT 8:View 9:Menu 10:L3 11:R3
+    // 12:Xbox 13:Share 14:P1 15:P2 16:P3 17:P4
     if (g_gamepad.a)
         r->buttons |= (1u << 0);
     if (g_gamepad.b)
@@ -128,14 +137,30 @@ static void build_report(bind_bandit_gamepad_report_t *r)
         r->buttons |= (1u << 4);
     if (g_gamepad.rb)
         r->buttons |= (1u << 5);
-    if (g_gamepad.back)
+    if (g_gamepad.lt)
         r->buttons |= (1u << 6);
-    if (g_gamepad.start)
+    if (g_gamepad.rt)
         r->buttons |= (1u << 7);
-    if (g_gamepad.l3)
+    if (g_gamepad.back)
         r->buttons |= (1u << 8);
-    if (g_gamepad.r3)
+    if (g_gamepad.start)
         r->buttons |= (1u << 9);
+    if (g_gamepad.l3)
+        r->buttons |= (1u << 10);
+    if (g_gamepad.r3)
+        r->buttons |= (1u << 11);
+    if (g_gamepad.xbox)
+        r->buttons |= (1u << 12);
+    if (g_gamepad.share)
+        r->buttons |= (1u << 13);
+    if (g_gamepad.p1)
+        r->buttons |= (1u << 14);
+    if (g_gamepad.p2)
+        r->buttons |= (1u << 15);
+    if (g_gamepad.p3)
+        r->buttons |= (1u << 16);
+    if (g_gamepad.p4)
+        r->buttons |= (1u << 17);
 
     r->hat = hat_from_dpad(g_gamepad.up, g_gamepad.down, g_gamepad.left, g_gamepad.right);
 
@@ -284,6 +309,83 @@ void usb_gamepad_handle_analog(uint8_t device_id, int16_t x, int16_t y)
             g_gamepad.rx = rx0;
             g_gamepad.ry = ry0;
         }
+    }
+
+    send_report_if_ready();
+}
+
+void usb_gamepad_set_virtual_button(uint8_t output, bool pressed)
+{
+    switch (output)
+    {
+    case USB_GAMEPAD_OUTPUT_A:
+        g_gamepad.a = pressed;
+        break;
+    case USB_GAMEPAD_OUTPUT_B:
+        g_gamepad.b = pressed;
+        break;
+    case USB_GAMEPAD_OUTPUT_X:
+        g_gamepad.x = pressed;
+        break;
+    case USB_GAMEPAD_OUTPUT_Y:
+        g_gamepad.y = pressed;
+        break;
+    case USB_GAMEPAD_OUTPUT_LB:
+        g_gamepad.lb = pressed;
+        break;
+    case USB_GAMEPAD_OUTPUT_RB:
+        g_gamepad.rb = pressed;
+        break;
+    case USB_GAMEPAD_OUTPUT_LT:
+        g_gamepad.lt = pressed;
+        break;
+    case USB_GAMEPAD_OUTPUT_RT:
+        g_gamepad.rt = pressed;
+        break;
+    case USB_GAMEPAD_OUTPUT_VIEW:
+        g_gamepad.back = pressed;
+        break;
+    case USB_GAMEPAD_OUTPUT_MENU:
+        g_gamepad.start = pressed;
+        break;
+    case USB_GAMEPAD_OUTPUT_L3:
+        g_gamepad.l3 = pressed;
+        break;
+    case USB_GAMEPAD_OUTPUT_R3:
+        g_gamepad.r3 = pressed;
+        break;
+    case USB_GAMEPAD_OUTPUT_XBOX:
+        g_gamepad.xbox = pressed;
+        break;
+    case USB_GAMEPAD_OUTPUT_SHARE:
+        g_gamepad.share = pressed;
+        break;
+    case USB_GAMEPAD_OUTPUT_P1:
+        g_gamepad.p1 = pressed;
+        break;
+    case USB_GAMEPAD_OUTPUT_P2:
+        g_gamepad.p2 = pressed;
+        break;
+    case USB_GAMEPAD_OUTPUT_P3:
+        g_gamepad.p3 = pressed;
+        break;
+    case USB_GAMEPAD_OUTPUT_P4:
+        g_gamepad.p4 = pressed;
+        break;
+    case USB_GAMEPAD_OUTPUT_DPAD_UP:
+        g_gamepad.up = pressed;
+        break;
+    case USB_GAMEPAD_OUTPUT_DPAD_DOWN:
+        g_gamepad.down = pressed;
+        break;
+    case USB_GAMEPAD_OUTPUT_DPAD_LEFT:
+        g_gamepad.left = pressed;
+        break;
+    case USB_GAMEPAD_OUTPUT_DPAD_RIGHT:
+        g_gamepad.right = pressed;
+        break;
+    default:
+        return;
     }
 
     send_report_if_ready();
