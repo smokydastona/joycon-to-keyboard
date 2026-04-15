@@ -1,7 +1,8 @@
 """Generate per-button overlay PNGs for every device in the project.
 
 Each overlay is a transparent PNG (same size as the device image) with a
-hand-drawn pencil-sketch highlight at the button's hotspot position.
+hand-drawn pencil-sketch highlight at the button's hotspot position plus a
+matching handwritten legend/symbol for the represented physical control.
 Joy-Con overlays use shape-aware drawing matching JOYCON_BUTTON_SHAPES.
 Seven rainbow colour variants are generated per button so the user can choose
 their preferred highlight colour at runtime:
@@ -39,10 +40,11 @@ import math
 import random
 import sys
 import zlib
+from functools import lru_cache
 from pathlib import Path
 
 try:
-    from PIL import Image, ImageDraw  # type: ignore
+    from PIL import Image, ImageDraw, ImageFont  # type: ignore
 except ImportError as e:
     print("Pillow is required: pip install Pillow", file=sys.stderr)
     raise SystemExit(1) from e
@@ -70,6 +72,7 @@ from joycon_helper.ui.constants import (  # noqa: E402  # isort: skip
 
 UI_DIR = REPO_ROOT / "docs" / "ui"
 OUT_DIR = UI_DIR / "button_overlays"
+DOODLE_FONT = UI_DIR / "fonts" / "Doodle.otf"
 
 IMAGE_W = 1536
 IMAGE_H = 1024
@@ -431,6 +434,222 @@ RAINBOW_COLORS: dict[str, tuple[int, int, int, int]] = {
 
 DEFAULT_RAINBOW = "violet"
 
+_KEYBOARD_LEGENDS: dict[str, str] = {
+    "Esc": "Esc",
+    "PrtSc": "Prt",
+    "ScrLk": "Scr",
+    "Pause": "Pau",
+    "Grave": "`",
+    "Minus": "-",
+    "Equal": "=",
+    "Backspace": "Back",
+    "Ins": "Ins",
+    "Home": "Home",
+    "PgUp": "PgUp",
+    "NumLk": "Num",
+    "KPDiv": "/",
+    "KPMul": "*",
+    "KPMin": "-",
+    "Tab": "Tab",
+    "LBracket": "[",
+    "RBracket": "]",
+    "Backslash": "\\",
+    "Del": "Del",
+    "End": "End",
+    "PgDn": "PgDn",
+    "KPPlus": "+",
+    "CapsLk": "Caps",
+    "Semicolon": ";",
+    "Apostrophe": "'",
+    "Enter": "Enter",
+    "LShift": "Shift",
+    "Comma": ",",
+    "Period": ".",
+    "Slash": "/",
+    "RShift": "Shift",
+    "Up": "Up",
+    "LCtrl": "Ctrl",
+    "Win": "Win",
+    "LAlt": "Alt",
+    "Space": "Space",
+    "RAlt": "Alt",
+    "Fn": "Fn",
+    "RCtrl": "Ctrl",
+    "Left": "Lt",
+    "Down": "Dn",
+    "Right": "Rt",
+    "KPDot": ".",
+    "KPEnter": "Ent",
+}
+
+_JOYCON_LEGENDS: dict[str, str] = {
+    "LStick": "LS",
+    "RStick": "RS",
+    "LSUp": "Up",
+    "LSDown": "Dn",
+    "LSLeft": "Lt",
+    "LSRight": "Rt",
+    "RSUp": "Up",
+    "RSDown": "Dn",
+    "RSLeft": "Lt",
+    "RSRight": "Rt",
+    "DUp": "Up",
+    "DDown": "Dn",
+    "DLeft": "Lt",
+    "DRight": "Rt",
+    "Plus": "+",
+    "Minus": "-",
+    "Capture": "Cap",
+    "Home": "Home",
+    "SL(L)": "SL",
+    "SR(L)": "SR",
+    "SL(R)": "SL",
+    "SR(R)": "SR",
+    "Shake": "Shk",
+    "TiltUp": "Up",
+    "TiltDn": "Dn",
+    "TiltL": "Lt",
+    "TiltR": "Rt",
+    "Flick": "Flk",
+}
+
+_GAMEPAD_LEGENDS: dict[str, str] = {
+    "View": "View",
+    "Menu": "Menu",
+    "Xbox": "XB",
+    "Share": "Shr",
+    "LS": "LS",
+    "RS": "RS",
+    "DUp": "Up",
+    "DDown": "Dn",
+    "DLeft": "Lt",
+    "DRight": "Rt",
+}
+
+_MOUSE_LEGENDS: dict[str, str] = {
+    "left": "L",
+    "right": "R",
+    "middle": "M",
+    "back": "Bk",
+    "forward": "Fwd",
+    "scroll_up": "Up",
+    "scroll_down": "Dn",
+}
+
+
+def _overlay_legend(device_name: str, label: str) -> str:
+    if device_name == "keyboard":
+        if label in _KEYBOARD_LEGENDS:
+            return _KEYBOARD_LEGENDS[label]
+        if label.startswith("KP") and len(label) == 3 and label[-1].isdigit():
+            return label[-1]
+        return label
+
+    if device_name == "joycon":
+        return _JOYCON_LEGENDS.get(label, label)
+
+    if device_name == "gamepad":
+        if label in _GAMEPAD_LEGENDS:
+            return _GAMEPAD_LEGENDS[label]
+        if label.startswith("P") and label[1:].isdigit():
+            return label
+        return label
+
+    if device_name in {"mouse", "m913", "incedius"}:
+        if label in _MOUSE_LEGENDS:
+            return _MOUSE_LEGENDS[label]
+        if label.startswith("side") and label[4:].isdigit():
+            return label[4:]
+        if label == "fire":
+            return "Fire"
+        return label.title()
+
+    return label
+
+
+def _shape_text_bounds(label: str, shapes: dict | None, wide_set: set[str]) -> tuple[float, float]:
+    spec = (shapes or {}).get(label)
+    if not spec:
+        radius = RADIUS_WIDE if label in wide_set else RADIUS_NORMAL
+        return radius * 1.6, radius * 1.2
+
+    kind = spec[0]
+    if kind == "circle":
+        return spec[1] * 1.55, spec[1] * 1.2
+    if kind == "rrect":
+        return spec[1] * 0.82, spec[2] * 0.72
+    if kind == "plus":
+        return spec[1] * 1.35, spec[1] * 1.35
+    if kind in {"home", "camera"}:
+        size = spec[1]
+        return size * 1.7, size * 1.2
+    if kind.startswith("arrow_"):
+        size = spec[1]
+        return size * 1.3, size * 0.9
+    if kind.startswith("arc_"):
+        return spec[2] * 0.9, (spec[2] - spec[1]) * 1.2
+
+    return RADIUS_NORMAL * 1.6, RADIUS_NORMAL * 1.2
+
+
+@lru_cache(maxsize=64)
+def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    if DOODLE_FONT.exists():
+        try:
+            return ImageFont.truetype(str(DOODLE_FONT), size=size)
+        except OSError:
+            pass
+    return ImageFont.load_default()
+
+
+def _fit_font(text: str, max_w: float, max_h: float) -> tuple[ImageFont.FreeTypeFont | ImageFont.ImageFont, tuple[int, int, int, int]]:
+    probe = ImageDraw.Draw(Image.new("RGBA", (4, 4), (0, 0, 0, 0)))
+    for size in range(int(max_h * 1.35), 9, -1):
+        font = _load_font(size)
+        bbox = probe.textbbox((0, 0), text, font=font)
+        width = bbox[2] - bbox[0]
+        height = bbox[3] - bbox[1]
+        if width <= max_w and height <= max_h:
+            return font, bbox
+    font = _load_font(10)
+    bbox = probe.textbbox((0, 0), text, font=font)
+    return font, bbox
+
+
+def _draw_overlay_legend(
+    draw: ImageDraw.ImageDraw,
+    device_name: str,
+    label: str,
+    px: int,
+    py: int,
+    color: tuple[int, int, int, int],
+    wide_set: set[str],
+    shapes: dict | None,
+) -> None:
+    text = _overlay_legend(device_name, label)
+    if not text:
+        return
+
+    max_w, max_h = _shape_text_bounds(label, shapes, wide_set)
+    font, bbox = _fit_font(text, max_w, max_h)
+    text_w = bbox[2] - bbox[0]
+    text_h = bbox[3] - bbox[1]
+    x = px - text_w / 2 - bbox[0]
+    y = py - text_h / 2 - bbox[1]
+
+    base_shadow = (24, 17, 12, 115)
+    accent_shadow = (color[0], color[1], color[2], min(220, color[3] + 30))
+    fill = (255, 247, 231, 220)
+    seed = _stable_seed(f"{device_name}:{label}:legend")
+    rng = random.Random(seed)
+    for dx, dy, ink in [
+        (1, 1, base_shadow),
+        (0, 0, accent_shadow),
+        (rng.uniform(-1.2, 1.2), rng.uniform(-1.2, 1.2), accent_shadow),
+    ]:
+        draw.text((x + dx, y + dy), text, font=font, fill=ink)
+    draw.text((x, y), text, font=font, fill=fill)
+
 # ═══════════════════════════════════════════════════════════════════════════
 # Device registry
 # ═══════════════════════════════════════════════════════════════════════════
@@ -482,6 +701,7 @@ def _safe_filename(label: str) -> str:
 
 
 def _generate_overlay(
+    device_name: str,
     label: str,
     px: int,
     py: int,
@@ -506,6 +726,8 @@ def _generate_overlay(
     else:
         r = RADIUS_WIDE if label in wide_set else RADIUS_NORMAL
         _draw_circle_overlay(draw, px, py, r, color)
+
+    _draw_overlay_legend(draw, device_name, label, px, py, color, wide_set, shapes)
 
     dst.parent.mkdir(parents=True, exist_ok=True)
     img.save(str(dst), format="PNG", optimize=True)
@@ -559,7 +781,7 @@ def main() -> int:
             for label, px, py in hotspots:
                 fname = f"{prefix}_{_safe_filename(label)}.png"
                 dst = out_dir / fname
-                _generate_overlay(label, px, py, color, wide, dst, shapes=shapes)
+                _generate_overlay(device_name, label, px, py, color, wide, dst, shapes=shapes)
                 total += 1
 
             # Generate pale composite (all overlays at reduced opacity)
