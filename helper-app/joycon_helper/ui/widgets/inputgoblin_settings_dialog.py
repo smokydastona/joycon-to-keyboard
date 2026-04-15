@@ -9,6 +9,7 @@ Bind Bandit's general Safehouse settings.
 
 from __future__ import annotations
 
+import contextlib
 import logging
 from typing import Any
 
@@ -274,10 +275,8 @@ class InputGoblinSettingsDialog(QDialog):
         self._settings.setValue("baud_rate", value)
         # Keep the connection toolbar in sync.
         if hasattr(self._main, "_baud_edit"):
-            try:
+            with contextlib.suppress(Exception):
                 self._main._baud_edit.setText(value)
-            except Exception:
-                pass
 
     # -----------------------------------------------------------------
     # Event handling
