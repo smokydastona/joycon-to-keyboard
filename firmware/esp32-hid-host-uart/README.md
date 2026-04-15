@@ -91,6 +91,7 @@ A passive piezo buzzer on GPIO 25 provides audible status cues so you don't need
 | Connect | Joy-Con BT connection opens | Two ascending notes (C5→E5) |
 | Disconnect | BT connection closes | Two descending notes (E5→C5) |
 | Discovery start | Inquiry scan begins | Single short beep (A4) |
+| Discovery tick | Every ~3 s while scanning (opt-in) | Very short beep (A4, 40 ms) |
 | Setup complete | FSM finishes (ready for input) | Three ascending notes (C5→E5→G5) |
 | Error | Connection failure or repeated UART errors | Three rapid low beeps (C4×3) |
 
@@ -98,6 +99,8 @@ A passive piezo buzzer on GPIO 25 provides audible status cues so you don't need
 
 - `menuconfig` → `Bind Bandit` → `Enable piezo buzzer audio feedback` (default: on)
 - `menuconfig` → `Bind Bandit` → `Buzzer GPIO pin` (default: 25)
+- `menuconfig` → `Bind Bandit` → `Buzzer volume (1-100)` (default: 50 — 50% duty, loudest for passive piezo)
+- `menuconfig` → `Bind Bandit` → `Periodic beep during BT discovery scan` (default: off)
 - No buzzer wired? Disable in menuconfig — zero overhead (empty inline stubs).
 
 ### Wiring

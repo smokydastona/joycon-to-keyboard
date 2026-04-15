@@ -322,6 +322,7 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
             // the controller to full 0x30 report mode with IMU, reads
             // SPI flash calibration, sets player LEDs).
             joycon_setup_start(param->open.handle, slot, param->open.bd_addr);
+            buzzer_discovery_tick_stop();
             buzzer_play(BUZZER_TONE_CONNECT);
 
             // Clear SOCD/stick state from any prior session so stale
@@ -538,6 +539,7 @@ static void gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t* param) {
                     int free_slot = find_free_slot();
                     if (free_slot < 0) {
                         ESP_LOGI(TAG, "All %d device slots full; stopping discovery", BRIDGE_MAX_DEVICES);
+                        buzzer_discovery_tick_stop();
                         esp_bt_gap_cancel_discovery();
                         break;
                     }
@@ -547,6 +549,7 @@ static void gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t* param) {
                 bridge_send_bt_status(2, param->disc_res.bda, found_name);
 
                 // Stop discovery to reduce noise, then connect.
+                buzzer_discovery_tick_stop();
                 esp_bt_gap_cancel_discovery();
                 try_connect(param->disc_res.bda, device_id, found_name);
             }
@@ -633,6 +636,7 @@ esp_err_t bt_hid_host_start_discovery(void) {
     ESP_LOGI(TAG, "Starting inquiry scan (match='%s', %ds)...", needle, CONFIG_JOYCON_HOST_DISCOVERY_SECONDS);
     bridge_send_bt_status(1, NULL, needle);
     buzzer_play(BUZZER_TONE_DISCOVERY_START);
+    buzzer_discovery_tick_start();
 
     // Best-effort: ignore cancel errors if not currently discovering.
     (void)esp_bt_gap_cancel_discovery();

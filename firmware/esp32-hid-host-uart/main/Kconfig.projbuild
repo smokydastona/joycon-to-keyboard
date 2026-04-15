@@ -147,6 +147,27 @@ config BIND_BANDIT_BUZZER_GPIO
         buzzer goes to this pin, the other to GND.  Default GPIO 25 is
         free on most ESP32 dev boards.
 
+config BIND_BANDIT_BUZZER_VOLUME
+    int "Buzzer volume (1-100)"
+    range 1 100
+    default 50
+    depends on BIND_BANDIT_BUZZER_ENABLED
+    help
+        Volume level as a percentage mapped to LEDC duty cycle.
+        50 = 50% duty (loudest for a passive piezo).
+        Lower values reduce perceived volume.
+        1 = barely audible, 100 = full duty (may sound distorted).
+
+config BIND_BANDIT_BUZZER_DISCOVERY_TICK
+    bool "Periodic beep during BT discovery scan"
+    default n
+    depends on BIND_BANDIT_BUZZER_ENABLED
+    help
+        When enabled, plays a short tick every ~3 seconds while a
+        Bluetooth inquiry scan is in progress.  Provides audible
+        feedback that scanning is active.  Some users may find this
+        annoying, so it is disabled by default.
+
 config JOYCON_HOST_MOTION_TILT_THRESHOLD
     int "Tilt gesture accel threshold"
     range 500 10000

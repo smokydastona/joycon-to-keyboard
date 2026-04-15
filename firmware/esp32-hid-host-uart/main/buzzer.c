@@ -77,6 +77,11 @@ static const buzzer_note_t melody_error[] = {
     { 0, 0 }
 };
 
+static const buzzer_note_t melody_discovery_tick[] = {
+    { NOTE_A4, 40 },
+    { 0, 0 }
+};
+
 static const buzzer_note_t *const s_melodies[] = {
     [BUZZER_TONE_STARTUP]        = melody_startup,
     [BUZZER_TONE_CONNECT]        = melody_connect,
@@ -84,6 +89,7 @@ static const buzzer_note_t *const s_melodies[] = {
     [BUZZER_TONE_DISCOVERY_START]= melody_discovery_start,
     [BUZZER_TONE_SETUP_COMPLETE] = melody_setup_complete,
     [BUZZER_TONE_ERROR]          = melody_error,
+    [BUZZER_TONE_DISCOVERY_TICK]  = melody_discovery_tick,
 };
 
 // ---------- playback state ----------
@@ -101,9 +107,10 @@ static void buzzer_ledc_tone(uint16_t freq_hz) {
         return;
     }
     ledc_set_freq(LEDC_LOW_SPEED_MODE, BUZZER_LEDC_TIMER, freq_hz);
-    // 50% duty for maximum perceived volume from a passive piezo.
-    // 13-bit resolution → max duty = 8191, 50% ≈ 4096.
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, BUZZER_LEDC_CHANNEL, 4096);
+    // Duty cycle from Kconfig volume (1-100).  13-bit resolution → max 8191.
+    uint32_t duty = (uint32_t)(8191UL * BUZZER_VOLUME / 100);
+    if (duty == 0) duty = 1;
+    ledc_set_duty(LEDC_LOW_SPEED_MODE, BUZZER_LEDC_CHANNEL, duty);
     ledc_update_duty(LEDC_LOW_SPEED_MODE, BUZZER_LEDC_CHANNEL);
 }
 
@@ -201,5 +208,47 @@ void buzzer_stop(void) {
     s_seq = NULL;
     buzzer_ledc_off();
 }
+
+// ---------- discovery tick (periodic beep while scanning) ----------
+
+#if CONFIG_BIND_BANDIT_BUZZER_DISCOVERY_TICK
+
+#define DISCOVERY_TICK_INTERVAL_MS 3000
+
+static TimerHandle_t s_disc_tick_timer = NULL;
+
+static void disc_tick_timer_cb(TimerHandle_t xTimer) {
+    (void)xTimer;
+    buzzer_play(BUZZER_TONE_DISCOVERY_TICK);
+}
+
+void buzzer_discovery_tick_start(void) {
+    if (!s_disc_tick_timer) {
+        s_disc_tick_timer = xTimerCreate(
+            "bz_tick",
+            pdMS_TO_TICKS(DISCOVERY_TICK_INTERVAL_MS),
+            pdTRUE,   // auto-reload
+            NULL,
+            disc_tick_timer_cb);
+        if (!s_disc_tick_timer) {
+            ESP_LOGE(TAG, "Failed to create discovery tick timer");
+            return;
+        }
+    }
+    xTimerStart(s_disc_tick_timer, 0);
+}
+
+void buzzer_discovery_tick_stop(void) {
+    if (s_disc_tick_timer) {
+        xTimerStop(s_disc_tick_timer, 0);
+    }
+}
+
+#else
+
+void buzzer_discovery_tick_start(void) {}
+void buzzer_discovery_tick_stop(void) {}
+
+#endif // CONFIG_BIND_BANDIT_BUZZER_DISCOVERY_TICK
 
 #endif // CONFIG_BIND_BANDIT_BUZZER_ENABLED

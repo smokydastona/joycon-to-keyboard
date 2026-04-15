@@ -527,7 +527,13 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "  Verify the passive piezo buzzer is wired to GPIO25 and GND.\n"
                 "  Confirm the buzzer feature is enabled in menuconfig (Bind Bandit → Enable piezo buzzer audio feedback).\n"
                 "  Active buzzers (with built-in oscillator) won't produce variable tones — use a passive piezo.\n"
-                "  Try a different GPIO if 25 is in use — set via menuconfig → Buzzer GPIO pin."
+                "  Try a different GPIO if 25 is in use — set via menuconfig → Buzzer GPIO pin.\n\n"
+                "## Buzzer too loud / too quiet\n"
+                "  Adjust volume via menuconfig → Bind Bandit → Buzzer volume (1–100). Default is 50 (50% duty). "
+                "Lower values reduce volume; values above 50 may clip on most passive piezos.\n\n"
+                "## Want a beep while scanning?\n"
+                "  Enable menuconfig → Bind Bandit → Periodic beep during BT discovery scan. "
+                "This plays a short tick every ~3 seconds while an inquiry scan is active."
             ),
             False,
         ),
