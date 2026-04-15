@@ -1,8 +1,8 @@
 """Logging and crash-log infrastructure for Joy-Con Helper.
 
-Creates two log directories next to the installed application:
-  logs/        – rotating daily application logs
-  crash-logs/  – unhandled exception dumps
+Creates two log directories inside the unified Bind Bandit app-data folder:
+    logs/        – rotating daily application logs
+    crash-logs/  – unhandled exception dumps
 
 Auto-cleans files older than 15 days on startup.
 No personal data is collected.
@@ -18,38 +18,9 @@ import time
 import traceback
 from datetime import datetime
 from logging.handlers import TimedRotatingFileHandler
-from pathlib import Path
 
 from .debug_privacy import sanitize_text
-
-# ---------------------------------------------------------------------------
-# Directory helpers
-# ---------------------------------------------------------------------------
-
-def _app_base_dir() -> Path:
-    """Return the directory where log folders should be created.
-
-    When running as a PyInstaller exe  → next to the .exe
-    When running from source           → helper-app/joycon_helper/../../ (project root of helper-app)
-    """
-    if getattr(sys, "frozen", False):
-        # PyInstaller: sys.executable is the .exe path
-        return Path(sys.executable).resolve().parent
-    # Running from source – place logs next to the helper-app package
-    return Path(__file__).resolve().parent.parent
-
-
-def _ensure_dir(p: Path) -> Path:
-    p.mkdir(parents=True, exist_ok=True)
-    return p
-
-
-def logs_dir() -> Path:
-    return _ensure_dir(_app_base_dir() / "logs")
-
-
-def crash_logs_dir() -> Path:
-    return _ensure_dir(_app_base_dir() / "crash-logs")
+from .user_data import crash_logs_dir, logs_dir
 
 
 # ---------------------------------------------------------------------------

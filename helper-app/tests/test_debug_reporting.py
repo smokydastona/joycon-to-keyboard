@@ -149,3 +149,27 @@ def test_build_issue_url_targets_repo_issue_creation(monkeypatch) -> None:
     assert "/issues/new?" in issue_url
     assert "template=debug-report.md" in issue_url
     assert "debug-report" in issue_url
+
+
+def test_user_data_migrates_legacy_log_directories(monkeypatch, tmp_path) -> None:
+    from joycon_helper import user_data
+
+    data_root = tmp_path / "appdata"
+    helper_root = tmp_path / "helper-app"
+    helper_root.mkdir()
+    legacy_logs = helper_root / "logs"
+    legacy_crash_logs = helper_root / "crash-logs"
+    legacy_logs.mkdir()
+    legacy_crash_logs.mkdir()
+    (legacy_logs / "helper.log").write_text("log-data", encoding="utf-8")
+    (legacy_crash_logs / "crash_1.log").write_text("crash-data", encoding="utf-8")
+
+    monkeypatch.setattr(user_data, "_cached_data_dir", data_root)
+    monkeypatch.setattr(user_data, "_legacy_log_dir_candidates", lambda folder_name: [helper_root / folder_name])
+
+    user_data.migrate_legacy_files()
+
+    assert (data_root / "logs" / "helper.log").read_text(encoding="utf-8") == "log-data"
+    assert (data_root / "crash-logs" / "crash_1.log").read_text(encoding="utf-8") == "crash-data"
+    assert not legacy_logs.exists()
+    assert not legacy_crash_logs.exists()

@@ -11,6 +11,8 @@ Layout::
     ├── state.json                 # session state (last slot, port, window, etc.)
     ├── device_cache.json          # remembered devices
     ├── app_profiles.json          # app-switcher rules
+    ├── logs/                      # helper.log + ota failure reports
+    ├── crash-logs/                # unhandled exception dumps
     ├── profiles/                  # user Joy-Con / bridge mapping profiles
     │   ├── slot_0.json
     │   ├── slot_1.json
@@ -78,6 +80,20 @@ def m913_profiles_dir() -> Path:
 def razer_profiles_dir() -> Path:
     """``<data>/razer/`` — Razer mouse profiles & device registry."""
     d = data_dir() / "razer"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def logs_dir() -> Path:
+    """``<data>/logs/`` — helper log + OTA failure reports."""
+    d = data_dir() / "logs"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def crash_logs_dir() -> Path:
+    """``<data>/crash-logs/`` — unhandled exception dumps."""
+    d = data_dir() / "crash-logs"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -192,9 +208,11 @@ def migrate_legacy_files() -> None:
     Handles:
     * ``device_cache.json`` in the Qt AppDataLocation (pre-unified path)
     * ``app_profiles.json`` next to the executable or in cwd
+    * ``logs/`` and ``crash-logs/`` next to the executable / helper-app root
     """
     _migrate_device_cache()
     _migrate_app_rules()
+    _migrate_legacy_log_dirs()
 
 
 def _migrate_device_cache() -> None:
@@ -239,3 +257,76 @@ def _migrate_app_rules() -> None:
             shutil.copy2(str(old), str(target))
             log.info("Migrated app_profiles.json from %s", old)
             return
+
+
+def _migrate_legacy_log_dirs() -> None:
+    """Move legacy logs and crash dumps into the unified data directory."""
+    for folder_name, target_dir in (("logs", logs_dir()), ("crash-logs", crash_logs_dir())):
+        for source_dir in _legacy_log_dir_candidates(folder_name):
+            _move_directory_contents(source_dir, target_dir)
+
+
+def _legacy_log_dir_candidates(folder_name: str) -> list[Path]:
+    candidates = [Path(__file__).resolve().parent.parent / folder_name, Path.cwd() / folder_name]
+
+    import sys
+
+    if getattr(sys, "frozen", False):
+        candidates.append(Path(sys.executable).resolve().parent / folder_name)
+
+    unique_candidates: list[Path] = []
+    seen: set[Path] = set()
+    for candidate in candidates:
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            resolved = candidate
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        unique_candidates.append(resolved)
+    return unique_candidates
+
+
+def _move_directory_contents(source_dir: Path, target_dir: Path) -> None:
+    if not source_dir.exists() or not source_dir.is_dir() or source_dir == target_dir:
+        return
+
+    moved_any = False
+    for entry in source_dir.iterdir():
+        if not entry.is_file():
+            continue
+        destination = _unique_destination_path(target_dir / entry.name)
+        try:
+            shutil.move(str(entry), str(destination))
+        except Exception as exc:
+            log.warning("Could not migrate %s to %s: %s", entry, destination, exc)
+            continue
+        moved_any = True
+
+    if moved_any:
+        log.info("Migrated %s contents into %s", source_dir, target_dir)
+
+    try:
+        next(source_dir.iterdir())
+    except StopIteration:
+        try:
+            source_dir.rmdir()
+        except OSError:
+            pass
+    except OSError:
+        pass
+
+
+def _unique_destination_path(path: Path) -> Path:
+    if not path.exists():
+        return path
+
+    stem = path.stem
+    suffix = path.suffix
+    counter = 1
+    while True:
+        candidate = path.with_name(f"{stem}_{counter}{suffix}")
+        if not candidate.exists():
+            return candidate
+        counter += 1

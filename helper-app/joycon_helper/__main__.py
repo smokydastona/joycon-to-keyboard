@@ -1,6 +1,11 @@
 import sys
 
 from joycon_helper.logger import cleanup_old_logs, install_crash_handler, setup_logging
+from joycon_helper.user_data import migrate_legacy_files
+
+# Ensure the unified AppData directory exists and fold legacy files into it
+# before the logger starts writing new files.
+migrate_legacy_files()
 
 # Initialise logging and crash handling before anything else.
 setup_logging()
@@ -15,10 +20,6 @@ def _run() -> None:
 
     from joycon_helper.ui.assets import register_app_fonts
     from joycon_helper.ui.main_window import MainWindow
-    from joycon_helper.user_data import migrate_legacy_files
-
-    # Ensure persistent data directory exists and migrate legacy files.
-    migrate_legacy_files()
 
     app = QApplication(sys.argv)
     app.setApplicationName("Bind Bandit")

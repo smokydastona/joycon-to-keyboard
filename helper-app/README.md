@@ -137,7 +137,12 @@ The helper app writes structured logs to disk for debugging.
 | `logs/` | Daily rotating application log (`helper.log`). Records serial traffic, OTA activity, retries/timeouts, errors, theme loading, and connect/disconnect events. Failed firmware flashes also write `ota_failure_*.json` reports here with board, stage, offset, and recent serial history. Log output is sanitized before writing to disk. |
 | `crash-logs/` | Timestamped crash dumps (`crash_YYYYMMDD_HHMMSS.log`) written on unhandled exceptions. Crash reports are sanitized before being saved. |
 
-Both folders are created next to the installed application (next to the `.exe` when frozen, or next to the `helper-app/` package when running from source).
+Both folders are created inside the same Bind Bandit app-data root that stores device cache, saved profiles, and session state:
+
+- Windows: `%APPDATA%\\BindBandit\\`
+- Linux/macOS: `~/.config/BindBandit/`
+
+Older installs that wrote logs next to the `.exe` or `helper-app/` folder are migrated into this app-data location on startup.
 
 - **Auto-cleanup**: files older than 15 days are deleted on each startup.
 - **No personal data**: logs contain only application-level events (serial traffic, errors, platform info). No user paths, environment variables, or identifying data are recorded.

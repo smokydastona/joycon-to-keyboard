@@ -616,6 +616,8 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "  Windows:  %APPDATA%\\BindBandit\\\n"
                 "  Linux/macOS:  ~/.config/BindBandit/\n\n"
                 "## What's stored\n"
+                "  logs/              — helper.log, ota_failure_*.json, and other helper diagnostics\n"
+                "  crash-logs/        — Unhandled exception crash dumps\n"
                 "  profiles/          — Per-slot Joy-Con mapping profiles (auto-saved)\n"
                 "  m913/              — M913 keypad profiles & device registry\n"
                 "  razer/             — Razer mouse profiles & device registry\n"
@@ -630,7 +632,8 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "## Migration\n"
                 "  If you're upgrading from an older version, existing device_cache.json "
                 "and app_profiles.json files are automatically migrated into the new "
-                "data folder on first launch."
+                "data folder on first launch. Older logs/ and crash-logs/ folders that "
+                "used to live next to the app are moved there too."
             ),
             False,
         ),
