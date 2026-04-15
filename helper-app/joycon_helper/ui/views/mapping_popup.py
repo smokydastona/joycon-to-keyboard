@@ -55,6 +55,7 @@ from ..constants import (
     GAMEPAD_BUTTON_SHAPES,
     GAMEPAD_HOTSPOTS,
     GAMEPAD_WIDE,
+    KBD_BUTTON_SHAPES,
     KBD_HOTSPOTS,
     KBD_LABEL_TO_KEYCODE,
     KBD_WIDE,
@@ -366,10 +367,12 @@ class MappingPopup(QDialog):
         if kbd_pm:
             cropped_pm, remapped_hs = self._crop_kbd_for_canvas(kbd_pm, hotspots)
             self._kbd_canvas.set_hotspots(remapped_hs)
+            self._kbd_canvas.set_hotspot_shapes(KBD_BUTTON_SHAPES)
             self._kbd_canvas.set_wide_set(KBD_WIDE)
             self._kbd_canvas.set_background(cropped_pm)
         else:
             self._kbd_canvas.set_hotspots(hotspots)
+            self._kbd_canvas.set_hotspot_shapes(KBD_BUTTON_SHAPES)
             self._kbd_canvas.set_wide_set(KBD_WIDE)
         self._kbd_canvas.hotspot_clicked.connect(self._on_kbd_hotspot_clicked)
         lay.addWidget(self._kbd_canvas, 1)

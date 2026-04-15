@@ -37,6 +37,7 @@ from ..constants import (
     INCEDIUS_HOTSPOTS,
     INCEDIUS_WIDE,
     JOYCON_BUTTON_SHAPES,
+    KBD_BUTTON_SHAPES,
     KBD_HOTSPOTS,
     KBD_LABEL_TO_KEYCODE,
     KBD_WIDE,
@@ -475,6 +476,7 @@ class MappingView(QWidget):
         self._gp_canvas.set_hotspot_shapes(GAMEPAD_BUTTON_SHAPES)
         self._gp_canvas.set_wide_set(GAMEPAD_WIDE)
         self._kbd_canvas.set_hotspots(self._keyboard_pos)
+        self._kbd_canvas.set_hotspot_shapes(KBD_BUTTON_SHAPES)
         self._kbd_canvas.set_wide_set(KBD_WIDE)
 
         # Joy-Con background

@@ -403,6 +403,46 @@ KBD_HOTSPOTS: dict[str, list[tuple[str, float, float]]] = {
     ],
 }
 
+
+def _kbd_shape(width_units: float = 1.0, height_units: float = 1.0) -> ShapeSpec:
+    """Return a rounded-rectangle shape aligned to the keyboard art grid."""
+    base_width = 54
+    base_height = 54
+    width = round(base_width + 60 * (width_units - 1.0))
+    height = round(base_height + 80 * (height_units - 1.0))
+    return ("rrect", width, height, 8)
+
+
+KBD_BUTTON_SHAPES: dict[str, ShapeSpec] = {
+    name: _kbd_shape() for name, _, _ in KBD_HOTSPOTS["default"]
+}
+
+for _name in (
+    "Esc", "F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8",
+    "F9", "F10", "F11", "F12", "PrtSc", "ScrLk", "Pause",
+):
+    KBD_BUTTON_SHAPES[_name] = _kbd_shape(height_units=0.85)
+
+KBD_BUTTON_SHAPES.update({
+    "Backspace": _kbd_shape(2.25),
+    "Tab": _kbd_shape(1.5),
+    "Backslash": _kbd_shape(1.5),
+    "CapsLk": _kbd_shape(1.75),
+    "Enter": _kbd_shape(2.25),
+    "LShift": _kbd_shape(2.25),
+    "RShift": _kbd_shape(2.75),
+    "LCtrl": _kbd_shape(1.25),
+    "Win": _kbd_shape(1.25),
+    "LAlt": _kbd_shape(1.25),
+    "Space": _kbd_shape(6.25),
+    "RAlt": _kbd_shape(1.25),
+    "Fn": _kbd_shape(1.25),
+    "RCtrl": _kbd_shape(1.25),
+    "KP0": _kbd_shape(2.0),
+    "KPPlus": _kbd_shape(1.0, 2.0),
+    "KPEnter": _kbd_shape(1.0, 2.0),
+})
+
 # ---------------------------------------------------------------------------
 # M913 Stock hotspot positions (normalised over m913.png, 16 buttons)
 # ---------------------------------------------------------------------------
