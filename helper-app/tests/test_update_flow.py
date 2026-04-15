@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 from types import SimpleNamespace
 
+from joycon_helper import _version
 from joycon_helper.ui.main_window import MainWindow
 
 
@@ -37,15 +38,79 @@ class _FakeDialog:
         return not self.closed
 
 
+class _FakeButton:
+    def __init__(self) -> None:
+        self.text = ""
+        self.tool_tip = ""
+        self.enabled = True
+        self.style = ""
+
+    def setText(self, text: str) -> None:
+        self.text = text
+
+    def setToolTip(self, text: str) -> None:
+        self.tool_tip = text
+
+    def setEnabled(self, enabled: bool) -> None:
+        self.enabled = enabled
+
+    def setStyleSheet(self, style: str) -> None:
+        self.style = style
+
+
+class _FakeTimer:
+    def __init__(self) -> None:
+        self.active = False
+
+    def isActive(self) -> bool:
+        return self.active
+
+    def start(self) -> None:
+        self.active = True
+
+    def stop(self) -> None:
+        self.active = False
+
+
+class _FakeTheme:
+    def __init__(self) -> None:
+        self.is_dark = False
+        self.theme = {
+            "colors": {
+                "text": "#111111",
+                "border": "#222222",
+                "button_bg": "#333333",
+                "button_hover": "#444444",
+                "button_pressed": "#555555",
+                "accent": "#666666",
+                "accent_hover": "#777777",
+                "warning": "#888888",
+                "bg": "#ffffff",
+            }
+        }
+
+
 class _FakeWindow:
     def __init__(self, *, connected: bool) -> None:
         self.bridge = SimpleNamespace(is_connected=connected)
         self._blocking_update_dialog = _FakeDialog()
         self._pending_firmware_files = {}
         self._pending_firmware_started = False
+        self._update_info = {}
+        self._update_check_in_progress = False
+        self._update_install_in_progress = False
+        self._update_blink_on = False
+        self._update_btn = _FakeButton()
+        self._theme_btn = _FakeButton()
+        self._update_blink_timer = _FakeTimer()
+        self.theme = _FakeTheme()
         self._refresh_calls = 0
         self._wait_called = 0
         self._start_called = 0
+        self.begin_update_calls: list[tuple[bool, bool]] = []
+        self.install_calls = 0
+        self.info_messages: list[tuple[str, str]] = []
+        self.warn_messages: list[tuple[str, str]] = []
 
     def _show_blocking_update_dialog(self, _title: str, _message: str) -> None:
         return None
@@ -64,6 +129,18 @@ class _FakeWindow:
 
     def _start_pending_firmware_flash(self) -> None:
         self._start_called += 1
+
+    def _apply_header_icon_button_styles(self) -> None:
+        return None
+
+    def _refresh_update_button_state(self) -> None:
+        MainWindow._refresh_update_button_state(self)
+
+    def _begin_update_check(self, *, manual: bool, install_if_found: bool) -> None:
+        self.begin_update_calls.append((manual, install_if_found))
+
+    def _do_full_update(self) -> None:
+        self.install_calls += 1
 
     def _ensure_view(self, *_args) -> None:
         return None
@@ -140,3 +217,72 @@ def test_pending_firmware_is_kept_when_flash_fails(monkeypatch, tmp_path) -> Non
     assert remove_calls == []
     assert pending_path.exists()
     assert retry_errors == ["flash failed"]
+
+
+def test_update_button_checks_when_no_update_is_cached() -> None:
+    fake_window = _FakeWindow(connected=False)
+
+    MainWindow._on_update_button_clicked(fake_window)
+
+    assert fake_window.begin_update_calls == [(True, True)]
+    assert fake_window.install_calls == 0
+
+
+def test_update_button_installs_when_update_is_cached() -> None:
+    fake_window = _FakeWindow(connected=False)
+    fake_window._update_info = {"version": "0.1.318"}
+
+    MainWindow._on_update_button_clicked(fake_window)
+
+    assert fake_window.install_calls == 1
+    assert fake_window.begin_update_calls == []
+
+
+def test_refresh_update_button_state_blinks_when_update_available() -> None:
+    fake_window = _FakeWindow(connected=False)
+    fake_window._update_info = {"version": "0.1.318"}
+
+    MainWindow._refresh_update_button_state(fake_window)
+
+    assert fake_window._update_btn.text == "↑"
+    assert fake_window._update_btn.tool_tip == "Install Bind Bandit v0.1.318"
+    assert fake_window._update_btn.enabled is True
+    assert fake_window._update_blink_on is True
+    assert fake_window._update_blink_timer.isActive() is True
+
+
+def test_apply_update_result_reports_manual_up_to_date(monkeypatch) -> None:
+    fake_window = _FakeWindow(connected=False)
+    messages: list[tuple[str, str]] = []
+
+    monkeypatch.setattr(
+        "joycon_helper.ui.main_window.QMessageBox.information",
+        lambda _parent, title, text: messages.append((title, text)),
+    )
+
+    MainWindow._apply_update_result(
+        fake_window,
+        "up_to_date",
+        {},
+        "",
+        manual=True,
+        install_if_found=True,
+    )
+
+    assert messages == [("Up to Date", f"Bind Bandit v{_version.__version__} is already up to date.")]
+
+
+def test_apply_update_result_installs_after_manual_check_finds_update() -> None:
+    fake_window = _FakeWindow(connected=False)
+
+    MainWindow._apply_update_result(
+        fake_window,
+        "available",
+        {"version": "0.1.318"},
+        "",
+        manual=True,
+        install_if_found=True,
+    )
+
+    assert fake_window._update_info == {"version": "0.1.318"}
+    assert fake_window.install_calls == 1

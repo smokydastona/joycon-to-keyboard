@@ -59,6 +59,10 @@ from .widgets.toast import Toast
 
 log = logging.getLogger("joycon_helper.ui.main_window")
 
+_HEADER_ICON_BUTTON_SIZE = 96
+_HEADER_ICON_FONT_SIZE = 30
+_UPDATE_BLINK_INTERVAL_MS = 500
+
 # Navigation section indices
 NAV_DASHBOARD = 0
 NAV_MAPPING = 1
@@ -159,9 +163,15 @@ class MainWindow(QMainWindow):
         self._bt_connected_left = False
         self._bt_connected_right = False
         self._update_info: dict[str, Any] = {}
+        self._update_check_in_progress = False
+        self._update_install_in_progress = False
+        self._update_blink_on = False
         self._blocking_update_dialog: BlockingUpdateDialog | None = None
         self._pending_firmware_files: dict[str, Any] = {}
         self._pending_firmware_started = False
+        self._update_blink_timer = QTimer(self)
+        self._update_blink_timer.setInterval(_UPDATE_BLINK_INTERVAL_MS)
+        self._update_blink_timer.timeout.connect(self._toggle_update_button_blink)
 
         # Device tracking (new)
         self._device_cache = DeviceCache()
@@ -208,12 +218,8 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(500, self._show_onboarding)
 
         # Auto-update check
-        try:
-            from ..updater import check_for_update_async
-
-            check_for_update_async(self._on_update_result)
-        except Exception:
-            pass
+        with contextlib.suppress(Exception):
+            self._begin_update_check(manual=False, install_if_found=False)
 
         # Pending firmware (downloaded during last app update)
         QTimer.singleShot(1500, self._check_pending_firmware)
@@ -315,19 +321,28 @@ class MainWindow(QMainWindow):
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
         tb.addWidget(spacer)
 
-        # Settings
-        settings_btn = QPushButton("⚙")
-        settings_btn.setFixedSize(32, 32)
-        settings_btn.setToolTip("Settings (Ctrl+8)")
-        settings_btn.clicked.connect(lambda: self._nav_to(NAV_SETTINGS))
-        tb.addWidget(settings_btn)
+        # Permanent update button
+        self._update_btn = QPushButton("↑")
+        self._configure_header_icon_button(self._update_btn, "HeaderUpdateBtn")
+        self._update_btn.clicked.connect(self._on_update_button_clicked)
+        tb.addWidget(self._update_btn)
 
         # Theme toggle
         self._theme_btn = QPushButton("🌙" if self.theme.is_dark else "☀")
-        self._theme_btn.setFixedSize(32, 32)
+        self._configure_header_icon_button(self._theme_btn, "HeaderThemeBtn")
         self._theme_btn.setToolTip("Toggle light/dark theme")
         self._theme_btn.clicked.connect(self._toggle_theme)
         tb.addWidget(self._theme_btn)
+        self._refresh_update_button_state()
+
+    def _configure_header_icon_button(self, button: QPushButton, object_name: str) -> None:
+        button.setObjectName(object_name)
+        button.setCursor(Qt.CursorShape.PointingHandCursor)
+        button.setFixedSize(_HEADER_ICON_BUTTON_SIZE, _HEADER_ICON_BUTTON_SIZE)
+        font = button.font()
+        font.setPointSize(_HEADER_ICON_FONT_SIZE)
+        font.setBold(True)
+        button.setFont(font)
 
     # -----------------------------------------------------------------
     # Sidebar
@@ -339,7 +354,6 @@ class MainWindow(QMainWindow):
             self._sidebar.add_nav_item(icon, label)
         self._sidebar.set_version(__version__)
         self._sidebar.nav_clicked.connect(self._on_nav_changed)
-        self._sidebar.update_clicked.connect(self._do_full_update)
 
     # -----------------------------------------------------------------
     # Stacked views
@@ -951,6 +965,7 @@ class MainWindow(QMainWindow):
         self.setStyleSheet(qss)
         self._sidebar.apply_theme(self.theme)
         self._status_bar.apply_theme(self.theme)
+        self._apply_header_icon_button_styles()
 
         # Update log font
         self._log_text.setFont(QFont(
@@ -995,15 +1010,206 @@ class MainWindow(QMainWindow):
     # Update
     # -----------------------------------------------------------------
 
-    def _on_update_result(self, has_update: bool, info: dict) -> None:
-        # Called from background thread — marshal to main thread
-        QTimer.singleShot(0, lambda: self._apply_update_result(has_update, info))
+    def _begin_update_check(self, *, manual: bool, install_if_found: bool) -> None:
+        if self._update_check_in_progress or self._update_install_in_progress:
+            return
 
-    def _apply_update_result(self, has_update: bool, info: dict) -> None:
-        if has_update:
+        from ..updater import check_for_update_async
+
+        self._update_check_in_progress = True
+        self._refresh_update_button_state()
+        check_for_update_async(
+            lambda status, info, message, is_manual=manual, should_install=install_if_found: self._on_update_result(
+                status,
+                info,
+                message,
+                manual=is_manual,
+                install_if_found=should_install,
+            )
+        )
+
+    def _on_update_button_clicked(self) -> None:
+        if self._update_check_in_progress or self._update_install_in_progress:
+            return
+        if self._update_info:
+            self._do_full_update()
+            return
+        self._begin_update_check(manual=True, install_if_found=True)
+
+    def _on_update_result(
+        self,
+        status: str,
+        info: dict,
+        message: str,
+        *,
+        manual: bool,
+        install_if_found: bool,
+    ) -> None:
+        # Called from background thread — marshal to main thread
+        QTimer.singleShot(
+            0,
+            lambda: self._apply_update_result(
+                status,
+                info,
+                message,
+                manual=manual,
+                install_if_found=install_if_found,
+            ),
+        )
+
+    def _apply_update_result(
+        self,
+        status: str,
+        info: dict,
+        message: str,
+        *,
+        manual: bool,
+        install_if_found: bool,
+    ) -> None:
+        self._update_check_in_progress = False
+
+        if status == "available":
             self._update_info = info
-            version = info.get("version", "?")
-            self._sidebar.show_update_button(version)
+            self._refresh_update_button_state()
+            if manual and install_if_found:
+                self._do_full_update()
+            return
+
+        self._update_info = {}
+        self._refresh_update_button_state()
+
+        if not manual:
+            return
+
+        if status == "up_to_date":
+            QMessageBox.information(
+                self,
+                "Up to Date",
+                f"Bind Bandit v{__version__} is already up to date.",
+            )
+            return
+
+        QMessageBox.warning(
+            self,
+            "Update Check Failed",
+            message or "Could not check for updates right now.",
+        )
+
+    def _toggle_update_button_blink(self) -> None:
+        self._update_blink_on = not self._update_blink_on
+        self._apply_header_icon_button_styles()
+
+    def _refresh_update_button_state(self) -> None:
+        if not hasattr(self, "_update_btn"):
+            return
+
+        has_update = bool(self._update_info)
+        if self._update_install_in_progress:
+            self._update_btn.setText("↓")
+            self._update_btn.setToolTip("Installing update…")
+            self._update_btn.setEnabled(False)
+            self._update_blink_on = False
+            self._update_blink_timer.stop()
+        elif self._update_check_in_progress:
+            self._update_btn.setText("⟳")
+            self._update_btn.setToolTip("Checking for updates…")
+            self._update_btn.setEnabled(False)
+            self._update_blink_on = False
+            self._update_blink_timer.stop()
+        else:
+            self._update_btn.setText("↑")
+            if has_update:
+                version = self._update_info.get("version", "?")
+                self._update_btn.setToolTip(f"Install Bind Bandit v{version}")
+                if not self._update_blink_timer.isActive():
+                    self._update_blink_on = True
+                    self._update_blink_timer.start()
+            else:
+                self._update_btn.setToolTip("Check for updates")
+                self._update_blink_on = False
+                self._update_blink_timer.stop()
+            self._update_btn.setEnabled(True)
+
+        self._apply_header_icon_button_styles()
+
+    def _apply_header_icon_button_styles(self) -> None:
+        if not hasattr(self, "_update_btn") or not hasattr(self, "_theme_btn"):
+            return
+
+        colors = self.theme.theme["colors"]
+        text_color = colors["text"]
+        border = colors["border"]
+        button_bg = colors["button_bg"]
+        button_hover = colors["button_hover"]
+        button_pressed = colors["button_pressed"]
+        accent = colors["accent"]
+        accent_hover = colors.get("accent_hover", accent)
+        accent_text = "#ffffff"
+        radius = max(16, _HEADER_ICON_BUTTON_SIZE // 3)
+
+        if self._update_install_in_progress or self._update_check_in_progress:
+            update_bg = colors.get("warning", accent)
+            update_hover = update_bg
+            update_pressed = update_bg
+            update_text = "#111111" if not self.theme.is_dark else colors["bg"]
+            update_border = update_bg
+        elif self._update_info and self._update_blink_on:
+            update_bg = accent
+            update_hover = accent_hover
+            update_pressed = accent_hover
+            update_text = accent_text
+            update_border = accent
+        elif self._update_info:
+            update_bg = button_bg
+            update_hover = button_hover
+            update_pressed = button_pressed
+            update_text = text_color
+            update_border = accent
+        else:
+            update_bg = button_bg
+            update_hover = button_hover
+            update_pressed = button_pressed
+            update_text = text_color
+            update_border = border
+
+        self._update_btn.setStyleSheet(
+            f"""
+            QPushButton#HeaderUpdateBtn {{
+                background: {update_bg};
+                color: {update_text};
+                border: 2px solid {update_border};
+                border-radius: {radius}px;
+                padding: 0;
+            }}
+            QPushButton#HeaderUpdateBtn:hover {{
+                background: {update_hover};
+            }}
+            QPushButton#HeaderUpdateBtn:pressed {{
+                background: {update_pressed};
+            }}
+            QPushButton#HeaderUpdateBtn:disabled {{
+                background: {update_bg};
+                color: {update_text};
+            }}
+            """
+        )
+        self._theme_btn.setStyleSheet(
+            f"""
+            QPushButton#HeaderThemeBtn {{
+                background: {button_bg};
+                color: {text_color};
+                border: 2px solid {border};
+                border-radius: {radius}px;
+                padding: 0;
+            }}
+            QPushButton#HeaderThemeBtn:hover {{
+                background: {button_hover};
+            }}
+            QPushButton#HeaderThemeBtn:pressed {{
+                background: {button_pressed};
+            }}
+            """
+        )
 
     def _do_full_update(self) -> None:
         """Download firmware assets + new exe, then relaunch.
@@ -1046,7 +1252,8 @@ class MainWindow(QMainWindow):
         if reply != QMessageBox.StandardButton.Yes:
             return
 
-        self._sidebar.hide_update_button()
+        self._update_install_in_progress = True
+        self._refresh_update_button_state()
 
         # Progress dialog
         progress_dlg = QProgressDialog("Preparing update…", None, 0, 100, self)
@@ -1088,12 +1295,13 @@ class MainWindow(QMainWindow):
                 QTimer.singleShot(600, relaunch)
             except Exception as exc:
                 QTimer.singleShot(0, lambda e=str(exc): (
+                    setattr(self, "_update_install_in_progress", False),
                     progress_dlg.close(),
                     QMessageBox.critical(
                         self, "Update Failed",
                         f"The update could not be installed:\n\n{e}"
                     ),
-                    self._sidebar.show_update_button(version),
+                    self._refresh_update_button_state(),
                 ))
 
         _threading.Thread(target=_update_worker, daemon=True).start()

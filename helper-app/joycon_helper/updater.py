@@ -184,17 +184,19 @@ def _find_exe_asset(release: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
-def check_for_update() -> dict[str, str] | None:
-    """Check GitHub for a newer release.
+def check_for_update_status() -> tuple[str, dict[str, str], str]:
+    """Return a detailed update-check status tuple.
 
-    Returns a dict with 'tag', 'version', 'download_url', 'html_url',
-    and 'release_name' if a newer version is available, else None.
+    The first element is one of ``"available"``, ``"up_to_date"``, or
+    ``"error"``. The second element is the update info dict when available,
+    otherwise ``{}``. The third element is a user-facing error message when the
+    check fails, otherwise an empty string.
     """
     try:
         release = _fetch_latest_release()
     except Exception:
         log.warning("Failed to check for updates", exc_info=True)
-        return None
+        return "error", {}, "Could not reach GitHub Releases to check for updates."
 
     tag = release.get("tag_name", "")
     remote_ver = _parse_version(tag)
@@ -202,7 +204,7 @@ def check_for_update() -> dict[str, str] | None:
 
     if not remote_ver or remote_ver <= local_ver:
         log.info("Up to date (local=%s, remote=%s)", __version__, tag)
-        return None
+        return "up_to_date", {}, ""
 
     # Date guard: skip update if this build is newer than the release.
     if __build_date__:
@@ -216,16 +218,15 @@ def check_for_update() -> dict[str, str] | None:
                         "Skipping update %s: release date %s is not newer than build date %s",
                         tag, published, __build_date__,
                     )
-                    return None
+                    return "up_to_date", {}, ""
             except (ValueError, TypeError):
                 log.debug("Could not compare dates, falling back to version only")
 
     asset = _find_exe_asset(release)
     if asset is None:
         log.warning("Newer release %s found but no %s asset", tag, EXE_ASSET_NAME)
-        return None
+        return "error", {}, f"A newer release exists, but it does not include {EXE_ASSET_NAME}."
 
-    # Collect firmware assets from the same release.
     fw_assets: dict[str, dict[str, Any]] = {}
     for rel_asset in release.get("assets", []):
         name = rel_asset.get("name", "")
@@ -236,14 +237,24 @@ def check_for_update() -> dict[str, str] | None:
             }
 
     log.info("Update available: %s → %s", __version__, tag)
-    return {
+    return "available", {
         "tag": tag,
         "version": tag.lstrip("v"),
         "download_url": asset["browser_download_url"],
         "html_url": release.get("html_url", ""),
         "release_name": release.get("name", tag),
         "fw_assets": fw_assets,
-    }
+    }, ""
+
+
+def check_for_update() -> dict[str, str] | None:
+    """Check GitHub for a newer release.
+
+    Returns a dict with 'tag', 'version', 'download_url', 'html_url',
+    and 'release_name' if a newer version is available, else None.
+    """
+    status, info, _message = check_for_update_status()
+    return info if status == "available" else None
 
 
 # ---------------------------------------------------------------------------
@@ -516,16 +527,13 @@ def check_in_background(callback: Callable[[dict[str, str] | None], None]) -> No
 def check_for_update_async(callback: Callable[[bool, dict], None]) -> None:
     """Non-blocking update check for PyQt6 UI startup.
 
-    *callback(has_update, info)* is called from the background thread —
-    callers must marshal to the UI thread (e.g. ``QTimer.singleShot(0, ...)``)
+    *callback(status, info, message)* is called from the background thread.
+    Callers must marshal to the UI thread (e.g. ``QTimer.singleShot(0, ...)``)
     before touching widgets.
-
-    ``info`` is the dict returned by ``check_for_update()``, or ``{}`` when no
-    update is available.
     """
     def _worker() -> None:
-        result = check_for_update()
-        callback(bool(result), result or {})
+        status, info, message = check_for_update_status()
+        callback(status, info, message)
 
     threading.Thread(target=_worker, name="update-check-async", daemon=True).start()
 

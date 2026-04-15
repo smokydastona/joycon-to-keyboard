@@ -31,6 +31,37 @@ def test_check_for_update_returns_release_with_firmware_assets(monkeypatch) -> N
     assert sorted(info["fw_assets"]) == ["esp32-hid-host-uart.bin", "esp32s3-usb-kbd.bin"]
 
 
+def test_check_for_update_status_reports_up_to_date(monkeypatch) -> None:
+    monkeypatch.setattr(updater, "__version__", "0.1.317")
+    monkeypatch.setattr(
+        updater,
+        "_fetch_latest_release",
+        lambda: {
+            "tag_name": "v0.1.317",
+            "assets": [],
+        },
+    )
+
+    status, info, message = updater.check_for_update_status()
+
+    assert status == "up_to_date"
+    assert info == {}
+    assert message == ""
+
+
+def test_check_for_update_status_reports_error_when_fetch_fails(monkeypatch) -> None:
+    def _boom() -> dict:
+        raise RuntimeError("offline")
+
+    monkeypatch.setattr(updater, "_fetch_latest_release", _boom)
+
+    status, info, message = updater.check_for_update_status()
+
+    assert status == "error"
+    assert info == {}
+    assert "check for updates" in message.lower()
+
+
 def test_download_update_bundle_saves_firmware_before_install(monkeypatch) -> None:
     calls: list[tuple[str, str]] = []
 

@@ -169,7 +169,6 @@ class SidebarWidget(QFrame):
     COLLAPSED_WIDTH = 56
 
     nav_clicked = pyqtSignal(int)
-    update_clicked = pyqtSignal()
 
     # Group boundaries: separator inserted *before* these logical indices
     _GROUP_BREAKS: ClassVar[set[int]] = {4, 7}  # before Devices, before Settings
@@ -222,15 +221,6 @@ class SidebarWidget(QFrame):
 
         layout.addStretch()
 
-        # New release button (hidden until an update is found)
-        self._update_btn = QPushButton("New Target")
-        self._update_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._update_btn.setObjectName("SidebarUpdateBtn")
-        self._update_btn.setVisible(False)
-        self._update_btn.clicked.connect(self.update_clicked)
-        layout.addWidget(self._update_btn)
-        layout.addSpacing(4)
-
         # Version label at bottom
         self._version_label = QLabel()
         self._version_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -265,18 +255,6 @@ class SidebarWidget(QFrame):
     def set_version(self, version: str) -> None:
         self._version_label.setText(f"v{version}")
 
-    def show_update_button(self, version: str) -> None:
-        """Show the update button with the available version label."""
-        self._update_btn.setToolTip(f"New Target available: v{version}")
-        if self._expanded:
-            self._update_btn.setText("New Target")
-        else:
-            self._update_btn.setText("↑")
-        self._update_btn.setVisible(True)
-
-    def hide_update_button(self) -> None:
-        self._update_btn.setVisible(False)
-
     def toggle_collapse(self) -> None:
         self._expanded = not self._expanded
         target_width = self.EXPANDED_WIDTH if self._expanded else self.COLLAPSED_WIDTH
@@ -302,37 +280,16 @@ class SidebarWidget(QFrame):
         for item in self._items:
             item.set_expanded(self._expanded)
 
-        # Update button text based on expanded state
-        if self._update_btn.isVisible():
-            if self._expanded:
-                self._update_btn.setText("New Target")
-            else:
-                self._update_btn.setText("↑")
-
     def _on_item_clicked(self, index: int) -> None:
         self.set_active(index)
         self.nav_clicked.emit(index)
 
     def _apply_theme(self) -> None:
         c = self._theme.theme["colors"]
-        accent = c.get("sidebar_active", "#4a7aba")
         self.setStyleSheet(f"""
             #Sidebar {{
                 background: {c['sidebar_bg']};
                 border-right: 1px solid {c['border']};
-            }}
-            #SidebarUpdateBtn {{
-                background: {accent};
-                color: #ffffff;
-                border: none;
-                border-radius: 4px;
-                font-size: 9pt;
-                font-weight: 700;
-                padding: 6px 8px;
-                margin: 0 12px;
-            }}
-            #SidebarUpdateBtn:hover {{
-                background: {c.get('button_hover', accent)};
             }}
         """)
         self._title_label.setStyleSheet(f"color: {c['sidebar_active']}; background: transparent;")
