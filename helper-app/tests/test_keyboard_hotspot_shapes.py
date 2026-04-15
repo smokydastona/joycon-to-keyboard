@@ -16,3 +16,13 @@ def test_keyboard_shapes_capture_key_size_variants():
     assert backspace[1] > standard[1]
     assert kp_plus[2] > standard[2]
     assert space[1] > backspace[1]
+
+
+def test_keyboard_default_hotspots_match_applied_layout():
+    dark = dict((name, (x, y)) for name, x, y in KBD_HOTSPOTS["dark"])
+    default = dict((name, (x, y)) for name, x, y in KBD_HOTSPOTS["default"])
+
+    assert dark == default
+    assert default["Esc"] == (0.137511, 0.298956)
+    assert default["Space"] == (0.367276, 0.56658)
+    assert default["KPEnter"] == (0.850305, 0.562663)
