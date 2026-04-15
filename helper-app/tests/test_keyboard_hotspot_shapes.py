@@ -19,12 +19,28 @@ def test_keyboard_shapes_capture_key_size_variants():
     standard = KBD_BUTTON_SHAPES["A"]
     backspace = KBD_BUTTON_SHAPES["Backspace"]
     kp_plus = KBD_BUTTON_SHAPES["KPPlus"]
+    kp_enter = KBD_BUTTON_SHAPES["KPEnter"]
     space = KBD_BUTTON_SHAPES["Space"]
+    r_alt = KBD_BUTTON_SHAPES["RAlt"]
 
     assert standard == ("rrect", 54, 54, 8)
     assert backspace[1] > standard[1]
     assert kp_plus[2] > standard[2]
     assert space[1] > backspace[1]
+    assert space == ("rrect", 219, 54, 8)
+    assert kp_plus == ("rrect", 54, 94, 8)
+    assert kp_enter == ("rrect", 54, 94, 8)
+    assert (space[1] / 2) + (r_alt[1] / 2) < (0.461271 - 0.367276) * 1536
+    assert (kp_plus[2] / 2) + (kp_enter[2] / 2) < (0.562663 - 0.456919) * 1024
+
+
+def test_gamepad_paddles_are_rotated_horizontal():
+    from joycon_helper.ui.constants import GAMEPAD_BUTTON_SHAPES
+
+    for paddle in ("P1", "P2", "P3", "P4"):
+        shape = GAMEPAD_BUTTON_SHAPES[paddle]
+        assert shape[0] == "rrect"
+        assert shape[1] > shape[2]
 
 
 def test_keyboard_default_hotspots_match_applied_layout():

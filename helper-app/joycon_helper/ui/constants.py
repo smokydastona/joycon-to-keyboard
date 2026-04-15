@@ -330,13 +330,13 @@ KBD_BUTTON_SHAPES.update({
     "LCtrl": _kbd_shape(1.25),
     "Win": _kbd_shape(1.25),
     "LAlt": _kbd_shape(1.25),
-    "Space": _kbd_shape(6.25),
+    "Space": _kbd_shape(3.75),
     "RAlt": _kbd_shape(1.25),
     "Fn": _kbd_shape(1.25),
     "RCtrl": _kbd_shape(1.25),
     "KP0": _kbd_shape(2.0),
-    "KPPlus": _kbd_shape(1.0, 2.0),
-    "KPEnter": _kbd_shape(1.0, 2.0),
+    "KPPlus": _kbd_shape(1.0, 1.5),
+    "KPEnter": _kbd_shape(1.0, 1.5),
 })
 
 # ---------------------------------------------------------------------------
@@ -643,11 +643,11 @@ GAMEPAD_BUTTON_SHAPES: dict[str, ShapeSpec] = {
     "View":    ("rrect", 28, 16, 6),
     "Menu":    ("rrect", 28, 16, 6),
     "Share":   ("circle", 14),
-    # Back paddles — tall rounded rectangles
-    "P1":      ("rrect", 24, 56, 8),
-    "P2":      ("rrect", 24, 56, 8),
-    "P3":      ("rrect", 24, 56, 8),
-    "P4":      ("rrect", 24, 56, 8),
+    # Back paddles — horizontal rounded rectangles rotated to match the rear levers
+    "P1":      ("rrect", 56, 24, 8),
+    "P2":      ("rrect", 56, 24, 8),
+    "P3":      ("rrect", 56, 24, 8),
+    "P4":      ("rrect", 56, 24, 8),
 }
 
 # ---------------------------------------------------------------------------
