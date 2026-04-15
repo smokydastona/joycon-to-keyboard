@@ -28,6 +28,7 @@ from PyQt6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPlainTextEdit,
+    QProgressBar,
     QProgressDialog,
     QPushButton,
     QSizePolicy,
@@ -83,6 +84,56 @@ NAV_ITEMS = [
 ]
 
 
+class BlockingUpdateDialog(QDialog):
+    """Non-closeable modal dialog used to finish mandatory post-update work."""
+
+    def __init__(self, title: str, message: str, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._allow_close = False
+        self.setWindowTitle(title)
+        self.setModal(True)
+        self.setWindowModality(Qt.WindowModality.ApplicationModal)
+        self.setMinimumWidth(440)
+        self.setWindowFlag(Qt.WindowType.WindowCloseButtonHint, False)
+        self.setWindowFlag(Qt.WindowType.WindowContextHelpButtonHint, False)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+
+        self._label = QLabel(message, self)
+        self._label.setWordWrap(True)
+        layout.addWidget(self._label)
+
+        self._progress = QProgressBar(self)
+        self._progress.setRange(0, 100)
+        self._progress.setValue(0)
+        layout.addWidget(self._progress)
+
+    def set_status(self, message: str) -> None:
+        self._label.setText(message)
+
+    def set_progress(self, value: int) -> None:
+        self._progress.setValue(max(0, min(100, value)))
+
+    def unlock_and_close(self) -> None:
+        self._allow_close = True
+        self.close()
+
+    def is_locked(self) -> bool:
+        return not self._allow_close
+
+    def closeEvent(self, event: Any) -> None:
+        if self._allow_close:
+            super().closeEvent(event)
+        else:
+            event.ignore()
+
+    def reject(self) -> None:
+        if self._allow_close:
+            super().reject()
+
+
 class MainWindow(QMainWindow):
     """Top-level application window."""
 
@@ -107,6 +158,10 @@ class MainWindow(QMainWindow):
         self._active_key_ids: set = set()
         self._bt_connected_left = False
         self._bt_connected_right = False
+        self._update_info: dict[str, Any] = {}
+        self._blocking_update_dialog: BlockingUpdateDialog | None = None
+        self._pending_firmware_files: dict[str, Any] = {}
+        self._pending_firmware_started = False
 
         # Device tracking (new)
         self._device_cache = DeviceCache()
@@ -273,14 +328,6 @@ class MainWindow(QMainWindow):
         self._theme_btn.setToolTip("Toggle light/dark theme")
         self._theme_btn.clicked.connect(self._toggle_theme)
         tb.addWidget(self._theme_btn)
-
-        # Update button (hidden until update available)
-        self._update_btn = QPushButton(" ↑ Update ")
-        self._update_btn.setProperty("accent", True)
-        self._update_btn.setToolTip("A new version of Bind Bandit is available — click for details")
-        self._update_btn.setVisible(False)
-        self._update_btn.clicked.connect(self._open_update_dialog)
-        tb.addWidget(self._update_btn)
 
     # -----------------------------------------------------------------
     # Sidebar
@@ -956,9 +1003,6 @@ class MainWindow(QMainWindow):
         if has_update:
             self._update_info = info
             version = info.get("version", "?")
-            # Toolbar button (legacy)
-            self._update_btn.setVisible(True)
-            # Sidebar button
             self._sidebar.show_update_button(version)
 
     def _do_full_update(self) -> None:
@@ -1003,7 +1047,6 @@ class MainWindow(QMainWindow):
             return
 
         self._sidebar.hide_update_button()
-        self._update_btn.setVisible(False)
 
         # Progress dialog
         progress_dlg = QProgressDialog("Preparing update…", None, 0, 100, self)
@@ -1056,9 +1099,9 @@ class MainWindow(QMainWindow):
         _threading.Thread(target=_update_worker, daemon=True).start()
 
     def _check_pending_firmware(self) -> None:
-        """After an app update, flash any firmware that was downloaded alongside it."""
+        """After an app update, force-flash any bundled firmware before normal use."""
         try:
-            from ..updater import load_pending_firmware, remove_pending_firmware
+            from ..updater import load_pending_firmware
         except Exception:
             return
 
@@ -1066,70 +1109,151 @@ class MainWindow(QMainWindow):
         if not pending:
             return
 
-        names = ", ".join(sorted(pending))
-        reply = QMessageBox.question(
-            self, "Firmware Update Ready",
-            f"Firmware downloaded with the app update ({names}) is ready to flash.\n\n"
-            "Connect the ESP32-S3 and click Yes to flash now, or No to keep it queued for later.",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        self._pending_firmware_files = pending
+        self._pending_firmware_started = False
+        self._show_blocking_update_dialog(
+            "Finishing Update",
+            "A new app version was installed and the matching firmware must now be flashed.\n\n"
+            "Keep the ESP32-S3 connected. This step cannot be skipped.",
         )
-        if reply != QMessageBox.StandardButton.Yes:
+        self._wait_for_pending_firmware_connection()
+
+    def _show_blocking_update_dialog(self, title: str, message: str) -> None:
+        if self._blocking_update_dialog is None:
+            self._blocking_update_dialog = BlockingUpdateDialog(title, message, self)
+        else:
+            self._blocking_update_dialog.setWindowTitle(title)
+            self._blocking_update_dialog.set_status(message)
+        self._blocking_update_dialog.show()
+        self._blocking_update_dialog.raise_()
+        self._blocking_update_dialog.activateWindow()
+
+    def _set_blocking_update_progress(self, value: int) -> None:
+        if self._blocking_update_dialog is not None:
+            self._blocking_update_dialog.set_progress(value)
+
+    def _close_blocking_update_dialog(self) -> None:
+        if self._blocking_update_dialog is not None:
+            self._blocking_update_dialog.unlock_and_close()
+            self._blocking_update_dialog = None
+
+    def _wait_for_pending_firmware_connection(self) -> None:
+        if not self._pending_firmware_files or self._pending_firmware_started:
+            return
+        if self.bridge.is_connected:
+            self._start_pending_firmware_flash()
             return
 
+        self._show_blocking_update_dialog(
+            "Finishing Update",
+            "Waiting for the ESP32-S3 bridge so firmware flashing can begin automatically.\n\n"
+            "Keep the device connected. This update cannot be skipped.",
+        )
+        self._set_blocking_update_progress(0)
+        self._try_connect_bridge_for_update()
+        QTimer.singleShot(1000, self._wait_for_pending_firmware_connection)
+
+    def _try_connect_bridge_for_update(self) -> None:
+        if self.bridge.is_connected:
+            return
+
+        self._refresh_ports()
+        port = self._port_combo.currentData()
+        if not port:
+            return
+
+        import serial.tools.list_ports
+        for p in serial.tools.list_ports.comports():
+            if p.device == port and p.vid == self._BRIDGE_VID and p.pid == self._BRIDGE_PID:
+                try:
+                    baud = int(self._baud_edit.text())
+                except ValueError:
+                    baud = 115200
+                self.bridge.connect_serial(port, baud)
+                return
+
+    def _start_pending_firmware_flash(self) -> None:
+        if self._pending_firmware_started or not self._pending_firmware_files:
+            return
         if not self.bridge.is_connected:
-            Toast.warning(self, "Connect to the device first. The downloaded firmware will stay queued for a later retry.")
+            self._wait_for_pending_firmware_connection()
             return
-
-        # Use the existing DiagnosticsView firmware flash machinery
-        self._ensure_view(NAV_DIAGNOSTICS)
-        self._nav_to(NAV_DIAGNOSTICS)
 
         import threading as _threading
 
-        progress_dlg = QProgressDialog("Flashing firmware…", None, 0, 100, self)
-        progress_dlg.setWindowTitle("Firmware Update")
-        progress_dlg.setWindowModality(Qt.WindowModality.ApplicationModal)
-        progress_dlg.setMinimumDuration(0)
-        progress_dlg.setValue(0)
-        progress_dlg.show()
+        self._pending_firmware_started = True
+        items = sorted(
+            self._pending_firmware_files.items(),
+            key=lambda entry: (0 if "esp32s3" in entry[0] else 1, entry[0]),
+        )
 
-        results: list[str] = []
+        self._show_blocking_update_dialog(
+            "Finishing Update",
+            "Connected. Flashing firmware now…",
+        )
 
         def _flash_worker() -> None:
             try:
                 from ..fw_updater import FirmwareFlasher, extract_app_from_merged
+                from ..updater import remove_pending_firmware
+
                 flasher = FirmwareFlasher(self.bridge.client)
-                for name, path in sorted(pending.items()):
+                finished: list[str] = []
+                total_items = len(items)
+
+                for index, (name, path) in enumerate(items):
                     board = "esp32s3" if "esp32s3" in name else "esp32"
-                    QTimer.singleShot(0, lambda n=name: progress_dlg.setLabelText(f"Flashing {n}…"))
+                    QTimer.singleShot(
+                        0,
+                        lambda i=index, total=total_items, n=name: self._show_blocking_update_dialog(
+                            "Finishing Update",
+                            f"Flashing {i + 1}/{total}: {n}\n\nDo not unplug either board.",
+                        ),
+                    )
                     data = path.read_bytes()
                     try:
                         app = extract_app_from_merged(data)
                     except Exception:
                         app = data
 
-                    def _cb(done: int, total: int, _n: str = name) -> None:
-                        pct = int(done * 100 / total) if total else 0
-                        QTimer.singleShot(0, lambda p=pct: progress_dlg.setValue(p))
+                    def _cb(done: int, total: int, *, item_index: int = index, item_total: int = total_items) -> None:
+                        fraction = (done / total) if total else 0.0
+                        pct = int(((item_index + fraction) / item_total) * 100)
+                        QTimer.singleShot(0, lambda p=pct: self._set_blocking_update_progress(p))
 
-                    flasher.flash(board, app, progress_cb=_cb)
+                    flasher.flash(board, app, expected_version=__version__, progress_cb=_cb)
                     remove_pending_firmware(name)
-                    results.append(name)
+                    finished.append(name)
 
-                QTimer.singleShot(0, lambda: (
-                    progress_dlg.close(),
-                    Toast.success(self, f"Firmware updated: {', '.join(results)}"),
-                ))
+                QTimer.singleShot(0, lambda done=finished: self._finish_pending_firmware_flash(done))
             except Exception as exc:
-                QTimer.singleShot(0, lambda e=str(exc): (
-                    progress_dlg.close(),
-                    QMessageBox.warning(self, "Firmware Flash Error", f"{e}\n\nAny remaining firmware will stay queued for retry on the next launch."),
-                ))
+                QTimer.singleShot(0, lambda e=str(exc): self._retry_pending_firmware_flash(e))
 
         _threading.Thread(target=_flash_worker, daemon=True).start()
 
+    def _finish_pending_firmware_flash(self, flashed: list[str]) -> None:
+        self._set_blocking_update_progress(100)
+        self._close_blocking_update_dialog()
+        self._pending_firmware_files = {}
+        self._pending_firmware_started = False
+        if flashed:
+            Toast.success(self, f"Firmware updated: {', '.join(flashed)}")
+
+    def _retry_pending_firmware_flash(self, error: str) -> None:
+        self._pending_firmware_started = False
+        self._show_blocking_update_dialog(
+            "Finishing Update",
+            "Firmware flashing failed and will retry automatically.\n\n"
+            f"Last error: {error}\n\n"
+            "Keep the ESP32-S3 connected. This update cannot be skipped.",
+        )
+        self._set_blocking_update_progress(0)
+        if self.bridge.is_connected:
+            self.bridge.disconnect_serial()
+        QTimer.singleShot(2000, self._wait_for_pending_firmware_connection)
+
     def _open_update_dialog(self) -> None:
-        """Toolbar update button — delegates to the full update flow."""
+        """Legacy alias — delegates to the full sidebar update flow."""
         self._do_full_update()
 
     # -----------------------------------------------------------------
@@ -1137,6 +1261,9 @@ class MainWindow(QMainWindow):
     # -----------------------------------------------------------------
 
     def closeEvent(self, event: Any) -> None:
+        if self._blocking_update_dialog is not None and self._blocking_update_dialog.is_locked():
+            event.ignore()
+            return
         if self._settings.value("minimize_to_tray", False, type=bool) and self._tray_icon.isVisible():
             event.ignore()
             self.hide()

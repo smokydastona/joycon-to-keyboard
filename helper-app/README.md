@@ -149,8 +149,9 @@ Both folders are created next to the installed application (next to the `.exe` w
 When running as a packaged `.exe`, the app checks the [GitHub Releases](https://github.com/smokydastona/joycon-to-keyboard/releases) for a newer version on startup.
 
 - If an update is available, the version label in the sidebar changes to **"Update to X.Y.Z"**.
-- Clicking updates downloads the new `.exe`, swaps it in place, and prompts you to restart.
-- After relaunch, pending firmware is flashed over the existing ESP32-S3 serial connection, and the ESP32 host is updated through that same bridge path so both boards can be verified against the same release version.
-- If the ESP32-S3 is not connected yet, or you skip the flash prompt, the downloaded firmware stays queued so you can retry on the next launch instead of losing the staged update.
+- If an update is available, a **New Target** button appears at the bottom of the left sidebar.
+- Clicking **New Target** downloads the new `.exe`, swaps it in place, and relaunches the app automatically.
+- After relaunch, the app blocks normal use and auto-connects to the ESP32-S3 bridge so it can flash both boards to the matching release firmware before continuing.
+- The post-relaunch firmware stage is mandatory: it shows a non-closeable progress popup and retries automatically until flashing completes.
 - When running from source (not frozen), only a notification is shown — no auto-install.
 - The check uses an unauthenticated GET to the public GitHub API. No personal data is sent.

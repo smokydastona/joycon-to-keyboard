@@ -222,8 +222,8 @@ class SidebarWidget(QFrame):
 
         layout.addStretch()
 
-        # Update available button (hidden until an update is found)
-        self._update_btn = QPushButton("↑ Update Available")
+        # New release button (hidden until an update is found)
+        self._update_btn = QPushButton("New Target")
         self._update_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._update_btn.setObjectName("SidebarUpdateBtn")
         self._update_btn.setVisible(False)
@@ -267,8 +267,9 @@ class SidebarWidget(QFrame):
 
     def show_update_button(self, version: str) -> None:
         """Show the update button with the available version label."""
+        self._update_btn.setToolTip(f"New Target available: v{version}")
         if self._expanded:
-            self._update_btn.setText(f"↑ v{version} Available")
+            self._update_btn.setText("New Target")
         else:
             self._update_btn.setText("↑")
         self._update_btn.setVisible(True)
@@ -303,12 +304,8 @@ class SidebarWidget(QFrame):
 
         # Update button text based on expanded state
         if self._update_btn.isVisible():
-            cur = self._update_btn.text()
             if self._expanded:
-                # Try to restore version from current text
-                if cur == "↑":
-                    self._update_btn.setText("↑ Update Available")
-                # else keep whatever text it already shows (e.g. "↑ v1.2.3 Available")
+                self._update_btn.setText("New Target")
             else:
                 self._update_btn.setText("↑")
 
