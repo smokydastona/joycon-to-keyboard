@@ -403,9 +403,8 @@ class MappingPopup(QDialog):
         from pathlib import Path
         here = Path(__file__).resolve()
         repo = here.parents[4]
-        # Themed filename + fallback
+        # Dark theme uses the themed misc/ directory, not a separate filename.
         candidates = [
-            ("keyboard-dark.png", "dark"),
             ("keyboard.png", "dark"),
             ("keyboard.png", "default"),
         ] if theme_key == "dark" else [
