@@ -40,6 +40,11 @@ static const char *TAG = "bridge-ctrl";
 #define CTRL_CMD_OTA_ABORT   0x13
 #define CTRL_CMD_FW_VERSION  0x14
 
+// Buzzer control commands (runtime, persisted to NVS on ESP32 host)
+#define CTRL_CMD_BUZZER_GET  0x20
+#define CTRL_CMD_BUZZER_SET  0x21
+#define CTRL_CMD_BUZZER_TEST 0x22
+
 // OTA response IDs (sent back to ESP32-S3)
 #define OTA_RSP_BEGIN   0x01
 #define OTA_RSP_DATA    0x02   /* per-chunk ACK so S3 can throttle */
@@ -125,6 +130,76 @@ static void handle_ctrl_cmd(uint8_t cmd_id, const uint8_t *payload, uint8_t payl
             if (payload_len >= 2) {
                 joycon_mapper_set_rapid_trigger(payload[0], payload[1]);
             }
+            break;
+        }
+        case CTRL_CMD_BUZZER_GET: {
+#if CONFIG_BIND_BANDIT_BUZZER_ENABLED
+            buzzer_config_t cfg;
+            buzzer_get_config(&cfg);
+
+            uint8_t data[5];
+            data[0] = cfg.enabled ? 1 : 0;
+            data[1] = cfg.volume;
+            data[2] = cfg.discovery_tick ? 1 : 0;
+            data[3] = (uint8_t)(cfg.tone_mask & 0xFF);
+            data[4] = (uint8_t)((cfg.tone_mask >> 8) & 0xFF);
+
+            bridge_send_ctrl_rsp(CTRL_CMD_BUZZER_GET, 0x00, data, (uint8_t)sizeof(data));
+#else
+            uint8_t err = 0x01; // not_supported
+            bridge_send_ctrl_rsp(CTRL_CMD_BUZZER_GET, 0x01, &err, 1);
+#endif
+            break;
+        }
+        case CTRL_CMD_BUZZER_SET: {
+#if CONFIG_BIND_BANDIT_BUZZER_ENABLED
+            // payload: enabled(u8), volume(u8), discovery_tick(u8), tone_mask(u16le)
+            if (payload_len < 5) {
+                uint8_t err = 0x02; // invalid_arg
+                bridge_send_ctrl_rsp(CTRL_CMD_BUZZER_SET, 0x01, &err, 1);
+                break;
+            }
+
+            buzzer_config_t cfg;
+            cfg.enabled = payload[0] != 0;
+            cfg.volume = payload[1];
+            cfg.discovery_tick = payload[2] != 0;
+            cfg.tone_mask = (uint16_t)(payload[3] | ((uint16_t)payload[4] << 8));
+
+            esp_err_t err = buzzer_set_config(&cfg, true);
+            if (err != ESP_OK) {
+                uint8_t e = (err == ESP_ERR_INVALID_ARG) ? 0x02 : 0x03; // invalid_arg or nvs_error
+                bridge_send_ctrl_rsp(CTRL_CMD_BUZZER_SET, 0x01, &e, 1);
+            } else {
+                bridge_send_ctrl_rsp(CTRL_CMD_BUZZER_SET, 0x00, NULL, 0);
+            }
+#else
+            uint8_t err = 0x01; // not_supported
+            bridge_send_ctrl_rsp(CTRL_CMD_BUZZER_SET, 0x01, &err, 1);
+#endif
+            break;
+        }
+        case CTRL_CMD_BUZZER_TEST: {
+#if CONFIG_BIND_BANDIT_BUZZER_ENABLED
+            // payload: tone_id(u8)
+            if (payload_len < 1) {
+                uint8_t err = 0x02; // invalid_arg
+                bridge_send_ctrl_rsp(CTRL_CMD_BUZZER_TEST, 0x01, &err, 1);
+                break;
+            }
+            uint8_t tid = payload[0];
+            if (tid >= BUZZER_TONE_COUNT) {
+                uint8_t err = 0x02; // invalid_arg
+                bridge_send_ctrl_rsp(CTRL_CMD_BUZZER_TEST, 0x01, &err, 1);
+                break;
+            }
+
+            buzzer_play((buzzer_tone_t)tid);
+            bridge_send_ctrl_rsp(CTRL_CMD_BUZZER_TEST, 0x00, NULL, 0);
+#else
+            uint8_t err = 0x01; // not_supported
+            bridge_send_ctrl_rsp(CTRL_CMD_BUZZER_TEST, 0x01, &err, 1);
+#endif
             break;
         }
         case CTRL_CMD_FW_VERSION: {

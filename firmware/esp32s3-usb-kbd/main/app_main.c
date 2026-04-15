@@ -117,6 +117,11 @@ void app_main(void) {
                 continue;
             }
 
+            if (f.type == UART_FRAME_CTRL_RSP) {
+                bridge_serial_handle_ctrl_rsp(f.payload, f.length);
+                continue;
+            }
+
             if (f.type == UART_FRAME_BATTERY && f.length >= 3 && f.payload[0] == BATTERY_MARKER) {
                 uint8_t device_id = f.payload[1];
                 uint8_t level = f.payload[2];

@@ -126,6 +126,22 @@ void bridge_send_ota_rsp(uint8_t rsp_id, uint8_t status, const uint8_t* data, ui
     bridge_send_frame(payload, (uint8_t)(3 + n));
 }
 
+void bridge_send_ctrl_rsp(uint8_t rsp_id, uint8_t status, const uint8_t* data, uint8_t data_len) {
+    // CTRL response payload: [0]=0xF5, [1]=rsp_id, [2]=status, [3..]=data
+    uint8_t payload[3 + 200];
+    payload[0] = 0xF5;
+    payload[1] = rsp_id;
+    payload[2] = status;
+
+    uint8_t n = data_len;
+    if (n > 200) n = 200;
+    if (n > 0 && data) {
+        memcpy(&payload[3], data, n);
+    }
+
+    bridge_send_frame(payload, (uint8_t)(3 + n));
+}
+
 void bridge_send_battery(uint8_t device_id, uint8_t level) {
     // Battery payload: [0]=0xFA, [1]=device_id, [2]=level (0-4)
     uint8_t payload[3];

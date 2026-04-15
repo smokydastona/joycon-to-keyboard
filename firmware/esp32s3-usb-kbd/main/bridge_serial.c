@@ -48,6 +48,11 @@ static const char *TAG = "bridge-serial";
 #define CTRL_CMD_SET_SOCD_MODE   0x07
 #define CTRL_CMD_SET_RAPID_TRIGGER 0x08
 
+// Buzzer ("speaker") control commands relayed to ESP32
+#define CTRL_CMD_BUZZER_GET  0x20
+#define CTRL_CMD_BUZZER_SET  0x21
+#define CTRL_CMD_BUZZER_TEST 0x22
+
 // OTA response IDs received from ESP32 via UART
 #define OTA_RSP_MARKER  0xFB
 #define OTA_RSP_BEGIN   0x01
@@ -85,6 +90,13 @@ static volatile uint8_t s_esp32_ota_rsp_data_len = 0;
 // Set when legacy ESP32 firmware (< 0.1.249) is detected, to skip ACK waits.
 static bool s_esp32_ota_legacy_mode = false;
 
+// Pending ESP32 control response (buzzer settings, etc.).
+static volatile bool s_esp32_ctrl_rsp_ready = false;
+static volatile uint8_t s_esp32_ctrl_rsp_id = 0;
+static volatile uint8_t s_esp32_ctrl_rsp_status = 0;
+static uint8_t s_esp32_ctrl_rsp_data[64];
+static volatile uint8_t s_esp32_ctrl_rsp_data_len = 0;
+
 static void cdc_write_line(const char *line) {
     if (!tud_cdc_connected()) return;
 
@@ -110,6 +122,17 @@ static void respond_error(const char *cmd, const char *err) {
     cJSON_AddStringToObject(rsp, "rsp", cmd ? cmd : "error");
     cJSON_AddBoolToObject(rsp, "ok", false);
     cJSON_AddStringToObject(rsp, "error", err ? err : "unknown");
+    cdc_write_json(rsp);
+    cJSON_Delete(rsp);
+}
+
+static void respond_error_u8(const char *cmd, const char *err, uint8_t status) {
+    cJSON *rsp = cJSON_CreateObject();
+    if (!rsp) return;
+    cJSON_AddStringToObject(rsp, "rsp", cmd ? cmd : "error");
+    cJSON_AddBoolToObject(rsp, "ok", false);
+    cJSON_AddStringToObject(rsp, "error", err ? err : "unknown");
+    cJSON_AddNumberToObject(rsp, "status", status);
     cdc_write_json(rsp);
     cJSON_Delete(rsp);
 }
@@ -381,6 +404,31 @@ static bool wait_esp32_ota_rsp(uint8_t expected_rsp_id, int timeout_ms) {
         }
 
         if (s_esp32_ota_rsp_ready && s_esp32_ota_rsp_id == expected_rsp_id) {
+            return true;
+        }
+        vTaskDelay(1);
+    }
+    return false;
+}
+
+// Wait for a control response from ESP32, keeping USB alive.
+// Returns true if a response arrived within timeout_ms.
+static bool wait_esp32_ctrl_rsp(uint8_t expected_rsp_id, int timeout_ms) {
+    s_esp32_ctrl_rsp_ready = false;
+
+    TickType_t deadline = xTaskGetTickCount() + pdMS_TO_TICKS(timeout_ms);
+    while (xTaskGetTickCount() < deadline) {
+        // See wait_esp32_ota_rsp() for why we must not call tud_task() here.
+
+        uart_frame_t f;
+        while (uart_proto_poll_frame(&f)) {
+            if (f.type == UART_FRAME_CTRL_RSP) {
+                bridge_serial_handle_ctrl_rsp(f.payload, f.length);
+            }
+            // Ignore other frames while waiting for a specific response.
+        }
+
+        if (s_esp32_ctrl_rsp_ready && s_esp32_ctrl_rsp_id == expected_rsp_id) {
             return true;
         }
         vTaskDelay(1);
@@ -714,6 +762,126 @@ static void handle_set_gamepad_enabled(cJSON *root) {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Buzzer ("speaker") commands (relayed to ESP32 host)
+// ---------------------------------------------------------------------------
+
+static void handle_buzzer_get(void) {
+    if (!uart_proto_send_ctrl(CTRL_CMD_BUZZER_GET, NULL, 0)) {
+        respond_error("buzzer_get", "uart_send_failed");
+        return;
+    }
+
+    if (!wait_esp32_ctrl_rsp(CTRL_CMD_BUZZER_GET, 3000)) {
+        respond_error("buzzer_get", "esp32_timeout");
+        return;
+    }
+
+    if (s_esp32_ctrl_rsp_status != 0x00) {
+        respond_error_u8("buzzer_get", "esp32_error", s_esp32_ctrl_rsp_status);
+        return;
+    }
+
+    // Response data: [enabled, volume, discovery_tick, tone_mask_le16]
+    if (s_esp32_ctrl_rsp_data_len < 5) {
+        respond_error("buzzer_get", "bad_rsp_len");
+        return;
+    }
+
+    bool enabled = (s_esp32_ctrl_rsp_data[0] != 0);
+    uint8_t volume = s_esp32_ctrl_rsp_data[1];
+    bool discovery_tick = (s_esp32_ctrl_rsp_data[2] != 0);
+    uint16_t tone_mask = (uint16_t)s_esp32_ctrl_rsp_data[3] | ((uint16_t)s_esp32_ctrl_rsp_data[4] << 8);
+
+    cJSON *rsp = cJSON_CreateObject();
+    if (!rsp) return;
+    cJSON_AddStringToObject(rsp, "rsp", "buzzer_get");
+    cJSON_AddBoolToObject(rsp, "ok", true);
+    cJSON_AddBoolToObject(rsp, "enabled", enabled);
+    cJSON_AddNumberToObject(rsp, "volume", volume);
+    cJSON_AddBoolToObject(rsp, "discovery_tick", discovery_tick);
+    cJSON_AddNumberToObject(rsp, "tone_mask", tone_mask);
+    cdc_write_json(rsp);
+    cJSON_Delete(rsp);
+}
+
+static void handle_buzzer_set(cJSON *root) {
+    // {"cmd":"buzzer_set", "enabled":true|false, "volume":0..100, "discovery_tick":true|false, "tone_mask":0..65535}
+    cJSON *en = cJSON_GetObjectItemCaseSensitive(root, "enabled");
+    cJSON *vol = cJSON_GetObjectItemCaseSensitive(root, "volume");
+    cJSON *tick = cJSON_GetObjectItemCaseSensitive(root, "discovery_tick");
+    cJSON *mask = cJSON_GetObjectItemCaseSensitive(root, "tone_mask");
+
+    if (!cJSON_IsBool(en) || !cJSON_IsNumber(vol) || !cJSON_IsBool(tick) || !cJSON_IsNumber(mask)) {
+        respond_error("buzzer_set", "missing_fields");
+        return;
+    }
+
+    int v = vol->valueint;
+    if (v < 0) v = 0;
+    if (v > 100) v = 100;
+
+    int m = mask->valueint;
+    if (m < 0) m = 0;
+    if (m > 0xFFFF) m = 0xFFFF;
+
+    uint8_t payload[5];
+    payload[0] = cJSON_IsTrue(en) ? 1 : 0;
+    payload[1] = (uint8_t)v;
+    payload[2] = cJSON_IsTrue(tick) ? 1 : 0;
+    payload[3] = (uint8_t)(m & 0xFF);
+    payload[4] = (uint8_t)((m >> 8) & 0xFF);
+
+    if (!uart_proto_send_ctrl(CTRL_CMD_BUZZER_SET, payload, sizeof(payload))) {
+        respond_error("buzzer_set", "uart_send_failed");
+        return;
+    }
+
+    if (!wait_esp32_ctrl_rsp(CTRL_CMD_BUZZER_SET, 3000)) {
+        respond_error("buzzer_set", "esp32_timeout");
+        return;
+    }
+
+    if (s_esp32_ctrl_rsp_status != 0x00) {
+        respond_error_u8("buzzer_set", "esp32_error", s_esp32_ctrl_rsp_status);
+        return;
+    }
+
+    respond_ok_simple("buzzer_set");
+}
+
+static void handle_buzzer_test(cJSON *root) {
+    // {"cmd":"buzzer_test", "tone_id":0..255}
+    cJSON *tone_j = cJSON_GetObjectItemCaseSensitive(root, "tone_id");
+    if (!cJSON_IsNumber(tone_j)) {
+        respond_error("buzzer_test", "missing_tone_id");
+        return;
+    }
+
+    int t = tone_j->valueint;
+    if (t < 0) t = 0;
+    if (t > 255) t = 255;
+
+    uint8_t payload = (uint8_t)t;
+
+    if (!uart_proto_send_ctrl(CTRL_CMD_BUZZER_TEST, &payload, 1)) {
+        respond_error("buzzer_test", "uart_send_failed");
+        return;
+    }
+
+    if (!wait_esp32_ctrl_rsp(CTRL_CMD_BUZZER_TEST, 3000)) {
+        respond_error("buzzer_test", "esp32_timeout");
+        return;
+    }
+
+    if (s_esp32_ctrl_rsp_status != 0x00) {
+        respond_error_u8("buzzer_test", "esp32_error", s_esp32_ctrl_rsp_status);
+        return;
+    }
+
+    respond_ok_simple("buzzer_test");
+}
+
 static void handle_line(const char *line) {
     cJSON *root = cJSON_Parse(line);
     if (!root) {
@@ -760,7 +928,13 @@ static void handle_line(const char *line) {
         handle_home_led(root);
     } else if (strcmp(cmd->valuestring, "set_gamepad_enabled") == 0) {
         handle_set_gamepad_enabled(root);
-    } else if (strcmp(cmd->valuestring, "set_socd_mode") == 0) {
+    } else if (strcmp(cmd->valuestring, "buzzer_get") == 0) {
+        handle_buzzer_get();
+    } else if (strcmp(cmd->valuestring, "buzzer_set") == 0) {
+        handle_buzzer_set(root);
+    } else if (strcmp(cmd->valuestring, "buzzer_test") == 0) {
+        handle_buzzer_test(root);
+    } else if (strcmp(cmd->valuestring, "set_socd_mode") == 0) { 
         cJSON *mode_j = cJSON_GetObjectItemCaseSensitive(root, "mode");
         uint8_t mode = 0;
         if (cJSON_IsString(mode_j) && mode_j->valuestring) {
@@ -1031,6 +1205,22 @@ void bridge_serial_handle_ota_rsp(const uint8_t *payload, uint8_t length) {
     }
     s_esp32_ota_rsp_data_len = dlen;
     s_esp32_ota_rsp_ready = true;
+}
+
+void bridge_serial_handle_ctrl_rsp(const uint8_t *payload, uint8_t length) {
+    // payload: [0]=0xF5, [1]=rsp_id, [2]=status, [3..]=data
+    if (length < 3) return;
+
+    s_esp32_ctrl_rsp_id = payload[1];
+    s_esp32_ctrl_rsp_status = payload[2];
+
+    uint8_t dlen = (length > 3) ? (uint8_t)(length - 3) : 0;
+    if (dlen > sizeof(s_esp32_ctrl_rsp_data)) dlen = sizeof(s_esp32_ctrl_rsp_data);
+    if (dlen > 0) {
+        memcpy(s_esp32_ctrl_rsp_data, &payload[3], dlen);
+    }
+    s_esp32_ctrl_rsp_data_len = dlen;
+    s_esp32_ctrl_rsp_ready = true;
 }
 
 void bridge_serial_emit_battery(uint8_t device_id, uint8_t level) {

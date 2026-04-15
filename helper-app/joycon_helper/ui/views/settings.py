@@ -1,7 +1,10 @@
 """Settings view — dedicated full-panel settings with categorised cards.
 
-Provides five sections: General, Serial, Input (Key Pops), Profiles, and
-Developer Tools.  All settings persist via QSettings.
+Provides four sections: General, Input (Key Pops), Profiles, and Developer
+Tools. App-side settings persist via QSettings.
+
+InputGoblin-specific settings (speaker + serial) live in the separate
+"InputGoblin Settings" dialog.
 """
 from __future__ import annotations
 
@@ -60,7 +63,6 @@ class SettingsView(QScrollArea):
         self._layout.addWidget(title)
 
         self._build_general_card()
-        self._build_serial_card()
         self._build_input_card()
         self._build_profiles_card()
         self._build_developer_card()
@@ -125,6 +127,12 @@ class SettingsView(QScrollArea):
         self._cb_auto_conn.setToolTip("Automatically reconnect to the last used COM port on startup")
         self._cb_auto_conn.toggled.connect(lambda v: self._settings.setValue("auto_connect", v))
         form.addRow(self._cb_auto_conn)
+
+        # InputGoblin settings dialog (speaker + serial, etc.)
+        self._btn_inputgoblin = QPushButton("InputGoblin Settings…")
+        self._btn_inputgoblin.setToolTip("Open InputGoblin-specific settings (speaker + serial)")
+        self._btn_inputgoblin.clicked.connect(self._open_inputgoblin_settings)
+        form.addRow(self._btn_inputgoblin)
 
         card_layout.addLayout(form)
         self._layout.addWidget(card)
@@ -533,6 +541,12 @@ class SettingsView(QScrollArea):
         QMessageBox.information(
             self, "Onboarding",
             "The onboarding wizard will show on next launch.")
+
+    def _open_inputgoblin_settings(self) -> None:
+        from ..widgets.inputgoblin_settings_dialog import InputGoblinSettingsDialog
+
+        dlg = InputGoblinSettingsDialog(self._main)
+        dlg.exec()
 
     # -----------------------------------------------------------------
     # View protocol

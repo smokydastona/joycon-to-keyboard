@@ -25,6 +25,10 @@ void bridge_serial_emit_bt_status(const char *state, const char *name, const cha
 // payload[0]=0xFB, [1]=rsp_id, [2]=status, [3..]=optional data
 void bridge_serial_handle_ota_rsp(const uint8_t *payload, uint8_t length);
 
+// Handle a control response frame received from the ESP32 BT host via UART.
+// payload[0]=0xF5, [1]=rsp_id, [2]=status, [3..]=optional data
+void bridge_serial_handle_ctrl_rsp(const uint8_t *payload, uint8_t length);
+
 // Emit a battery level event for the helper app UI.
 // device_id: 0=left, 1=right. level: 0=empty, 1-3=mid, 4=full.
 void bridge_serial_emit_battery(uint8_t device_id, uint8_t level);

@@ -41,6 +41,14 @@ void bridge_send_bt_status(uint8_t status_id, const uint8_t* bda6, const char* n
 // rsp_ids: 0x01=begin, 0x02=data_ack (unused), 0x03=end, 0x04=version
 void bridge_send_ota_rsp(uint8_t rsp_id, uint8_t status, const uint8_t* data, uint8_t data_len);
 
+// Sends a control-command response frame back to the ESP32-S3.
+// Payload format:
+//   [0] = 0xF5 (CTRL response marker)
+//   [1] = rsp_id (typically the ctrl cmd_id)
+//   [2] = status (0x00 = ok, 0x01 = error)
+//   [3..] = optional data
+void bridge_send_ctrl_rsp(uint8_t rsp_id, uint8_t status, const uint8_t* data, uint8_t data_len);
+
 // Sends a battery level frame to the ESP32-S3.
 // Payload format:
 //   [0] = 0xFA (battery marker)

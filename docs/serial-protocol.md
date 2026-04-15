@@ -139,6 +139,17 @@ Current control commands:
 	- payload: 2 bytes
 		- `[0]`: activation threshold (stick → key on; default 30)
 		- `[1]`: deactivation threshold (key off; default 20; must be ≤ activation)
+- `cmd_id=0x20` — buzzer get (query current buzzer/speaker settings)
+	- no payload
+- `cmd_id=0x21` — buzzer set (apply + persist buzzer/speaker settings)
+	- payload: 5 bytes
+		- `[0]`: enabled (0/1)
+		- `[1]`: volume (0–100; 0 = mute)
+		- `[2]`: discovery_tick (0/1)
+		- `[3..4]`: tone_mask (uint16 LE; bit N = tone_id N)
+- `cmd_id=0x22` — buzzer test (play a tone)
+	- payload: 1 byte
+		- `[0]`: tone_id (matches ESP32 `buzzer_tone_t` enum)
 
 ### OTA update control commands (ESP32-S3 → ESP32)
 
@@ -169,6 +180,24 @@ Response IDs:
 - `0x01` — OTA begin ACK
 - `0x03` — OTA end ACK
 - `0x04` — firmware version (data = UTF-8 version string)
+
+## Control response frames (ESP32 → ESP32-S3)
+
+Non-OTA control responses use marker `0xF5`:
+
+- `payload[0]`: `0xF5` (control response marker)
+- `payload[1]`: response ID (typically echoes the `cmd_id`)
+- `payload[2]`: status (`0x00` = OK, non-zero = error)
+- `payload[3..]`: optional data
+
+Current control responses:
+
+- `rsp_id=0x20` — buzzer get
+	- data: 5 bytes
+		- `[0]`: enabled (0/1)
+		- `[1]`: volume (0–100)
+		- `[2]`: discovery_tick (0/1)
+		- `[3..4]`: tone_mask (uint16 LE)
 
 ## Battery level frames (ESP32 → ESP32-S3)
 

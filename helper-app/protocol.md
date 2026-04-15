@@ -609,6 +609,51 @@ Set the brightness of the Home button LED (right Joy-Con / Pro Controller only; 
 - `device_id`: `0` or `1`
 - `brightness`: 0–15 (0 = off, 15 = max)
 
+### Speaker / buzzer settings
+
+These commands configure the ESP32 BT host piezo/buzzer ("speaker") at runtime. Settings persist on the ESP32 host.
+
+#### Query current settings
+
+```json
+{"cmd":"buzzer_get"}
+```
+
+Response:
+
+```json
+{"rsp":"buzzer_get","ok":true,"enabled":true,"volume":60,"discovery_tick":true,"tone_mask":127}
+```
+
+- `enabled`: master enable
+- `volume`: 0–100 (0 = mute)
+- `discovery_tick`: enable periodic tick while BT discovery is active
+- `tone_mask`: per-tone enable bitmask (bit N = tone_id N)
+
+#### Apply settings
+
+```json
+{"cmd":"buzzer_set","enabled":true,"volume":60,"discovery_tick":true,"tone_mask":127}
+```
+
+Response:
+
+```json
+{"rsp":"buzzer_set","ok":true}
+```
+
+#### Play a test tone
+
+```json
+{"cmd":"buzzer_test","tone_id":1}
+```
+
+Response:
+
+```json
+{"rsp":"buzzer_test","ok":true}
+```
+
 ### Set SOCD mode
 
 Configure the Simultaneous Opposing Cardinal Directions cleaning mode on the ESP32 BT host.
