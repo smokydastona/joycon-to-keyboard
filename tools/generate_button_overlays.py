@@ -58,6 +58,7 @@ from joycon_helper.ui.constants import (  # noqa: E402  # isort: skip
     INCEDIUS_HOTSPOTS as _INCEDIUS_NORM,
     INCEDIUS_WIDE,
     JOYCON_BUTTON_SHAPES,
+    KBD_BUTTON_SHAPES,
     KBD_HOTSPOTS as _KBD_NORM,
     KBD_WIDE,
     KEYMAP_HOTSPOTS,
@@ -455,6 +456,7 @@ DEVICES: dict[str, dict] = {
         "hotspots": KBD_HOTSPOTS,
         "wide": KBD_WIDE,
         "prefix": "kbd",
+        "shapes": KBD_BUTTON_SHAPES,
     },
     "mouse": {
         "hotspots": MOUSE_HOTSPOTS,

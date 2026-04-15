@@ -8,9 +8,12 @@ from __future__ import annotations
 
 import logging
 import math
+import random
+import zlib
 from typing import Any
 
 from PyQt6.QtCore import (
+    QPointF,
     QRectF,
     Qt,
     QTimer,
@@ -192,6 +195,7 @@ class HotspotCanvas(QGraphicsView):
 
     def set_overlay_color(self, hex_color: str) -> None:
         self._overlay_color = hex_color
+        self._build_overlay_brushes()
         self._update_hotspot_visuals()
 
     def set_pale_overlay(self, pixmap: QPixmap | None) -> None:
@@ -327,6 +331,8 @@ class HotspotCanvas(QGraphicsView):
                                 hs.label.setPos(cx + outer_r + 4, cy - 8)
                         else:
                             hs.label.setPos(cx - lw / 2, cy + _TEXT_OFFSET_Y)
+                self._build_overlay_brushes()
+                self._update_hotspot_visuals()
             return
         name = self._pick_hotspot(event.position())
         if name != self._hovered:
@@ -546,30 +552,104 @@ class HotspotCanvas(QGraphicsView):
         self._update_hotspot_visuals()
 
     def _build_overlay_brushes(self) -> None:
-        """Crop cached overlay pixmaps to shape bounds and build QBrush instances."""
+        """Build overlay brushes directly from the live hotspot geometry."""
         self._overlay_brushes.clear()
         rect = self._scene.sceneRect()
-        if rect.width() <= 0 or not self._overlay_full_pixmaps:
+        if rect.width() <= 0:
             return
 
         for hs in self._hotspots:
-            pm = self._overlay_full_pixmaps.get(hs.name)
-            if pm is None:
-                continue
-            cx = hs.norm_x * rect.width()
-            cy = hs.norm_y * rect.height()
-            # Use generous grow so texture covers the pulse animation range
-            shape_path = self._make_shape_path(cx, cy, hs.name, grow=_PULSE_RANGE + 8)
-            bounds = shape_path.boundingRect().toAlignedRect()
-            bounds = bounds.intersected(pm.rect())
-            if bounds.isEmpty():
-                continue
-            cropped = pm.copy(bounds)
-            brush = QBrush(cropped)
-            t = QTransform()
-            t.translate(bounds.x(), bounds.y())
-            brush.setTransform(t)
-            self._overlay_brushes[hs.name] = brush
+            brush = self._build_overlay_brush(hs, rect)
+            if brush is not None:
+                self._overlay_brushes[hs.name] = brush
+
+    def _build_overlay_brush(self, hs: HotspotItem, rect: QRectF) -> QBrush | None:
+        cx = hs.norm_x * rect.width()
+        cy = hs.norm_y * rect.height()
+        shape_path = self._make_shape_path(cx, cy, hs.name, grow=_PULSE_RANGE + 8)
+        bounds = shape_path.boundingRect().toAlignedRect()
+        if bounds.isEmpty():
+            return None
+
+        pixmap = QPixmap(bounds.size())
+        pixmap.fill(Qt.GlobalColor.transparent)
+
+        local_path = QPainterPath(shape_path)
+        local_path.translate(-bounds.x(), -bounds.y())
+
+        painter = QPainter(pixmap)
+        painter.setRenderHints(
+            QPainter.RenderHint.Antialiasing |
+            QPainter.RenderHint.SmoothPixmapTransform
+        )
+        self._paint_overlay_texture(painter, local_path, hs.name)
+        painter.end()
+
+        brush = QBrush(pixmap)
+        transform = QTransform()
+        transform.translate(bounds.x(), bounds.y())
+        brush.setTransform(transform)
+        return brush
+
+    def _paint_overlay_texture(self, painter: QPainter, path: QPainterPath, seed_name: str) -> None:
+        seed = zlib.crc32(seed_name.encode("utf-8")) & 0xFFFF_FFFF
+        rng = random.Random(seed)
+        bounds = path.boundingRect()
+        base = QColor(self._overlay_color)
+
+        tint = QColor(base)
+        tint.setAlpha(26)
+        painter.fillPath(path, tint)
+
+        painter.save()
+        painter.setClipPath(path)
+
+        hatch = QColor(base)
+        hatch.setAlpha(86)
+        hatch_pen = QPen(hatch, 1.2)
+        hatch_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(hatch_pen)
+
+        primary_step = max(6, int(min(bounds.width(), bounds.height()) / 5))
+        start = int(bounds.left() - bounds.height())
+        stop = int(bounds.right() + bounds.height())
+        for offset in range(start, stop, primary_step):
+            painter.drawLine(
+                QPointF(offset + rng.uniform(-1.5, 1.5), bounds.top() + rng.uniform(-1.5, 1.5)),
+                QPointF(offset - bounds.height() + rng.uniform(-1.5, 1.5), bounds.bottom() + rng.uniform(-1.5, 1.5)),
+            )
+
+        secondary = QColor(base)
+        secondary.setAlpha(52)
+        secondary_pen = QPen(secondary, 1.0)
+        secondary_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(secondary_pen)
+        secondary_step = primary_step + 3
+        for offset in range(start, stop, secondary_step):
+            painter.drawLine(
+                QPointF(offset + rng.uniform(-1.2, 1.2), bounds.bottom() + rng.uniform(-1.2, 1.2)),
+                QPointF(offset - bounds.height() + rng.uniform(-1.2, 1.2), bounds.top() + rng.uniform(-1.2, 1.2)),
+            )
+
+        painter.restore()
+
+        glow = QColor(base)
+        glow.setAlpha(70)
+        glow_pen = QPen(glow, 5.0)
+        glow_pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        glow_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.strokePath(path, glow_pen)
+
+        for width, alpha, jitter in ((2.2, 220, 1.1), (1.7, 165, 1.9), (1.0, 115, 2.4)):
+            outline = QColor(base)
+            outline.setAlpha(alpha)
+            pen = QPen(outline, width)
+            pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+            painter.setPen(pen)
+            dx = rng.uniform(-jitter, jitter)
+            dy = rng.uniform(-jitter, jitter)
+            painter.strokePath(QTransform.fromTranslate(dx, dy).map(path), pen)
 
     def _update_hotspot_visuals(self) -> None:
         c = self._theme.theme["colors"]
@@ -579,50 +659,37 @@ class HotspotCanvas(QGraphicsView):
 
             # Determine color
             if hs.disabled:
-                fill_color = c["muted"]
                 border_color = c["border"]
             elif hs.name == self._selected:
-                fill_color = c["accent"]
                 border_color = c["accent"]
             elif hs.conflict:
-                fill_color = c["conflict"]
                 border_color = c["conflict"]
             elif hs.search_match:
-                fill_color = c["success"]
                 border_color = c["success"]
             elif hs.mapped:
-                fill_color = self._overlay_color
                 border_color = self._overlay_color
             else:
-                fill_color = c["muted"]
                 border_color = c["border"]
 
             # Hover effect — determine opacity based on state
             is_hovered = hs.name == self._hovered
-            has_pale = self._pale_item is not None
             overlay_brush = self._overlay_brushes.get(hs.name)
 
-            if hs.name == self._selected or is_hovered:
-                opacity = 0.85
-            elif overlay_brush and hs.mapped:
-                opacity = 0.65
-            elif overlay_brush:
-                opacity = 0.35
-            elif has_pale and hs.mapped:
-                opacity = 0.25
-            elif has_pale:
-                opacity = 0.15
+            if hs.disabled:
+                opacity = 0.18
+            elif hs.name == self._selected or is_hovered:
+                opacity = 0.92
+            elif hs.mapped:
+                opacity = 0.72
             else:
-                opacity = 0.75 if not is_hovered else 0.95
+                opacity = 0.34
 
-            # Use overlay texture brush when available, solid color fallback
+            # Hotspots always render through the overlay texture brush.
             if overlay_brush:
                 hs.dot.setBrush(overlay_brush)
                 hs.dot.setOpacity(opacity)
             else:
-                fc = QColor(fill_color)
-                fc.setAlphaF(opacity)
-                hs.dot.setBrush(QBrush(fc))
+                hs.dot.setBrush(Qt.BrushStyle.NoBrush)
                 hs.dot.setOpacity(1.0)
 
             pen_width = 3 if is_hovered or hs.name == self._selected else 2

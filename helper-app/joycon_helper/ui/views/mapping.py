@@ -539,66 +539,25 @@ class MappingView(QWidget):
     }
 
     def _load_pale_overlays(self) -> None:
-        """Load pale composite overlays for all device canvases."""
-        color = getattr(self, "_overlay_color", "violet")
-        for attr, (device, _prefix) in self._CANVAS_DEVICE_INFO.items():
+        """Clear any pre-rendered scene overlays and keep live hotspot textures authoritative."""
+        for attr, (_device, _prefix) in self._CANVAS_DEVICE_INFO.items():
             canvas: HotspotCanvas = getattr(self, attr, None)
             if canvas is None:
                 continue
-            # Use incedius device name when that skin is active
-            actual_device = device
-            if attr == "_m913_canvas" and getattr(self, "_m913_skin", "Stock") == "Incedius":
-                actual_device = "incedius"
-            path = self._main.assets.find_pale_overlay(actual_device, color)
-            if path:
-                pm = self._main.assets.load_pixmap(path.name, extra_roots=[path.parent])
-                canvas.set_pale_overlay(pm)
-            else:
-                canvas.set_pale_overlay(None)
+            canvas.set_pale_overlay(None)
 
     def _load_bright_overlay(self, canvas: HotspotCanvas, button_name: str) -> None:
-        """Load the full-brightness individual overlay for *button_name*."""
-        color = getattr(self, "_overlay_color", "violet")
-        # Determine device & prefix from the canvas
-        device = "joycon"
-        prefix = "jc"
-        for attr, (d, p) in self._CANVAS_DEVICE_INFO.items():
-            if getattr(self, attr, None) is canvas:
-                device = d
-                prefix = p
-                if attr == "_m913_canvas" and getattr(self, "_m913_skin", "Stock") == "Incedius":
-                    device = "incedius"
-                    prefix = "inc"
-                break
-        safe_name = button_name.replace("/", "_").replace("\\", "_").replace(".", "_dot_")
-        overlay_name = f"{prefix}_{safe_name}"
-        path = self._main.assets.find_overlay_image(device, overlay_name, color)
-        if path:
-            pm = self._main.assets.load_pixmap(path.name, extra_roots=[path.parent])
-            canvas.set_bright_overlay(pm)
-        else:
-            canvas.set_bright_overlay(None)
+        """Clear any pre-rendered selected overlay for *button_name*."""
+        del button_name
+        canvas.set_bright_overlay(None)
 
     def _load_overlay_textures(self) -> None:
-        """Load individual button overlay paths for texture brush fills."""
-        color = getattr(self, "_overlay_color", "violet")
-        for attr, (device, prefix) in self._CANVAS_DEVICE_INFO.items():
+        """Clear file-based overlays so live hotspot textures own the rendering."""
+        for attr, (_device, _prefix) in self._CANVAS_DEVICE_INFO.items():
             canvas: HotspotCanvas = getattr(self, attr, None)
             if canvas is None:
                 continue
-            actual_device = device
-            actual_prefix = prefix
-            if attr == "_m913_canvas" and getattr(self, "_m913_skin", "Stock") == "Incedius":
-                actual_device = "incedius"
-                actual_prefix = "inc"
-            paths: dict[str, str] = {}
-            for name in canvas.get_hotspot_names():
-                safe_name = name.replace("/", "_").replace("\\", "_").replace(".", "_dot_")
-                overlay_name = f"{actual_prefix}_{safe_name}"
-                path = self._main.assets.find_overlay_image(actual_device, overlay_name, color)
-                if path:
-                    paths[name] = str(path)
-            canvas.set_overlay_paths(paths)
+            canvas.set_overlay_paths({})
 
     # -----------------------------------------------------------------
     # Active device helpers
