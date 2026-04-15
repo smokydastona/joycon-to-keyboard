@@ -192,6 +192,8 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "Help — you are here\n\n"
                 "## Key Binding\n"
                 "The Blueprint Layout tab handles all key mapping for Joy-Con, M913, and Razer. "
+                "It also includes a Keyboard tab so you can tune keyboard hotspot positions "
+                "directly in the mapping view when needed. "
                 "The M913 section includes a Skin selector (Stock / Incedius) to switch "
                 "between the standard M913 layout and the Incedius variant. "
                 "Each skin has its own independent hotspot positions so the dots "

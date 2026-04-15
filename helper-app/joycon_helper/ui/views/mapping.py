@@ -248,9 +248,12 @@ class MappingView(QWidget):
         self._gp_canvas.hotspot_hovered.connect(self._on_hotspot_hovered)
         self._device_tabs.addTab(self._gp_canvas, "Gamepad")
 
-        # Keyboard canvas (popup only — not a tab)
+        # Keyboard canvas
         self._kbd_canvas = HotspotCanvas(self._main.theme)
         self._kbd_canvas.hotspot_clicked.connect(self._on_kbd_hotspot_clicked)
+        self._kbd_canvas.hotspot_right_clicked.connect(self._on_hotspot_right_click)
+        self._kbd_canvas.hotspot_hovered.connect(self._on_hotspot_hovered)
+        self._device_tabs.addTab(self._kbd_canvas, "Keyboard")
 
         lay.addWidget(self._device_tabs, 1)
 
@@ -612,6 +615,7 @@ class MappingView(QWidget):
             (self._m913_canvas, m913_hs),
             (self._mouse_canvas, self._mouse_pos),
             (self._gp_canvas, self._gamepad_pos),
+            (self._kbd_canvas, self._keyboard_pos),
         ]
 
     def _active_canvas(self) -> HotspotCanvas:
@@ -948,7 +952,6 @@ class MappingView(QWidget):
     def _on_edit_positions_toggled(self, checked: bool) -> None:
         for canvas, _ in self._device_list():
             canvas.set_edit_mode(checked)
-        self._kbd_canvas.set_edit_mode(checked)
         self._edit_pos_btn.setText(
             "📐 Editing..." if checked else "📐 Edit Positions"
         )
@@ -1246,7 +1249,6 @@ class MappingView(QWidget):
         self._reload_backgrounds()
         for canvas, _ in self._device_list():
             canvas.apply_theme(theme)
-        self._kbd_canvas.apply_theme(theme)
         self._refresh_mapping_visuals()
 
     def _reload_backgrounds(self) -> None:
