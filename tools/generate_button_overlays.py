@@ -18,17 +18,16 @@ The default colour is **violet**.
 
 Output layout:
 
-    docs/ui/button_overlays/
-      red/
-        joycon/    jc_ZL.png, jc_ZR.png, ..., pale_joycon.png
-        m913/      m913_left.png, ..., pale_m913.png
-        incedius/  inc_left.png, ..., pale_incedius.png
-        keyboard/  kbd_Esc.png, ..., pale_keyboard.png
-        mouse/     mouse_Left.png, ..., pale_mouse.png
-      orange/
-        ...
-      yellow/ green/ blue/ indigo/ violet/
-        ...
+        docs/ui/button_overlays/
+            default/
+                red/
+                    joycon/    jc_ZL.png, jc_ZR.png, ..., pale_joycon.png
+                    ...
+                orange/ yellow/ green/ blue/ indigo/ violet/
+                    ...
+            dark/
+                red/ orange/ yellow/ green/ blue/ indigo/ violet/
+                    ...
 
 Usage:
     python tools/generate_button_overlays.py
@@ -36,6 +35,7 @@ Usage:
 
 from __future__ import annotations
 
+import json
 import math
 import random
 import sys
@@ -85,6 +85,57 @@ PALE_ALPHA_FRACTION = 0.30
 
 # Reproducible hand-drawn wobble
 RNG = random.Random(42)
+
+THEMES = ("default", "dark")
+
+
+def _load_hotspot_positions_json() -> dict[str, list[tuple[str, float, float]]]:
+    """Load repo-root hotspot_positions.json (if present).
+
+    The helper app can import/export per-device hotspot coordinates to this
+    file. Using it here keeps the generated PNG overlays aligned with the
+    positions the app will actually use.
+    """
+    path = REPO_ROOT / "hotspot_positions.json"
+    if not path.exists():
+        return {}
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        out: dict[str, list[tuple[str, float, float]]] = {}
+        if not isinstance(raw, dict):
+            return {}
+        for device, items in raw.items():
+            if not isinstance(device, str) or not isinstance(items, list):
+                continue
+            parsed: list[tuple[str, float, float]] = []
+            for row in items:
+                if not isinstance(row, list) or len(row) != 3:
+                    continue
+                name, nx, ny = row
+                if not isinstance(name, str):
+                    continue
+                try:
+                    fx = float(nx)
+                    fy = float(ny)
+                except (TypeError, ValueError):
+                    continue
+                parsed.append((name, fx, fy))
+            if parsed:
+                out[device] = parsed
+        return out
+    except Exception:
+        return {}
+
+
+_HOTSPOTS_JSON = _load_hotspot_positions_json()
+
+
+def _norm_to_px(norm: list[tuple[str, float, float]]) -> list[tuple[str, int, int]]:
+    return [(name, int(nx * IMAGE_W), int(ny * IMAGE_H)) for name, nx, ny in norm]
+
+
+def _device_norm_positions(device: str) -> list[tuple[str, float, float]] | None:
+    return _HOTSPOTS_JSON.get(device)
 
 
 def _stable_seed(text: str) -> int:
@@ -377,45 +428,33 @@ def _draw_arc_segment(
 # ── Joy-Con ───────────────────────────────────────────────────────────────
 # Computed from the authoritative normalised positions in constants.py.
 # Uses "dark" theme positions (identical to "default" for Joy-Con).
-JOYCON_HOTSPOTS: list[tuple[str, int, int]] = [
-    (name, int(nx * IMAGE_W), int(ny * IMAGE_H))
-    for name, nx, ny in KEYMAP_HOTSPOTS["dark"]
-]
+_jc_norm = _device_norm_positions("joycon") or KEYMAP_HOTSPOTS["dark"]
+JOYCON_HOTSPOTS: list[tuple[str, int, int]] = _norm_to_px(_jc_norm)
 
 # ── M913 Stock (16 buttons) ──────────────────────────────────────────────
 # Computed from the authoritative normalised positions in constants.py.
-M913_HOTSPOTS: list[tuple[str, int, int]] = [
-    (name, int(nx * IMAGE_W), int(ny * IMAGE_H))
-    for name, nx, ny in _M913_NORM["dark"]
-]
+_m913_norm = _device_norm_positions("m913") or _M913_NORM["dark"]
+M913_HOTSPOTS: list[tuple[str, int, int]] = _norm_to_px(_m913_norm)
 
 # ── Incedius M913 (16 buttons, same physical mouse, different skin) ──────
 # Computed from the authoritative normalised positions in constants.py.
-INCEDIUS_HOTSPOTS: list[tuple[str, int, int]] = [
-    (name, int(nx * IMAGE_W), int(ny * IMAGE_H))
-    for name, nx, ny in _INCEDIUS_NORM["dark"]
-]
+_incedius_norm = _device_norm_positions("incedius") or _INCEDIUS_NORM["dark"]
+INCEDIUS_HOTSPOTS: list[tuple[str, int, int]] = _norm_to_px(_incedius_norm)
 
 # ── Keyboard (103 keys) ──────────────────────────────────────────────────
 # Computed from the authoritative normalised positions in constants.py.
-KBD_HOTSPOTS: list[tuple[str, int, int]] = [
-    (name, int(nx * IMAGE_W), int(ny * IMAGE_H))
-    for name, nx, ny in _KBD_NORM["dark"]
-]
+_kbd_norm = _device_norm_positions("keyboard") or _KBD_NORM["dark"]
+KBD_HOTSPOTS: list[tuple[str, int, int]] = _norm_to_px(_kbd_norm)
 
 # ── Generic Mouse (7 buttons) ────────────────────────────────────────────
 # Computed from the authoritative normalised positions in constants.py.
-MOUSE_HOTSPOTS: list[tuple[str, int, int]] = [
-    (name, int(nx * IMAGE_W), int(ny * IMAGE_H))
-    for name, nx, ny in _MOUSE_NORM["dark"]
-]
+_mouse_norm = _device_norm_positions("mouse") or _MOUSE_NORM["dark"]
+MOUSE_HOTSPOTS: list[tuple[str, int, int]] = _norm_to_px(_mouse_norm)
 
 # ── Gamepad / Xbox Elite (30 buttons) ────────────────────────────────────
 # Computed from the authoritative normalised positions in constants.py.
-GP_HOTSPOTS: list[tuple[str, int, int]] = [
-    (name, int(nx * IMAGE_W), int(ny * IMAGE_H))
-    for name, nx, ny in _GAMEPAD_NORM["dark"]
-]
+_gp_norm = _device_norm_positions("gamepad") or _GAMEPAD_NORM["dark"]
+GP_HOTSPOTS: list[tuple[str, int, int]] = _norm_to_px(_gp_norm)
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Rainbow colour palettes — one uniform colour per rainbow hue, all devices
@@ -423,13 +462,13 @@ GP_HOTSPOTS: list[tuple[str, int, int]] = [
 
 # Each entry maps a rainbow colour name → single RGBA used for every device.
 RAINBOW_COLORS: dict[str, tuple[int, int, int, int]] = {
-    "red":    (220, 60,  60, 170),
-    "orange": (230, 140, 40, 170),
-    "yellow": (210, 190, 40, 170),
-    "green":  (60,  185, 80, 170),
-    "blue":   (60,  120, 220, 170),
-    "indigo": (90,  60,  180, 170),
-    "violet": (160, 60,  200, 170),
+    "red":    (239, 47,  47, 200),
+    "orange": (255, 138, 26, 200),
+    "yellow": (241, 209, 24, 200),
+    "green":  (34,  214, 90, 200),
+    "blue":   (47,  134, 255, 200),
+    "indigo": (106, 60,  255, 200),
+    "violet": (193, 60,  255, 200),
 }
 
 DEFAULT_RAINBOW = "violet"
@@ -618,6 +657,7 @@ def _fit_font(text: str, max_w: float, max_h: float) -> tuple[ImageFont.FreeType
 
 def _draw_overlay_legend(
     draw: ImageDraw.ImageDraw,
+    theme: str,
     device_name: str,
     label: str,
     px: int,
@@ -637,9 +677,14 @@ def _draw_overlay_legend(
     x = px - text_w / 2 - bbox[0]
     y = py - text_h / 2 - bbox[1]
 
-    base_shadow = (24, 17, 12, 115)
-    accent_shadow = (color[0], color[1], color[2], min(220, color[3] + 30))
-    fill = (255, 247, 231, 220)
+    if theme == "dark":
+        base_shadow = (0, 0, 0, 170)
+        accent_shadow = (color[0], color[1], color[2], min(240, color[3] + 40))
+        fill = (255, 252, 240, 235)
+    else:
+        base_shadow = (24, 17, 12, 115)
+        accent_shadow = (color[0], color[1], color[2], min(220, color[3] + 30))
+        fill = (255, 247, 231, 220)
     seed = _stable_seed(f"{device_name}:{label}:legend")
     rng = random.Random(seed)
     for dx, dy, ink in [
@@ -701,6 +746,7 @@ def _safe_filename(label: str) -> str:
 
 
 def _generate_overlay(
+    theme: str,
     device_name: str,
     label: str,
     px: int,
@@ -727,7 +773,7 @@ def _generate_overlay(
         r = RADIUS_WIDE if label in wide_set else RADIUS_NORMAL
         _draw_circle_overlay(draw, px, py, r, color)
 
-    _draw_overlay_legend(draw, device_name, label, px, py, color, wide_set, shapes)
+    _draw_overlay_legend(draw, theme, device_name, label, px, py, color, wide_set, shapes)
 
     dst.parent.mkdir(parents=True, exist_ok=True)
     img.save(str(dst), format="PNG", optimize=True)
@@ -767,30 +813,31 @@ def _generate_pale_composite(
 def main() -> int:
     total = 0
 
-    for color_name, color in RAINBOW_COLORS.items():
-        for device_name, cfg in DEVICES.items():
-            # docs/ui/button_overlays/{color}/{device}/
-            out_dir = OUT_DIR / color_name / device_name
-            out_dir.mkdir(parents=True, exist_ok=True)
+    for theme in THEMES:
+        for color_name, color in RAINBOW_COLORS.items():
+            for device_name, cfg in DEVICES.items():
+                # docs/ui/button_overlays/{theme}/{color}/{device}/
+                out_dir = OUT_DIR / theme / color_name / device_name
+                out_dir.mkdir(parents=True, exist_ok=True)
 
-            hotspots = cfg["hotspots"]
-            wide = cfg["wide"]
-            prefix = cfg["prefix"]
-            shapes = cfg.get("shapes")
+                hotspots = cfg["hotspots"]
+                wide = cfg["wide"]
+                prefix = cfg["prefix"]
+                shapes = cfg.get("shapes")
 
-            for label, px, py in hotspots:
-                fname = f"{prefix}_{_safe_filename(label)}.png"
-                dst = out_dir / fname
-                _generate_overlay(device_name, label, px, py, color, wide, dst, shapes=shapes)
+                for label, px, py in hotspots:
+                    fname = f"{prefix}_{_safe_filename(label)}.png"
+                    dst = out_dir / fname
+                    _generate_overlay(theme, device_name, label, px, py, color, wide, dst, shapes=shapes)
+                    total += 1
+
+                # Generate pale composite (all overlays at reduced opacity)
+                _generate_pale_composite(color_name, device_name, cfg, out_dir)
                 total += 1
 
-            # Generate pale composite (all overlays at reduced opacity)
-            _generate_pale_composite(color_name, device_name, cfg, out_dir)
-            total += 1
+                print(f"  [{theme}/{color_name}/{device_name}] {len(hotspots)} overlays + pale -> {out_dir.relative_to(REPO_ROOT)}")
 
-            print(f"  [{color_name}/{device_name}] {len(hotspots)} overlays + pale -> {out_dir.relative_to(REPO_ROOT)}")
-
-    print(f"[button-overlays] Generated {total} overlay PNGs (incl. pale composites) across {len(DEVICES)} devices × {len(RAINBOW_COLORS)} colours (default: {DEFAULT_RAINBOW})")
+    print(f"[button-overlays] Generated {total} overlay PNGs (incl. pale composites) across {len(THEMES)} themes × {len(DEVICES)} devices × {len(RAINBOW_COLORS)} colours (default: {DEFAULT_RAINBOW})")
     return 0
 
 

@@ -282,28 +282,38 @@ class AssetManager:
 
     def find_overlay_image(self, device: str, button: str, color: str) -> Path | None:
         filename = f"{button}.png"
+        overlay_theme = "dark" if self._theme == "dark" else "default"
         extra_roots: list[Path] = []
         try:
             cwd = Path.cwd()
+            extra_roots.append(cwd / "docs" / "ui" / "button_overlays" / overlay_theme / color / device)
+            # Legacy layout (pre-themed overlays)
             extra_roots.append(cwd / "docs" / "ui" / "button_overlays" / color / device)
         except Exception:
             pass
         here = Path(__file__).resolve()
         repo = here.parents[3]
+        extra_roots.append(repo / "docs" / "ui" / "button_overlays" / overlay_theme / color / device)
+        # Legacy layout (pre-themed overlays)
         extra_roots.append(repo / "docs" / "ui" / "button_overlays" / color / device)
         return self.find_file(filename, extra_roots)
 
     def find_pale_overlay(self, device: str, color: str) -> Path | None:
         """Return path to the pale composite PNG for *device* and *color*."""
         filename = f"pale_{device}.png"
+        overlay_theme = "dark" if self._theme == "dark" else "default"
         extra_roots: list[Path] = []
         try:
             cwd = Path.cwd()
+            extra_roots.append(cwd / "docs" / "ui" / "button_overlays" / overlay_theme / color / device)
+            # Legacy layout (pre-themed overlays)
             extra_roots.append(cwd / "docs" / "ui" / "button_overlays" / color / device)
         except Exception:
             pass
         here = Path(__file__).resolve()
         repo = here.parents[3]
+        extra_roots.append(repo / "docs" / "ui" / "button_overlays" / overlay_theme / color / device)
+        # Legacy layout (pre-themed overlays)
         extra_roots.append(repo / "docs" / "ui" / "button_overlays" / color / device)
         return self.find_file(filename, extra_roots)
 

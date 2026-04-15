@@ -27,13 +27,13 @@ MOUSE_IMAGE_H = 1024
 # Rainbow overlay colours — matches generate_button_overlays.py output
 # ---------------------------------------------------------------------------
 RAINBOW_COLORS: dict[str, str] = {
-    "red":    "#dc3c3c",
-    "orange": "#e68c28",
-    "yellow": "#d2be28",
-    "green":  "#3cb950",
-    "blue":   "#3c78dc",
-    "indigo": "#5a3cb4",
-    "violet": "#a03cc8",
+    "red":    "#ef2f2f",
+    "orange": "#ff8a1a",
+    "yellow": "#f1d118",
+    "green":  "#22d65a",
+    "blue":   "#2f86ff",
+    "indigo": "#6a3cff",
+    "violet": "#c13cff",
 }
 RAINBOW_NAMES: list[str] = list(RAINBOW_COLORS.keys())
 DEFAULT_OVERLAY_COLOR = "violet"
