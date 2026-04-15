@@ -156,7 +156,7 @@ When running as a packaged `.exe`, the app checks the [GitHub Releases](https://
 - The toolbar always shows an ↑ Update button next to the theme toggle.
 - If an update is available, the ↑ button blinks until you click it.
 - Clicking ↑ with no cached update performs an immediate check. If a release is found, the normal install flow starts right away; otherwise the app shows an up-to-date popup.
-- Clicking ↑ when an update is already known downloads the new `.exe`, swaps it in place, and relaunches the app automatically.
+- Clicking ↑ when an update is already known downloads the new release bundle (or `.exe`), swaps the `.exe` in place, and relaunches the app automatically.
 - After relaunch, the app blocks normal use and auto-connects to the ESP32-S3 bridge so it can flash both boards to the matching release firmware before continuing.
 - The post-relaunch firmware stage is mandatory: it shows a non-closeable progress popup and retries automatically until flashing completes.
 - When running from source (not frozen), only a notification is shown — no auto-install.

@@ -10,6 +10,7 @@ Releases API for this repository.
 from __future__ import annotations
 
 import contextlib
+import io
 import json
 import logging
 import os
@@ -18,6 +19,7 @@ import ssl
 import sys
 import tempfile
 import threading
+import zipfile
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -41,6 +43,11 @@ EXE_ASSET_NAME = "BindBandit.exe"
 FW_ASSET_S3 = "esp32s3-usb-kbd.bin"
 FW_ASSET_ESP32 = "esp32-hid-host-uart.bin"
 _PENDING_FW_DIR = "pending_fw"
+
+# CI-generated release bundle (zip) prefix. Releases may ship either:
+# - BindBandit.exe directly, or
+# - a bundle zip that contains helper-app/BindBandit.exe and firmware binaries.
+RELEASE_BUNDLE_PREFIX = "bind-bandit-release-bundle-"
 
 # How long to wait for GitHub API responses (seconds).
 _TIMEOUT = 15
@@ -184,6 +191,70 @@ def _find_exe_asset(release: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+def _find_bundle_asset(release: dict[str, Any]) -> dict[str, Any] | None:
+    """Return the release bundle asset dict if present."""
+    for asset in release.get("assets", []):
+        name = asset.get("name", "")
+        if name.lower().startswith(RELEASE_BUNDLE_PREFIX):
+            return asset
+    return None
+
+
+def _zip_find_first(zf: zipfile.ZipFile, *, suffixes: list[str]) -> str | None:
+    """Return the first member name that matches any path suffix."""
+    members = zf.namelist()
+    for suffix in suffixes:
+        suffix_norm = suffix.replace("\\", "/")
+        for member in members:
+            if member.replace("\\", "/").endswith(suffix_norm):
+                return member
+    return None
+
+
+def _extract_from_release_bundle(bundle_zip: bytes) -> tuple[bytes, dict[str, bytes]]:
+    """Extract (exe_bytes, {fw_name: fw_bytes}) from a release bundle zip."""
+    try:
+        with zipfile.ZipFile(io.BytesIO(bundle_zip)) as zf:
+            exe_member = _zip_find_first(
+                zf,
+                suffixes=[
+                    "helper-app/BindBandit.exe",
+                    "BindBandit.exe",
+                ],
+            )
+            if not exe_member:
+                raise RuntimeError("Release bundle does not contain BindBandit.exe")
+
+            # Prefer merged images; fall back to app-only binaries if needed.
+            s3_member = _zip_find_first(
+                zf,
+                suffixes=[
+                    "firmware/esp32s3-usb-kbd/esp32s3-usb-kbd-merged.bin",
+                    "firmware/esp32s3-usb-kbd/esp32s3_usb_kbd.bin",
+                    "esp32s3-usb-kbd.bin",
+                ],
+            )
+            esp32_member = _zip_find_first(
+                zf,
+                suffixes=[
+                    "firmware/esp32-hid-host-uart/esp32-hid-host-uart-merged.bin",
+                    "firmware/esp32-hid-host-uart/esp32_hid_host_uart.bin",
+                    "esp32-hid-host-uart.bin",
+                ],
+            )
+
+            exe_bytes = zf.read(exe_member)
+            fw: dict[str, bytes] = {}
+            if s3_member:
+                fw[Path(s3_member).name] = zf.read(s3_member)
+            if esp32_member:
+                fw[Path(esp32_member).name] = zf.read(esp32_member)
+
+            return exe_bytes, fw
+    except zipfile.BadZipFile as e:
+        raise RuntimeError("Downloaded release bundle is not a valid ZIP file") from e
+
+
 def check_for_update_status() -> tuple[str, dict[str, str], str]:
     """Return a detailed update-check status tuple.
 
@@ -222,10 +293,19 @@ def check_for_update_status() -> tuple[str, dict[str, str], str]:
             except (ValueError, TypeError):
                 log.debug("Could not compare dates, falling back to version only")
 
-    asset = _find_exe_asset(release)
-    if asset is None:
-        log.warning("Newer release %s found but no %s asset", tag, EXE_ASSET_NAME)
-        return "error", {}, f"A newer release exists, but it does not include {EXE_ASSET_NAME}."
+    exe_asset = _find_exe_asset(release)
+    bundle_asset = _find_bundle_asset(release)
+    if exe_asset is None and bundle_asset is None:
+        log.warning(
+            "Newer release %s found but no %s or release bundle asset",
+            tag,
+            EXE_ASSET_NAME,
+        )
+        return (
+            "error",
+            {},
+            "A newer release exists, but it does not include the helper app executable or release bundle.",
+        )
 
     fw_assets: dict[str, dict[str, Any]] = {}
     for rel_asset in release.get("assets", []):
@@ -236,11 +316,19 @@ def check_for_update_status() -> tuple[str, dict[str, str], str]:
                 "size": rel_asset.get("size", 0),
             }
 
-    log.info("Update available: %s → %s", __version__, tag)
+    download_kind = "bundle" if bundle_asset is not None else "exe"
+    download_url = (
+        bundle_asset["browser_download_url"]
+        if download_kind == "bundle"
+        else exe_asset["browser_download_url"]
+    )
+
+    log.info("Update available: %s → %s (%s)", __version__, tag, download_kind)
     return "available", {
         "tag": tag,
         "version": tag.lstrip("v"),
-        "download_url": asset["browser_download_url"],
+        "download_url": download_url,
+        "download_kind": download_kind,
         "html_url": release.get("html_url", ""),
         "release_name": release.get("name", tag),
         "fw_assets": fw_assets,
@@ -524,7 +612,7 @@ def check_in_background(callback: Callable[[dict[str, str] | None], None]) -> No
     t.start()
 
 
-def check_for_update_async(callback: Callable[[bool, dict], None]) -> None:
+def check_for_update_async(callback: Callable[[str, dict, str], None]) -> None:
     """Non-blocking update check for PyQt6 UI startup.
 
     *callback(status, info, message)* is called from the background thread.
@@ -556,11 +644,39 @@ def download_update_bundle(
 
     *progress_cb(step_label, downloaded, total)* is called from this thread.
     """
+    download_kind = info.get("download_kind", "exe")
+
+    if download_kind == "bundle":
+        total_steps = 3
+        step = 1
+        label = f"Downloading release bundle ({step}/{total_steps})…"
+
+        def _bundle_progress(done: int, total: int) -> None:
+            if progress_cb:
+                progress_cb(label, done, total)
+
+        bundle_bytes = download_bytes(info["download_url"], progress_cb=_bundle_progress)
+
+        step = 2
+        label = f"Extracting firmware ({step}/{total_steps})…"
+        if progress_cb:
+            progress_cb(label, 1, 1)
+
+        exe_bytes, fw_files = _extract_from_release_bundle(bundle_bytes)
+        for fw_name, fw_data in fw_files.items():
+            save_pending_firmware(fw_name, fw_data)
+            log.info("Saved pending firmware %s (%d bytes)", fw_name, len(fw_data))
+
+        step = 3
+        label = f"Installing update ({step}/{total_steps})…"
+        if progress_cb:
+            progress_cb(label, 1, 1)
+        return install_exe(exe_bytes)
+
     fw_assets: dict[str, dict] = info.get("fw_assets", {})
     total_steps = len(fw_assets) + 1  # +1 for the exe
     step = 0
 
-    # Download firmware binaries first (saved as pending; flashed after relaunch)
     for asset_name, asset_info in fw_assets.items():
         step += 1
         label = f"Downloading {asset_name} ({step}/{total_steps})…"
@@ -574,7 +690,6 @@ def download_update_bundle(
         save_pending_firmware(asset_name, data)
         log.info("Saved pending firmware %s (%d bytes)", asset_name, len(data))
 
-    # Download and install the new exe
     step += 1
     label = f"Downloading Bind Bandit update ({step}/{total_steps})…"
 

@@ -1029,12 +1029,28 @@ class MainWindow(QMainWindow):
         )
 
     def _on_update_button_clicked(self) -> None:
-        if self._update_check_in_progress or self._update_install_in_progress:
-            return
-        if self._update_info:
-            self._do_full_update()
-            return
-        self._begin_update_check(manual=True, install_if_found=True)
+        try:
+            is_widget = isinstance(self, QWidget)
+            if self._update_check_in_progress or self._update_install_in_progress:
+                if is_widget:
+                    Toast.info(self, "Update is already in progress…")
+                return
+            if self._update_info:
+                self._do_full_update()
+                return
+            if is_widget:
+                Toast.info(self, "Checking for updates…")
+            self._begin_update_check(manual=True, install_if_found=True)
+        except Exception as exc:
+            log.exception("Update button click failed")
+            if isinstance(self, QWidget):
+                QMessageBox.critical(
+                    self,
+                    "Update Failed",
+                    f"The update flow could not be started:\n\n{exc}",
+                )
+            else:
+                raise
 
     def _on_update_result(
         self,
@@ -1223,6 +1239,7 @@ class MainWindow(QMainWindow):
 
         info = getattr(self, "_update_info", {})
         version = info.get("version", "?")
+        download_kind = info.get("download_kind", "exe")
 
         if not is_frozen():
             import webbrowser
@@ -1237,11 +1254,17 @@ class MainWindow(QMainWindow):
             return
 
         fw_count = len(info.get("fw_assets", {}))
-        fw_note = (
-            f"\n\nFirmware for {fw_count} board(s) will also be downloaded and "
-            "flashed automatically after the app restarts."
-            if fw_count else ""
-        )
+        if download_kind == "bundle":
+            fw_note = (
+                "\n\nMatching firmware will also be installed and flashed automatically "
+                "after the app restarts."
+            )
+        else:
+            fw_note = (
+                f"\n\nFirmware for {fw_count} board(s) will also be downloaded and "
+                "flashed automatically after the app restarts."
+                if fw_count else ""
+            )
         reply = QMessageBox.question(
             self, "Install Update",
             f"Install Bind Bandit v{version}?"
@@ -1265,8 +1288,12 @@ class MainWindow(QMainWindow):
 
         def _update_worker() -> None:
             try:
-                # Exe size unknown upfront; treat each asset as equal weight
-                asset_count = len(info.get("fw_assets", {})) + 1
+                # Exe size unknown upfront; treat each step as equal weight.
+                # Bundle-based updates download a single zip, then extract + install.
+                if download_kind == "bundle":
+                    asset_count = 3
+                else:
+                    asset_count = len(info.get("fw_assets", {})) + 1
                 current_step = [0]
 
                 def _progress(label: str, done: int, total: int) -> None:

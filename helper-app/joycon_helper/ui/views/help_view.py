@@ -145,7 +145,7 @@ def _sections() -> list[tuple[str, str, bool]]:
                 "After first-time setup, updates are handled automatically.\n"
                 "When a newer GitHub release is available the oversized ↑ Update button\n"
                 "next to the theme toggle starts blinking. Click it whenever you want to update;\n"
-                "the app downloads the new .exe, relaunches itself, then blocks normal use\n"
+                "the app downloads the new release bundle (or .exe), relaunches itself, then blocks normal use\n"
                 "until both boards finish flashing to the matching release firmware.\n\n"
                 "## Manual build (advanced)\n"
                 "  cd firmware/esp32-hid-host-uart\n"
