@@ -514,13 +514,22 @@ static void gap_cb(esp_bt_gap_cb_event_t event, esp_bt_gap_cb_param_t* param) {
                 }
             }
 
-            if (found_name && name_matches_target(found_name)) {
-                char bda_str[18];
-                ESP_LOGI(TAG, "Found %s @ %s", found_name, bda_to_str(param->disc_res.bda, bda_str, sizeof(bda_str)));
+            if (found_name) {
+                bool match = name_matches_target(found_name);
 
                 if (is_bda_connected(param->disc_res.bda)) {
                     break;
                 }
+
+                if (!match) {
+                    // Report discovered devices even when they don't match the filter.
+                    // This keeps the PC-side scanner UI informative without changing connect behavior.
+                    bridge_send_bt_status(7, param->disc_res.bda, found_name);  // status 7 = seen
+                    break;
+                }
+
+                char bda_str[18];
+                ESP_LOGI(TAG, "Found %s @ %s", found_name, bda_to_str(param->disc_res.bda, bda_str, sizeof(bda_str)));
 
                 uint8_t device_id = 0;
                 if (s_dual_connect) {

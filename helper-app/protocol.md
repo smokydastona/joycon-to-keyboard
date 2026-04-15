@@ -750,6 +750,14 @@ BT host status events (optional):
 ```
 
 ```json
+{"evt":"bt_status","state":"seen","name":"Some Keyboard","bda":"aa:bb:cc:dd:ee:ff"}
+```
+
+```json
+{"evt":"bt_status","state":"found","name":"Joy-Con (L)","bda":"aa:bb:cc:dd:ee:ff"}
+```
+
+```json
 {"evt":"bt_status","state":"connected","bda":"aa:bb:cc:dd:ee:ff"}
 ```
 

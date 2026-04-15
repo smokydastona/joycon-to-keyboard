@@ -3,7 +3,7 @@
 Two tabs:
   * **Via ESP32 Bluetooth** — sends ``bt_set_target`` + ``bt_connect`` and shows
     a live status progression as the ESP32 discovers and connects to a device.
-  * **Via PC USB (HID)** — scans hidapi for M913 keypad and Razer mouse.
+  * **Via PC USB (HID)** — scans hidapi for supported devices (M913, Razer) and lists common HID classes (keyboards/mice/gamepads/joysticks).
 
 On a successful connection the dialog emits :pyqt:`device_added` with the
 :class:`~joycon_helper.device_cache.DeviceEntry` that was added to the cache.
@@ -45,17 +45,28 @@ log = logging.getLogger("joycon_helper.ui.widgets.add_device_dialog")
 # ---------------------------------------------------------------------------
 
 class _HidScanWorker(QObject):
-    finished = pyqtSignal(list)   # list of dicts: {type, name, vid, pid, serial}
+    finished = pyqtSignal(list)   # list of dicts: {type, name, vid, pid, serial, kind?, usage_page?, usage?, interface?}
     error = pyqtSignal(str)
 
     def run(self) -> None:
+        try:
+            import hid as _hid  # type: ignore[import-untyped]
+        except Exception as exc:
+            log.warning("USB HID scan unavailable (hidapi import failed): %s", exc)
+            self.error.emit(
+                "USB HID scanning requires hidapi. Install deps from helper-app/requirements.txt"
+            )
+            return
+
         results: list[dict[str, Any]] = []
+
         # Scan for M913
         try:
             from ... import m913_device as m
             for d in m.M913Device.enumerate():
                 results.append({
                     "type": "m913",
+                    "kind": "mouse",
                     "name": d.display_name,
                     "vid": getattr(d, "vendor_id", 0),
                     "pid": getattr(d, "product_id", 0),
@@ -70,6 +81,7 @@ class _HidScanWorker(QObject):
             for d in r.RazerDevice.enumerate():
                 results.append({
                     "type": "razer",
+                    "kind": "mouse",
                     "name": d.display_name,
                     "vid": getattr(d, "vendor_id", 0),
                     "pid": getattr(d, "product_id", 0),
@@ -77,6 +89,53 @@ class _HidScanWorker(QObject):
                 })
         except Exception as exc:
             log.debug("Razer scan skipped: %s", exc)
+
+        # Generic HID scan (keyboards/mice/gamepads/joysticks).
+        # We only list common Generic Desktop usages to avoid flooding the list.
+        kind_by_usage: dict[tuple[int, int], str] = {
+            (0x01, 0x06): "keyboard",
+            (0x01, 0x02): "mouse",
+            (0x01, 0x05): "gamepad",
+            (0x01, 0x04): "joystick",
+            (0x01, 0x08): "multiaxis",
+        }
+        seen: set[tuple[int, int, str, int, int]] = set()  # vid,pid,serial,usage_page,usage
+        try:
+            for info in _hid.enumerate(0, 0):
+                vid = int(info.get("vendor_id") or 0)
+                pid = int(info.get("product_id") or 0)
+                serial = str(info.get("serial_number") or "")
+                usage_page = int(info.get("usage_page") or 0)
+                usage = int(info.get("usage") or 0)
+
+                kind = kind_by_usage.get((usage_page, usage))
+                if not kind:
+                    continue
+
+                key = (vid, pid, serial, usage_page, usage)
+                if key in seen:
+                    continue
+                seen.add(key)
+
+                product = str(info.get("product_string") or "").strip()
+                manufacturer = str(info.get("manufacturer_string") or "").strip()
+                display = product or "HID Device"
+                if manufacturer and product and manufacturer.lower() not in product.lower():
+                    display = f"{manufacturer} {product}".strip()
+
+                results.append({
+                    "type": "hid",
+                    "kind": kind,
+                    "name": display,
+                    "vid": vid,
+                    "pid": pid,
+                    "serial": serial,
+                    "usage_page": usage_page,
+                    "usage": usage,
+                    "interface": int(info.get("interface_number") or 0),
+                })
+        except Exception as exc:
+            log.debug("Generic HID scan skipped: %s", exc)
 
         self.finished.emit(results)
 
@@ -115,6 +174,7 @@ class AddDeviceDialog(QDialog):
 
         self._bt_phase = "idle"
         self._bt_found_devices: list[dict[str, str]] = []   # {name, bda}
+        self._bt_listed_bdas: set[str] = set()
         self._bt_connected_entry: DeviceEntry | None = None
 
         self._timeout_timer = QTimer(self)
@@ -217,7 +277,7 @@ class AddDeviceDialog(QDialog):
 
         desc = QLabel(
             "Scan for USB HID devices plugged into <b>this PC</b>.  "
-            "Supported: M913 Keypad, Razer Mouse."
+            "Shows common device types (keyboards, mice, gamepads, joysticks), plus supported devices like M913 and Razer."
         )
         desc.setWordWrap(True)
         lay.addWidget(desc)
@@ -276,6 +336,7 @@ class AddDeviceDialog(QDialog):
         # Reset state
         self._bt_phase = "idle"
         self._bt_found_devices.clear()
+        self._bt_listed_bdas.clear()
         self._bt_found_list.clear()
         self._bt_connected_entry = None
         self._bt_scan_btn.setEnabled(False)
@@ -311,7 +372,25 @@ class AddDeviceDialog(QDialog):
         if state == "discovering":
             self._bt_set_phase("discovering")
 
+        elif state == "seen":
+            # Discovered device that does not match the filter.
+            # We list it for visibility but do not reset the timeout.
+            if bda and bda in self._bt_listed_bdas:
+                return
+            if bda:
+                self._bt_listed_bdas.add(bda)
+            info = {"name": name or "Unknown", "bda": bda}
+            self._bt_found_devices.append(info)
+            item = QListWidgetItem(f"👀  {info['name']}   [{bda}]")
+            self._bt_found_list.addItem(item)
+
         elif state == "found":
+            # Filter matched; the ESP32 will attempt to connect.
+            if bda and bda in self._bt_listed_bdas:
+                return
+            if bda:
+                self._bt_listed_bdas.add(bda)
+
             self._timeout_timer.start()   # reset timeout
             info = {"name": name or "Unknown", "bda": bda}
             self._bt_found_devices.append(info)
@@ -379,19 +458,38 @@ class AddDeviceDialog(QDialog):
         def _done(results: list[dict]) -> None:
             self._hid_found = results
             self._usb_found_list.clear()
+
+            def _icon_for(dev: dict) -> str:
+                dtype = str(dev.get("type", ""))
+                if dtype == "m913":
+                    return "🖱"
+                if dtype == "razer":
+                    return "🐍"
+                if dtype == "hid":
+                    kind = str(dev.get("kind", ""))
+                    if kind == "keyboard":
+                        return "⌨"
+                    if kind == "mouse":
+                        return "🖱"
+                    if kind == "gamepad":
+                        return "🎮"
+                    if kind in ("joystick", "multiaxis"):
+                        return "🕹"
+                    return "🔌"
+                return "📦"
+
             if results:
                 for dev in results:
-                    item = QListWidgetItem(
-                        f"{'🖱' if dev['type'] == 'razer' else '🎮'}  "
-                        f"{dev['name']}"
-                        + (f"  [VID:{dev['vid']:04X} PID:{dev['pid']:04X}]"
-                           if dev['vid'] else "")
-                    )
+                    vid = int(dev.get("vid") or 0)
+                    pid = int(dev.get("pid") or 0)
+                    suffix = f"  [VID:{vid:04X} PID:{pid:04X}]" if vid else ""
+                    item = QListWidgetItem(f"{_icon_for(dev)}  {dev.get('name','')}" + suffix)
                     item.setData(0x0100, dev)   # Qt.UserRole = 0x0100
                     self._usb_found_list.addItem(item)
                 self._usb_status_label.setText(f"Found {len(results)} device(s).")
             else:
-                self._usb_status_label.setText("No supported USB devices found.")
+                self._usb_status_label.setText("No compatible USB HID devices found.")
+
             self._usb_scan_btn.setEnabled(True)
             self._hid_thread.quit()
 
@@ -414,6 +512,15 @@ class AddDeviceDialog(QDialog):
             return
 
         device_id = DeviceCache.make_hid_id(dev["type"], dev["vid"], dev["pid"])
+        meta: dict[str, Any] = {}
+        if dev.get("type") == "hid":
+            meta = {
+                "kind": dev.get("kind", ""),
+                "usage_page": dev.get("usage_page", 0),
+                "usage": dev.get("usage", 0),
+                "interface": dev.get("interface", 0),
+            }
+
         entry = DeviceEntry(
             id=device_id,
             type=dev["type"],
@@ -422,6 +529,7 @@ class AddDeviceDialog(QDialog):
             hid_vendor=dev["vid"],
             hid_product=dev["pid"],
             hid_serial=dev.get("serial", ""),
+            meta=meta,
         )
         self._cache.add_or_update(entry)
         entry.connected = True

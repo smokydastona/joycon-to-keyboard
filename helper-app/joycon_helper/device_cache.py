@@ -27,10 +27,10 @@ class DeviceEntry:
     """One cached device record."""
 
     #: Stable ID used as a dict key and tab identifier.
-    #: Format: ``"joycon-L"``, ``"joycon-R"``, ``"m913-<vid>-<pid>"``, ``"razer-<vid>-<pid>"``.
+    #: Format: ``"joycon-L"``, ``"joycon-R"``, ``"m913-<vid>-<pid>"``, ``"razer-<vid>-<pid>"``, ``"hid-<vid>-<pid>"``.
     id: str
 
-    #: Broad category: ``"joycon"`` | ``"m913"`` | ``"razer"``
+    #: Broad category: ``"joycon"`` | ``"m913"`` | ``"razer"`` | ``"hid"``
     type: str
 
     #: Transport: ``"esp32-bt"`` (Bluetooth via ESP32) | ``"pc-hid"`` (USB HID on host PC)
