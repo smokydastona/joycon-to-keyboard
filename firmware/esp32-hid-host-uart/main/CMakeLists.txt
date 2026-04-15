@@ -9,6 +9,7 @@ idf_component_register(
         "joycon_mapper.c"
         "joycon_setup.c"
         "nintendo_candidate.c"
+        "buzzer.c"
     INCLUDE_DIRS "."
     PRIV_REQUIRES bt driver nvs_flash app_update
 )

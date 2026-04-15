@@ -21,6 +21,7 @@
 #include "joycon_mapper.h"
 #include "uart_framing.h"
 #include "joycon_setup.h"
+#include "buzzer.h"
 #include "config.h"
 
 static const char* TAG = "bt-hidh";
@@ -264,6 +265,7 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
                 ESP_LOGW(TAG, "HID OPEN failed (status=%d); scheduling reconnect",
                          param->open.status);
                 s_connecting = false;
+                buzzer_play(BUZZER_TONE_ERROR);
 #if CONFIG_JOYCON_HOST_AUTO_RECONNECT
                 schedule_reconnect();
 #else
@@ -320,6 +322,7 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
             // the controller to full 0x30 report mode with IMU, reads
             // SPI flash calibration, sets player LEDs).
             joycon_setup_start(param->open.handle, slot, param->open.bd_addr);
+            buzzer_play(BUZZER_TONE_CONNECT);
 
             // Clear SOCD/stick state from any prior session so stale
             // direction history doesn't contaminate the new connection.
@@ -372,6 +375,7 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
                 }
             }
             bridge_send_bt_status(5, have_bda ? closed_bda : s_target_bda, NULL);
+            buzzer_play(BUZZER_TONE_DISCONNECT);
 #if CONFIG_JOYCON_HOST_AUTO_RECONNECT
             schedule_reconnect();
 #endif
@@ -628,6 +632,7 @@ esp_err_t bt_hid_host_start_discovery(void) {
     const char* needle = (local_name[0] != 0) ? local_name : CONFIG_JOYCON_HOST_NAME_SUBSTR;
     ESP_LOGI(TAG, "Starting inquiry scan (match='%s', %ds)...", needle, CONFIG_JOYCON_HOST_DISCOVERY_SECONDS);
     bridge_send_bt_status(1, NULL, needle);
+    buzzer_play(BUZZER_TONE_DISCOVERY_START);
 
     // Best-effort: ignore cancel errors if not currently discovering.
     (void)esp_bt_gap_cancel_discovery();

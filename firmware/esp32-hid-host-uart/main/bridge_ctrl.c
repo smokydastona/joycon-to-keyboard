@@ -7,6 +7,7 @@
 #include "driver/uart.h"
 #include "esp_log.h"
 #include "esp_system.h"
+#include "esp_timer.h"
 
 #include "bt_hid_host.h"
 #include "uart_framing.h"
@@ -14,6 +15,7 @@
 #include "installer_console.h"
 #include "joycon_mapper.h"
 #include "joycon_setup.h"
+#include "buzzer.h"
 
 static const char *TAG = "bridge-ctrl";
 
@@ -194,6 +196,12 @@ static void ctrl_task(void *arg) {
     uint8_t payload[220];
     uint8_t payload_i = 0;
 
+    // UART error counting — alert buzzer on repeated framing errors
+    uint32_t uart_err_count = 0;
+    int64_t  uart_err_window_start = esp_timer_get_time();
+    #define UART_ERR_THRESHOLD    5
+    #define UART_ERR_WINDOW_US    (10 * 1000000LL)  // 10 seconds
+
     while (1) {
         if (installer_console_passthrough_active()) {
             vTaskDelay(pdMS_TO_TICKS(20));
@@ -218,6 +226,18 @@ static void ctrl_task(void *arg) {
                 payload_i = 0;
                 if (length == 0 || length > sizeof(payload)) {
                     state = 0;
+                    // Count as framing error
+                    int64_t now = esp_timer_get_time();
+                    if (now - uart_err_window_start > UART_ERR_WINDOW_US) {
+                        uart_err_count = 0;
+                        uart_err_window_start = now;
+                    }
+                    uart_err_count++;
+                    if (uart_err_count >= UART_ERR_THRESHOLD) {
+                        buzzer_play(BUZZER_TONE_ERROR);
+                        uart_err_count = 0;
+                        uart_err_window_start = now;
+                    }
                 } else {
                     state = 3;
                 }
@@ -233,6 +253,17 @@ static void ctrl_task(void *arg) {
                 state = 0;
                 if (calc != b) {
                     ESP_LOGD(TAG, "Checksum mismatch: expected 0x%02X got 0x%02X (len=%u)", calc, b, (unsigned)length);
+                    int64_t now = esp_timer_get_time();
+                    if (now - uart_err_window_start > UART_ERR_WINDOW_US) {
+                        uart_err_count = 0;
+                        uart_err_window_start = now;
+                    }
+                    uart_err_count++;
+                    if (uart_err_count >= UART_ERR_THRESHOLD) {
+                        buzzer_play(BUZZER_TONE_ERROR);
+                        uart_err_count = 0;
+                        uart_err_window_start = now;
+                    }
                     break;
                 }
 

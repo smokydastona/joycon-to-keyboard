@@ -28,6 +28,7 @@
 #include "freertos/semphr.h"
 
 #include "uart_framing.h"
+#include "buzzer.h"
 #include "config.h"
 
 static const char *TAG = "joycon-setup";
@@ -389,6 +390,7 @@ static void fsm_retry_current(setup_instance_t *inst) {
 
 static void fsm_ready(setup_instance_t *inst) {
     inst->state = SETUP_READY;
+    buzzer_play(BUZZER_TONE_SETUP_COMPLETE);
 
     // Do NOT call esp_bt_gap_set_qos() here (or anywhere).
     // The Joy-Con negotiates sniff mode immediately after connection;

@@ -77,8 +77,32 @@ During this passthrough window, normal Joy-Con UART framing is suppressed so the
 - RX pin: GPIO 16 (optional helper-app control)
 - Installer boot pin: GPIO 21
 - Installer reset pin: GPIO 22
+- Buzzer pin: GPIO 25 (optional, configurable via menuconfig)
 
 Set in `main/config.h`.
+
+## Audio feedback (piezo buzzer)
+
+A passive piezo buzzer on GPIO 25 provides audible status cues so you don't need to watch a serial monitor or LED:
+
+| Tone | When | Pattern |
+|------|------|---------|
+| Startup chime | Board powers on | Three ascending notes (C5→E5→G5) |
+| Connect | Joy-Con BT connection opens | Two ascending notes (C5→E5) |
+| Disconnect | BT connection closes | Two descending notes (E5→C5) |
+| Discovery start | Inquiry scan begins | Single short beep (A4) |
+| Setup complete | FSM finishes (ready for input) | Three ascending notes (C5→E5→G5) |
+| Error | Connection failure or repeated UART errors | Three rapid low beeps (C4×3) |
+
+### Configuration
+
+- `menuconfig` → `Bind Bandit` → `Enable piezo buzzer audio feedback` (default: on)
+- `menuconfig` → `Bind Bandit` → `Buzzer GPIO pin` (default: 25)
+- No buzzer wired? Disable in menuconfig — zero overhead (empty inline stubs).
+
+### Wiring
+
+One leg of a passive piezo buzzer → GPIO 25, other leg → GND. No resistor or amplifier needed.
 
 ## What this firmware does today
 

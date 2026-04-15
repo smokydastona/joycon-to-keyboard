@@ -112,6 +112,15 @@ Required if you want the **helper app to initiate controller connect/scan** (no 
 
 The Web Flasher uses these two lines after the ESP32 host is installed. It opens the host serial port, tells the host to pull Nano `GPIO0` low and pulse Nano `RESET`, then flashes the Nano over the existing `GPIO17/GPIO16` UART bridge.
 
+### Optional piezo buzzer (ESP32 only)
+
+- NodeMCU **GPIO25** → one leg of a **passive piezo buzzer**
+- Other leg → **GND**
+
+Provides audible feedback for Bluetooth connect/disconnect, discovery scanning, setup complete, and error alerts. No resistor or amplifier needed — the ESP32 3.3 V LEDC PWM output drives small passive piezo buzzers directly.
+
+This is optional. The pin is configurable via `menuconfig` → `Bind Bandit` → `Buzzer GPIO pin` (default 25). The feature can be disabled entirely via `Enable piezo buzzer audio feedback`.
+
 ## Voltage levels (important)
 
 - UART signals on both chips are **3.3V logic**.

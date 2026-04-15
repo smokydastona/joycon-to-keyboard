@@ -128,6 +128,25 @@ config JOYCON_HOST_MOTION_SHAKE_THRESHOLD
         Acceleration magnitude (raw int16 units) above which a "shake"
         gesture is detected. Higher = less sensitive.
 
+config BIND_BANDIT_BUZZER_ENABLED
+    bool "Enable piezo buzzer audio feedback"
+    default y
+    help
+        Drive a passive piezo buzzer via LEDC PWM to provide audible
+        feedback for BT connect/disconnect, discovery start, setup
+        complete, and error conditions.  Disable to save one GPIO and
+        a small amount of flash.
+
+config BIND_BANDIT_BUZZER_GPIO
+    int "Buzzer GPIO pin"
+    range 0 39
+    default 25
+    depends on BIND_BANDIT_BUZZER_ENABLED
+    help
+        GPIO pin connected to the passive piezo buzzer.  One leg of the
+        buzzer goes to this pin, the other to GND.  Default GPIO 25 is
+        free on most ESP32 dev boards.
+
 config JOYCON_HOST_MOTION_TILT_THRESHOLD
     int "Tilt gesture accel threshold"
     range 500 10000

@@ -11,6 +11,7 @@
 #include "bridge_ctrl.h"
 #include "fw_ota.h"
 #include "installer_console.h"
+#include "buzzer.h"
 
 static const char* TAG = "bind-bandit";
 
@@ -35,6 +36,7 @@ static void uart_init_bridge(void) {
 void app_main(void) {
     fw_ota_mark_valid();
     uart_init_bridge();
+    buzzer_init();
     installer_console_init();
 
     ESP_LOGI(TAG, "UART bridge ready (TX=%d RX=%d baud=%d)", BRIDGE_UART_TX_GPIO, BRIDGE_UART_RX_GPIO,
@@ -46,6 +48,8 @@ void app_main(void) {
     }
 
     bridge_ctrl_init();
+
+    buzzer_play(BUZZER_TONE_STARTUP);
 
     // Idle loop — check FSM timeouts/retries quickly enough for
     // the new retry logic (timeout=1500 ms, up to 2 retries).
