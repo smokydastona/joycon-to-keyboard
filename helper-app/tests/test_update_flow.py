@@ -104,6 +104,7 @@ class _FakeWindow:
         self._theme_btn = _FakeButton()
         self._update_blink_timer = _FakeTimer()
         self.theme = _FakeTheme()
+        self.update_available_calls: list[tuple[str, dict]] = []
         self._refresh_calls = 0
         self._wait_called = 0
         self._start_called = 0
@@ -141,6 +142,9 @@ class _FakeWindow:
 
     def _do_full_update(self) -> None:
         self.install_calls += 1
+
+    def _notify_update_available(self, *, version: str, info: dict) -> None:
+        self.update_available_calls.append((version, info))
 
     def _ensure_view(self, *_args) -> None:
         return None
@@ -270,6 +274,22 @@ def test_apply_update_result_reports_manual_up_to_date(monkeypatch) -> None:
     )
 
     assert messages == [("Up to Date", f"Bind Bandit v{_version.__version__} is already up to date.")]
+
+
+def test_apply_update_result_notifies_when_automatic_update_available() -> None:
+    fake_window = _FakeWindow(connected=False)
+
+    MainWindow._apply_update_result(
+        fake_window,
+        "available",
+        {"version": "0.1.318"},
+        "",
+        manual=False,
+        install_if_found=False,
+    )
+
+    assert fake_window._update_info.get("version") == "0.1.318"
+    assert fake_window.update_available_calls == [("0.1.318", {"version": "0.1.318"})]
 
 
 def test_apply_update_result_installs_after_manual_check_finds_update() -> None:

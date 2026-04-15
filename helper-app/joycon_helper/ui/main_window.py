@@ -173,6 +173,12 @@ class MainWindow(QMainWindow):
         self._update_blink_timer.setInterval(_UPDATE_BLINK_INTERVAL_MS)
         self._update_blink_timer.timeout.connect(self._toggle_update_button_blink)
 
+        # Periodic auto-update checks (background)
+        self._last_update_toast_version: str = ""
+        self._update_periodic_timer = QTimer(self)
+        self._update_periodic_timer.setInterval(12 * 60 * 60 * 1000)  # 12 hours
+        self._update_periodic_timer.timeout.connect(self._on_periodic_update_check)
+
         # Device tracking (new)
         self._device_cache = DeviceCache()
         self._bda_name_map: dict[str, str] = {}  # bda → name from found/reconnecting events
@@ -218,8 +224,13 @@ class MainWindow(QMainWindow):
             QTimer.singleShot(500, self._show_onboarding)
 
         # Auto-update check
+        # Delay slightly so the window is laid out before any toast tries to position.
         with contextlib.suppress(Exception):
-            self._begin_update_check(manual=False, install_if_found=False)
+            QTimer.singleShot(
+                800,
+                lambda: self._begin_update_check(manual=False, install_if_found=False),
+            )
+        self._update_periodic_timer.start()
 
         # Pending firmware (downloaded during last app update)
         QTimer.singleShot(1500, self._check_pending_firmware)
@@ -1010,6 +1021,36 @@ class MainWindow(QMainWindow):
     # Update
     # -----------------------------------------------------------------
 
+    def _on_periodic_update_check(self) -> None:
+        # Skip if we already have a cached update or are busy.
+        if self._update_info:
+            return
+        if self._update_check_in_progress or self._update_install_in_progress:
+            return
+
+        with contextlib.suppress(Exception):
+            self._begin_update_check(manual=False, install_if_found=False)
+
+    def _notify_update_available(self, *, version: str, info: dict) -> None:
+        # Show at most one toast per version per app session.
+        if not version or version == self._last_update_toast_version:
+            return
+        self._last_update_toast_version = version
+
+        # If minimized/hidden to tray, just cache the update and let the header
+        # ↑ button blink once the window is opened.
+        if not self.isVisible():
+            return
+
+        def _on_click() -> None:
+            # Uses the standard confirmation dialog.
+            if self._update_install_in_progress or self._update_check_in_progress:
+                return
+            if self._update_info:
+                self._do_full_update()
+
+        Toast.info(self, f"Update available: v{version} — click to install", on_click=_on_click)
+
     def _begin_update_check(self, *, manual: bool, install_if_found: bool) -> None:
         if self._update_check_in_progress or self._update_install_in_progress:
             return
@@ -1087,8 +1128,13 @@ class MainWindow(QMainWindow):
         if status == "available":
             self._update_info = info
             self._refresh_update_button_state()
+            # No need to keep polling once we know an update exists.
+            if hasattr(self, "_update_periodic_timer"):
+                self._update_periodic_timer.stop()
             if manual and install_if_found:
                 self._do_full_update()
+            elif not manual:
+                self._notify_update_available(version=info.get("version", ""), info=info)
             return
 
         self._update_info = {}

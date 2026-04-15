@@ -9,9 +9,15 @@ Usage:
 """
 from __future__ import annotations
 
+import contextlib
+import logging
+from collections.abc import Callable
+
 from PyQt6.QtCore import QPoint, QPropertyAnimation, Qt, QTimer
 from PyQt6.QtGui import QColor, QFont, QPainter
 from PyQt6.QtWidgets import QWidget
+
+log = logging.getLogger(__name__)
 
 # Maximum visible toasts stacked at once
 _MAX_VISIBLE = 3
@@ -41,6 +47,7 @@ class Toast(QWidget):
         message: str,
         kind: str = "info",
         duration_ms: int = DURATION_MS,
+        on_click: Callable[[], None] | None = None,
     ) -> None:
         super().__init__(parent)
         self.setFixedSize(self.WIDTH, self.HEIGHT)
@@ -51,6 +58,10 @@ class Toast(QWidget):
         self._bg_color = QColor(bg)
         self._text = f"{icon}  {message}"
         self._opacity = 1.0
+        self._on_click = on_click
+
+        if self._on_click is not None:
+            self.setCursor(Qt.CursorShape.PointingHandCursor)
 
         # Accessibility
         self.setAccessibleName(message)
@@ -131,4 +142,7 @@ class Toast(QWidget):
         painter.end()
 
     def mousePressEvent(self, event: object) -> None:
+        if self._on_click is not None:
+            with contextlib.suppress(Exception):
+                self._on_click()
         self._dismiss()

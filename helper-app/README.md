@@ -153,6 +153,9 @@ Older installs that wrote logs next to the `.exe` or `helper-app/` folder are mi
 
 When running as a packaged `.exe`, the app checks the [GitHub Releases](https://github.com/smokydastona/joycon-to-keyboard/releases) for a newer version on startup.
 
+- While the app is running, it re-checks periodically (about every 12 hours).
+- If an update appears and the main window is open, a toast notification pops up — click it to start the install flow.
+
 - The toolbar always shows an ↑ Update button next to the theme toggle.
 - If an update is available, the ↑ button blinks until you click it.
 - Clicking ↑ with no cached update performs an immediate check. If a release is found, the normal install flow starts right away; otherwise the app shows an up-to-date popup.
