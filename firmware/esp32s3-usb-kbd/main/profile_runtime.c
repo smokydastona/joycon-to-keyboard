@@ -936,14 +936,22 @@ static void free_profile(void) {
     s_macro_count = 0;
 
     for (int i = 0; i < INPUT_KEY_ID_MAX; i++) {
+        const uint8_t base = (uint8_t)(i % 128);
+
         s_map[i].mode = MAP_PASSTHROUGH;
         // Default behavior:
         // - input ids map to output base id (0..127) via modulo
         //   (supports device_id*128 + base_key_id)
-        s_map[i].remap_to = (uint8_t)(i % 128);
+        s_map[i].remap_to = base;
         s_map[i].macro_index = -1;
         s_map[i].hid_mod = 0;
         s_map[i].hid_keycode = 0;
+
+        // Motion / IMU gesture inputs (Shake / Tilt / Flick) are opt-in.
+        // Prevent accidental key presses from small controller movements.
+        if (base >= 26 && base <= 31) {
+            s_map[i].mode = MAP_DISABLED;
+        }
     }
 
     for (size_t l = 0; l < MAX_LAYERS; l++) {

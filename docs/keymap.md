@@ -128,12 +128,12 @@ by targeting the full `key_id` value.
 | 23     | RStick Down | `Arrow Down`   |
 | 24     | RStick Left | `Arrow Left`   |
 | 25     | RStick Right| `Arrow Right`  |
-| 26     | Shake       | `T`            |
-| 27     | Tilt Up     | `1`            |
-| 28     | Tilt Down   | `2`            |
-| 29     | Tilt Left   | `3`            |
-| 30     | Tilt Right  | `4`            |
-| 31     | Flick       | `X`            |
+| 26     | Shake       | *(unmapped by default)* |
+| 27     | Tilt Up     | *(unmapped by default)* |
+| 28     | Tilt Down   | *(unmapped by default)* |
+| 29     | Tilt Left   | *(unmapped by default)* |
+| 30     | Tilt Right  | *(unmapped by default)* |
+| 31     | Flick       | *(unmapped by default)* |
 | 32     | SL(L)       | `5`            |
 | 33     | SR(L)       | `6`            |
 | 34     | SL(R)       | `7`            |
