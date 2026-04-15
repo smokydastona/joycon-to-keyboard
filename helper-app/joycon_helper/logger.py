@@ -22,7 +22,6 @@ from logging.handlers import TimedRotatingFileHandler
 from .debug_privacy import sanitize_text
 from .user_data import crash_logs_dir, logs_dir
 
-
 # ---------------------------------------------------------------------------
 # Auto-cleanup
 # ---------------------------------------------------------------------------

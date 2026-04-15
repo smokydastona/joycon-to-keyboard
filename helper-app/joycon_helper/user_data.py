@@ -31,6 +31,7 @@ import json
 import logging
 import os
 import shutil
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -310,10 +311,8 @@ def _move_directory_contents(source_dir: Path, target_dir: Path) -> None:
     try:
         next(source_dir.iterdir())
     except StopIteration:
-        try:
+        with suppress(OSError):
             source_dir.rmdir()
-        except OSError:
-            pass
     except OSError:
         pass
 
