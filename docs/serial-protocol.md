@@ -178,6 +178,10 @@ The ESP32 sends OTA responses back via UART using marker `0xFB`:
 Response IDs:
 
 - `0x01` — OTA begin ACK
+- `0x02` — OTA data ACK (per-frame)
+	- Sent in response to each `cmd_id=0x11` OTA data control frame.
+	- The ESP32-S3 waits for this before sending the next OTA data frame to avoid
+		overflowing the ESP32 host's UART RX buffer while it is erasing/writing flash.
 - `0x03` — OTA end ACK
 - `0x04` — firmware version (data = UTF-8 version string)
 

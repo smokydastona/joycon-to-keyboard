@@ -51,16 +51,17 @@ BOARD_ESP32 = "esp32"
 # 3072 bytes → ~4096 base64 chars per NDJSON line.
 OTA_CHUNK_SIZE = 3072
 
-# ESP32 host OTA is relayed over UART via the ESP32-S3 bridge. Older ESP32 host
-# firmware may not support per-chunk ACKs, so the bridge uses a timed-delay mode
-# which can still overflow UART RX buffers during long flash erases/task stalls.
-# Using smaller host chunks reduces the peak burst size and makes the relay more
-# tolerant.
+# ESP32 host OTA is relayed over UART via the ESP32-S3 bridge.
+# The bridge throttles OTA data by waiting for per-frame ACKs from the ESP32 host
+# before sending the next UART chunk, to avoid overflowing UART RX while the host
+# is erasing/writing flash.
+# Using smaller host chunks reduces peak burst size and makes the overall relay
+# path more tolerant of USB/CDC jitter.
 OTA_CHUNK_SIZE_ESP32_RELAY = 512
 
 # Extra pacing after each fw_update_data command when flashing the ESP32 host.
-# This is intentionally small; the S3 relay already throttles heavily in legacy
-# mode. Kept as a constant so we can tune safely if needed.
+# This is intentionally small; the S3 relay already throttles via per-frame ACKs.
+# Kept as a constant so we can tune safely if needed.
 ESP32_RELAY_INTER_CHUNK_DELAY_S = 0.10
 
 # Timeouts for serial commands (seconds).
