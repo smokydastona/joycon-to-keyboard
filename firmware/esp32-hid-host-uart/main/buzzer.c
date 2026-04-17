@@ -206,6 +206,8 @@ static const buzzer_note_t *const s_melodies[] = {
 static const buzzer_note_t *s_seq = NULL;  // current melody being played
 static uint8_t s_seq_idx = 0;              // current note index in melody
 static TimerHandle_t s_timer = NULL;       // FreeRTOS software timer for sequencing
+static TickType_t s_note_deadline = 0;     // tick count when the current note ends
+static bool s_note_active = false;         // whether we've started playback for the current note
 
 // ---------- low-level LEDC helpers ----------
 
@@ -233,28 +235,50 @@ static void buzzer_ledc_off(void) {
 
 // ---------- timer callback (runs in timer daemon task) ----------
 
+// We avoid calling xTimerChangePeriod() from inside the timer callback.
+// Under load (e.g., BT connect), timer-command-queue contention can cause
+// xTimerChangePeriod() to fail, leaving the PWM duty set and producing a
+// continuous stuck tone. Instead, we run a short-period auto-reload timer
+// and advance notes when their internal deadline expires.
 static void buzzer_timer_cb(TimerHandle_t xTimer) {
     (void)xTimer;
+
     if (!s_seq) {
         buzzer_ledc_off();
         return;
     }
 
+    TickType_t now = xTaskGetTickCount();
+    if (s_note_active) {
+        // Handle tick wrap safely with signed subtraction.
+        if ((int32_t)(now - s_note_deadline) < 0) {
+            return;
+        }
+    }
+
+    // Start (or advance to) the next note.
     const buzzer_note_t *note = &s_seq[s_seq_idx];
 
     // Sentinel: end of melody
     if (note->freq_hz == 0 && note->duration_ms == 0) {
         buzzer_ledc_off();
         s_seq = NULL;
+        s_note_active = false;
+        if (s_timer) {
+            xTimerStop(s_timer, 0);
+        }
         return;
     }
 
     buzzer_ledc_tone(note->freq_hz);
-
     s_seq_idx++;
 
-    // Schedule the next note after this note's duration
-    xTimerChangePeriod(s_timer, pdMS_TO_TICKS(note->duration_ms), 0);
+    TickType_t dur_ticks = pdMS_TO_TICKS(note->duration_ms);
+    if (dur_ticks == 0) {
+        dur_ticks = 1;
+    }
+    s_note_deadline = now + dur_ticks;
+    s_note_active = true;
 }
 
 // ---------- public API ----------
@@ -281,9 +305,14 @@ void buzzer_init(void) {
     };
     ESP_ERROR_CHECK(ledc_channel_config(&ch_cfg));
 
-    // Create the one-shot software timer used for note sequencing.
-    // Period is placeholder (1 tick) — changed dynamically per note.
-    s_timer = xTimerCreate("buzzer", 1, pdFALSE, NULL, buzzer_timer_cb);
+    // Create the software timer used for note sequencing.
+    // Use a short periodic timer and internal deadlines to avoid relying on
+    // timer period changes from within the callback.
+    TickType_t seq_period = pdMS_TO_TICKS(10);
+    if (seq_period == 0) {
+        seq_period = 1;
+    }
+    s_timer = xTimerCreate("buzzer", seq_period, pdTRUE, NULL, buzzer_timer_cb);
     if (!s_timer) {
         ESP_LOGE(TAG, "Failed to create buzzer timer");
         return;
@@ -332,11 +361,12 @@ void buzzer_play(buzzer_tone_t tone) {
 
     s_seq = melody;
     s_seq_idx = 0;
+    s_note_active = false;
+    s_note_deadline = 0;
 
-    // Kick off the first note immediately via the timer callback.
-    // Use 1 tick so it fires as soon as the timer daemon runs.
+    // Start periodic sequencing timer. The callback will begin playback.
     if (s_timer) {
-        xTimerChangePeriod(s_timer, 1, 0);
+        xTimerStart(s_timer, 0);
     }
 }
 
@@ -345,6 +375,7 @@ void buzzer_stop(void) {
         xTimerStop(s_timer, 0);
     }
     s_seq = NULL;
+    s_note_active = false;
     buzzer_ledc_off();
 }
 
