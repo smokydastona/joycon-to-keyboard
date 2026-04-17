@@ -107,6 +107,12 @@ static bool buzzer_tone_allowed(buzzer_tone_t tone) {
 
 static void disc_tick_timer_cb(TimerHandle_t xTimer) {
     (void)xTimer;
+    // Be defensive: even if the FreeRTOS timer keeps firing due to a missed
+    // stop command (timer-command-queue contention under BT load), never play
+    // ticks when disabled/muted or when tick is not requested.
+    if (!s_cfg.enabled || s_cfg.volume == 0 || !s_cfg.discovery_tick || !s_disc_tick_requested) {
+        return;
+    }
     buzzer_play(BUZZER_TONE_DISCOVERY_TICK);
 }
 
@@ -429,7 +435,7 @@ void buzzer_init(void) {
 }
 
 void buzzer_play(buzzer_tone_t tone) {
-    if (!s_cfg.enabled) {
+    if (!s_cfg.enabled || s_cfg.volume == 0) {
         return;
     }
     if ((unsigned)tone >= sizeof(s_melodies) / sizeof(s_melodies[0])) {
