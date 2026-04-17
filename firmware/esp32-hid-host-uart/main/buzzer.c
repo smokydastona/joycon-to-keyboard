@@ -134,60 +134,70 @@ typedef struct {
 #define NOTE_E4  330
 #define NOTE_G4  392
 #define NOTE_C5  523
+#define NOTE_D5  587
 #define NOTE_E5  659
+#define NOTE_F5  698
 #define NOTE_G5  784
 #define NOTE_C6  1047
 #define NOTE_A4  440
+#define NOTE_B4  494
 
 // Each melody is a zero-terminated array of notes.
 static const buzzer_note_t melody_startup[] = {
-    { NOTE_C5,  80 },
-    { 0,        40 },
-    { NOTE_E5,  80 },
-    { 0,        40 },
-    { NOTE_G5, 120 },
+    // Short rising chirp.
+    { NOTE_C5,  35 },
+    { NOTE_D5,  35 },
+    { NOTE_E5,  45 },
+    { NOTE_G5,  70 },
+    { NOTE_C6,  90 },
     { 0, 0 }
 };
 
 static const buzzer_note_t melody_connect[] = {
-    { NOTE_C5, 100 },
-    { 0,        30 },
-    { NOTE_E5, 150 },
+    // Pleasant rising chirp (no hard gaps; envelope handles clicks).
+    { NOTE_C5,  30 },
+    { NOTE_D5,  30 },
+    { NOTE_E5,  45 },
+    { NOTE_G5,  90 },
     { 0, 0 }
 };
 
 static const buzzer_note_t melody_disconnect[] = {
-    { NOTE_E5, 150 },
-    { 0,        30 },
-    { NOTE_C5, 100 },
+    // Descending chirp.
+    { NOTE_G5,  80 },
+    { NOTE_E5,  45 },
+    { NOTE_D5,  30 },
+    { NOTE_C5,  30 },
     { 0, 0 }
 };
 
 static const buzzer_note_t melody_discovery_start[] = {
-    { NOTE_A4, 80 },
+    { NOTE_A4, 55 },
+    { NOTE_B4, 55 },
     { 0, 0 }
 };
 
 static const buzzer_note_t melody_setup_complete[] = {
-    { NOTE_C5, 80 },
-    { 0,       30 },
-    { NOTE_E5, 80 },
-    { 0,       30 },
-    { NOTE_G5, 80 },
+    // Slightly longer "ready" chirp.
+    { NOTE_C5,  35 },
+    { NOTE_D5,  35 },
+    { NOTE_E5,  45 },
+    { NOTE_G5,  70 },
+    { NOTE_C6,  80 },
     { 0, 0 }
 };
 
 static const buzzer_note_t melody_error[] = {
-    { NOTE_C4, 80 },
-    { 0,       60 },
-    { NOTE_C4, 80 },
-    { 0,       60 },
-    { NOTE_C4, 80 },
+    { NOTE_C4, 70 },
+    { 0,       55 },
+    { NOTE_C4, 70 },
+    { 0,       55 },
+    { NOTE_C4, 70 },
     { 0, 0 }
 };
 
 static const buzzer_note_t melody_discovery_tick[] = {
-    { NOTE_A4, 40 },
+    { NOTE_A4, 35 },
     { 0, 0 }
 };
 
@@ -209,28 +219,83 @@ static TimerHandle_t s_timer = NULL;       // FreeRTOS software timer for sequen
 static TickType_t s_note_deadline = 0;     // tick count when the current note ends
 static bool s_note_active = false;         // whether we've started playback for the current note
 
+static uint16_t s_note_freq_hz = 0;
+static TickType_t s_note_start = 0;
+static TickType_t s_note_duration_ticks = 0;
+static TickType_t s_note_attack_ticks = 0;
+static TickType_t s_note_decay_ticks = 0;
+static uint32_t s_last_duty = 0;
+static uint16_t s_last_freq = 0;
+
 // ---------- low-level LEDC helpers ----------
 
-static void buzzer_ledc_tone(uint16_t freq_hz) {
-    if (freq_hz == 0 || !s_cfg.enabled || s_cfg.volume == 0) {
-        ledc_set_duty(LEDC_LOW_SPEED_MODE, BUZZER_LEDC_CHANNEL, 0);
-        ledc_update_duty(LEDC_LOW_SPEED_MODE, BUZZER_LEDC_CHANNEL);
-        return;
+static uint32_t buzzer_target_duty(void) {
+    if (!s_cfg.enabled || s_cfg.volume == 0) {
+        return 0;
     }
-
-    ledc_set_freq(LEDC_LOW_SPEED_MODE, BUZZER_LEDC_TIMER, freq_hz);
-
     uint32_t duty = (uint32_t)(8191UL * (uint32_t)s_cfg.volume / 100u);
+    if (duty > 8191u) {
+        duty = 8191u;
+    }
+    // Avoid a totally-flat "almost silent" tone when volume > 0.
     if (duty == 0) {
         duty = 1;
     }
+    return duty;
+}
+
+static void buzzer_ledc_set_duty(uint32_t duty) {
+    if (duty > 8191u) {
+        duty = 8191u;
+    }
+    if (duty == s_last_duty) {
+        return;
+    }
+    s_last_duty = duty;
     ledc_set_duty(LEDC_LOW_SPEED_MODE, BUZZER_LEDC_CHANNEL, duty);
     ledc_update_duty(LEDC_LOW_SPEED_MODE, BUZZER_LEDC_CHANNEL);
 }
 
+static void buzzer_ledc_set_freq(uint16_t freq_hz) {
+    if (freq_hz == 0) {
+        return;
+    }
+    if (freq_hz == s_last_freq) {
+        return;
+    }
+    s_last_freq = freq_hz;
+    ledc_set_freq(LEDC_LOW_SPEED_MODE, BUZZER_LEDC_TIMER, freq_hz);
+}
+
 static void buzzer_ledc_off(void) {
-    ledc_set_duty(LEDC_LOW_SPEED_MODE, BUZZER_LEDC_CHANNEL, 0);
-    ledc_update_duty(LEDC_LOW_SPEED_MODE, BUZZER_LEDC_CHANNEL);
+    buzzer_ledc_set_duty(0);
+}
+
+static void buzzer_apply_envelope(TickType_t now) {
+    if (s_note_freq_hz == 0 || !s_cfg.enabled || s_cfg.volume == 0) {
+        buzzer_ledc_off();
+        return;
+    }
+
+    // Signed subtraction for wrap-safe comparisons.
+    TickType_t elapsed = (TickType_t)(now - s_note_start);
+    TickType_t remaining = (TickType_t)(s_note_deadline - now);
+
+    uint32_t target = buzzer_target_duty();
+    uint32_t duty = target;
+
+    // Attack
+    if (s_note_attack_ticks > 0 && (int32_t)elapsed >= 0 && elapsed < s_note_attack_ticks) {
+        // Scale 0..target across attack window.
+        duty = (uint32_t)((uint64_t)target * (uint64_t)(elapsed + 1) / (uint64_t)s_note_attack_ticks);
+    }
+
+    // Decay (overrides sustain/attack near the end)
+    if (s_note_decay_ticks > 0 && (int32_t)remaining > 0 && remaining < s_note_decay_ticks) {
+        duty = (uint32_t)((uint64_t)target * (uint64_t)remaining / (uint64_t)s_note_decay_ticks);
+    }
+
+    buzzer_ledc_set_duty(duty);
 }
 
 // ---------- timer callback (runs in timer daemon task) ----------
@@ -249,14 +314,18 @@ static void buzzer_timer_cb(TimerHandle_t xTimer) {
     }
 
     TickType_t now = xTaskGetTickCount();
+
     if (s_note_active) {
-        // Handle tick wrap safely with signed subtraction.
+        // If the note is still playing, just update the envelope.
         if ((int32_t)(now - s_note_deadline) < 0) {
+            buzzer_apply_envelope(now);
             return;
         }
+        // Otherwise, fall through and advance to the next note.
+        s_note_active = false;
+        buzzer_ledc_off();
     }
 
-    // Start (or advance to) the next note.
     const buzzer_note_t *note = &s_seq[s_seq_idx];
 
     // Sentinel: end of melody
@@ -264,19 +333,41 @@ static void buzzer_timer_cb(TimerHandle_t xTimer) {
         buzzer_ledc_off();
         s_seq = NULL;
         s_note_active = false;
+        s_note_freq_hz = 0;
         if (s_timer) {
             xTimerStop(s_timer, 0);
         }
         return;
     }
 
-    buzzer_ledc_tone(note->freq_hz);
-    s_seq_idx++;
-
     TickType_t dur_ticks = pdMS_TO_TICKS(note->duration_ms);
     if (dur_ticks == 0) {
         dur_ticks = 1;
     }
+
+    s_note_freq_hz = note->freq_hz;
+    s_note_start = now;
+    s_note_duration_ticks = dur_ticks;
+
+    // Basic attack/decay envelope to reduce "clicky" edges on passive piezo.
+    TickType_t attack = pdMS_TO_TICKS(20);
+    TickType_t decay = pdMS_TO_TICKS(25);
+    TickType_t half = (TickType_t)(dur_ticks / 2);
+    if (attack > half) attack = half;
+    if (decay > half) decay = half;
+    s_note_attack_ticks = attack;
+    s_note_decay_ticks = decay;
+
+    if (s_note_freq_hz == 0 || !s_cfg.enabled || s_cfg.volume == 0) {
+        buzzer_ledc_off();
+        s_last_freq = 0;
+    } else {
+        buzzer_ledc_set_freq(s_note_freq_hz);
+        buzzer_ledc_set_duty(0);
+        buzzer_apply_envelope(now);
+    }
+
+    s_seq_idx++;
     s_note_deadline = now + dur_ticks;
     s_note_active = true;
 }
@@ -363,6 +454,11 @@ void buzzer_play(buzzer_tone_t tone) {
     s_seq_idx = 0;
     s_note_active = false;
     s_note_deadline = 0;
+    s_note_freq_hz = 0;
+    s_note_start = 0;
+    s_note_duration_ticks = 0;
+    s_note_attack_ticks = 0;
+    s_note_decay_ticks = 0;
 
     // Start periodic sequencing timer. The callback will begin playback.
     if (s_timer) {
@@ -376,6 +472,7 @@ void buzzer_stop(void) {
     }
     s_seq = NULL;
     s_note_active = false;
+    s_note_freq_hz = 0;
     buzzer_ledc_off();
 }
 

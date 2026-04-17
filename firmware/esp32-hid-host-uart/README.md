@@ -87,13 +87,15 @@ A passive piezo buzzer on GPIO 25 provides audible status cues so you don't need
 
 | Tone | When | Pattern |
 |------|------|---------|
-| Startup chime | Board powers on | Three ascending notes (C5→E5→G5) |
-| Connect | Joy-Con BT connection opens | Two ascending notes (C5→E5) |
-| Disconnect | BT connection closes | Two descending notes (E5→C5) |
-| Discovery start | Inquiry scan begins | Single short beep (A4) |
-| Discovery tick | Every ~3 s while scanning (opt-in) | Very short beep (A4, 40 ms) |
-| Setup complete | FSM finishes (ready for input) | Three ascending notes (C5→E5→G5) |
+| Startup chime | Board powers on | Rising chirp (C5→D5→E5→G5→C6) |
+| Connect | Joy-Con BT connection opens | Short rising chirp (C5→D5→E5→G5) |
+| Disconnect | BT connection closes | Short descending chirp (G5→E5→D5→C5) |
+| Discovery start | Inquiry scan begins | Two short beeps (A4→B4) |
+| Discovery tick | Every ~3 s while scanning (opt-in) | Very short beep (A4, ~35 ms) |
+| Setup complete | FSM finishes (ready for input) | Rising chirp (C5→D5→E5→G5→C6) |
 | Error | Connection failure or repeated UART errors | Three rapid low beeps (C4×3) |
+
+To reduce the "clicky" sound of abrupt note edges on passive piezo buzzers, notes are played with a small software attack/decay envelope (still using LEDC PWM).
 
 ### Configuration
 
