@@ -125,9 +125,9 @@ def test_flash_esp32_uses_smaller_relay_chunks(monkeypatch, tmp_path):
     flasher = FirmwareFlasher(fake)
 
     # 2050 bytes should split into 3 fw_update_data commands when using
-    # 1024-byte relay chunks.
+    # 512-byte relay chunks.
     flasher.flash(BOARD_ESP32, b"x" * 2050)
 
     data_cmds = [cmd for cmd in fake.sent if cmd["cmd"] == "fw_update_data"]
-    assert len(data_cmds) == 3
+    assert len(data_cmds) == 5
     assert all(cmd.get("board") == BOARD_ESP32 for cmd in data_cmds)

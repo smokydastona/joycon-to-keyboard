@@ -493,7 +493,7 @@ Response:
 
 Send a base64-encoded chunk of firmware binary data. Recommended chunk size: 3072 bytes raw (4096 chars base64).
 
-Note: When relaying an ESP32 host update through the ESP32-S3 bridge (i.e. `board: "esp32"`), smaller chunks may be required for reliability (the helper app currently uses 1024-byte chunks with a small inter-chunk delay).
+Note: When relaying an ESP32 host update through the ESP32-S3 bridge (i.e. `board: "esp32"`), smaller chunks may be required for reliability (the helper app currently uses 512-byte chunks with a small inter-chunk delay).
 
 ```json
 {"cmd":"fw_update_data","data":"<base64>"}

@@ -56,12 +56,12 @@ OTA_CHUNK_SIZE = 3072
 # which can still overflow UART RX buffers during long flash erases/task stalls.
 # Using smaller host chunks reduces the peak burst size and makes the relay more
 # tolerant.
-OTA_CHUNK_SIZE_ESP32_RELAY = 1024
+OTA_CHUNK_SIZE_ESP32_RELAY = 512
 
 # Extra pacing after each fw_update_data command when flashing the ESP32 host.
 # This is intentionally small; the S3 relay already throttles heavily in legacy
 # mode. Kept as a constant so we can tune safely if needed.
-ESP32_RELAY_INTER_CHUNK_DELAY_S = 0.05
+ESP32_RELAY_INTER_CHUNK_DELAY_S = 0.10
 
 # Timeouts for serial commands (seconds).
 _CMD_TIMEOUT = 10
