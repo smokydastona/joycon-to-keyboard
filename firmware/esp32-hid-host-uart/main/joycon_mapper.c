@@ -459,8 +459,8 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
             // Hysteresis: use lower threshold to keep active, higher to activate
             bool now_right = prev_right ? (dx > deact_dz)  : (dx > act_dz);
             bool now_left  = prev_left  ? (dx < -deact_dz) : (dx < -act_dz);
-            bool now_up    = prev_forward ? (dy < -deact_dz) : (dy < -act_dz);
-            bool now_down  = prev_back    ? (dy > deact_dz)  : (dy > act_dz);
+            bool now_up    = prev_forward ? (dy > deact_dz)  : (dy > act_dz);
+            bool now_down  = prev_back    ? (dy < -deact_dz) : (dy < -act_dz);
 
             // SOCD cleaning using the selected mode.
             socd_clean(&now_left, &now_right, &s_socd_lr_last);
