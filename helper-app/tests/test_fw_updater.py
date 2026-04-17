@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from joycon_helper.fw_updater import BOARD_S3, FirmwareFlasher
+from joycon_helper.fw_updater import BOARD_ESP32, BOARD_S3, FirmwareFlasher
 from joycon_helper.serial_client import SerialHistoryEntry, SerialLine
 
 
@@ -115,3 +115,19 @@ def test_flash_can_verify_success_after_missing_end_response(monkeypatch, tmp_pa
     assert len(end_cmds) == 1
     assert len(version_cmds) >= 1
     assert not list(tmp_path.glob("ota_failure_*.json"))
+
+
+def test_flash_esp32_uses_smaller_relay_chunks(monkeypatch, tmp_path):
+    monkeypatch.setattr("joycon_helper.fw_updater.ESP32_RELAY_INTER_CHUNK_DELAY_S", 0)
+    monkeypatch.setattr("joycon_helper.fw_updater.logs_dir", lambda: tmp_path)
+
+    fake = FakeSerialClient()
+    flasher = FirmwareFlasher(fake)
+
+    # 2050 bytes should split into 3 fw_update_data commands when using
+    # 1024-byte relay chunks.
+    flasher.flash(BOARD_ESP32, b"x" * 2050)
+
+    data_cmds = [cmd for cmd in fake.sent if cmd["cmd"] == "fw_update_data"]
+    assert len(data_cmds) == 3
+    assert all(cmd.get("board") == BOARD_ESP32 for cmd in data_cmds)

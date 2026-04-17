@@ -51,6 +51,18 @@ BOARD_ESP32 = "esp32"
 # 3072 bytes → ~4096 base64 chars per NDJSON line.
 OTA_CHUNK_SIZE = 3072
 
+# ESP32 host OTA is relayed over UART via the ESP32-S3 bridge. Older ESP32 host
+# firmware may not support per-chunk ACKs, so the bridge uses a timed-delay mode
+# which can still overflow UART RX buffers during long flash erases/task stalls.
+# Using smaller host chunks reduces the peak burst size and makes the relay more
+# tolerant.
+OTA_CHUNK_SIZE_ESP32_RELAY = 1024
+
+# Extra pacing after each fw_update_data command when flashing the ESP32 host.
+# This is intentionally small; the S3 relay already throttles heavily in legacy
+# mode. Kept as a constant so we can tune safely if needed.
+ESP32_RELAY_INTER_CHUNK_DELAY_S = 0.05
+
 # Timeouts for serial commands (seconds).
 _CMD_TIMEOUT = 10
 _END_TIMEOUT = 30
@@ -425,8 +437,9 @@ class FirmwareFlasher:
 
             # 2. Send data chunks
             stage = "data"
+            chunk_size = OTA_CHUNK_SIZE_ESP32_RELAY if board == BOARD_ESP32 else OTA_CHUNK_SIZE
             while offset < total:
-                chunk = firmware[offset:offset + OTA_CHUNK_SIZE]
+                chunk = firmware[offset:offset + chunk_size]
                 b64 = base64.b64encode(chunk).decode("ascii")
                 cmd_data: dict[str, Any] = {"cmd": "fw_update_data", "data": b64}
                 if board == BOARD_ESP32:
@@ -449,6 +462,9 @@ class FirmwareFlasher:
                 offset += len(chunk)
                 if progress_cb:
                     progress_cb(offset, total)
+
+                if board == BOARD_ESP32 and ESP32_RELAY_INTER_CHUNK_DELAY_S > 0:
+                    time.sleep(ESP32_RELAY_INTER_CHUNK_DELAY_S)
         except Exception as exc:
             # Abort on any failure.
             stage = f"{stage}-abort"
