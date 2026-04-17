@@ -6,6 +6,7 @@
 #include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
+#include "freertos/semphr.h"
 
 #include "esp_log.h"
 
@@ -37,6 +38,18 @@ static const char* TAG = "uart-proto";
 static QueueHandle_t s_uart_queue = NULL;
 static volatile uint32_t s_total_rx_bytes = 0;
 static volatile uint32_t s_total_frames = 0;
+
+static SemaphoreHandle_t s_uart_tx_mutex = NULL;
+static portMUX_TYPE s_uart_tx_mutex_init_lock = portMUX_INITIALIZER_UNLOCKED;
+
+static void uart_proto_tx_mutex_init_once(void) {
+    if (s_uart_tx_mutex) return;
+    portENTER_CRITICAL(&s_uart_tx_mutex_init_lock);
+    if (!s_uart_tx_mutex) {
+        s_uart_tx_mutex = xSemaphoreCreateMutex();
+    }
+    portEXIT_CRITICAL(&s_uart_tx_mutex_init_lock);
+}
 
 static inline uint8_t xor_checksum(uint8_t length, const uint8_t* payload) {
     uint8_t x = length;
@@ -72,6 +85,8 @@ void uart_proto_init(void) {
     ESP_ERROR_CHECK(uart_set_pin(port, CONFIG_BRIDGE_UART_TX_GPIO, CONFIG_BRIDGE_UART_RX_GPIO,
                                  UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
+    uart_proto_tx_mutex_init_once();
+
     ESP_LOGI(TAG, "UART ready: port=%d baud=%d RX_GPIO=%d TX_GPIO=%d",
              CONFIG_BRIDGE_UART_PORT,
              CONFIG_BRIDGE_UART_BAUD,
@@ -84,6 +99,11 @@ static void uart_proto_send_frame(const uint8_t* payload, uint8_t length) {
         return;
     }
 
+    uart_proto_tx_mutex_init_once();
+    if (s_uart_tx_mutex) {
+        xSemaphoreTake(s_uart_tx_mutex, portMAX_DELAY);
+    }
+
     uart_port_t port = (uart_port_t)CONFIG_BRIDGE_UART_PORT;
 
     // Frame format: AA 55 <len> <payload...> <checksum>
@@ -93,6 +113,10 @@ static void uart_proto_send_frame(const uint8_t* payload, uint8_t length) {
     uart_write_bytes(port, (const char*)header, sizeof(header));
     uart_write_bytes(port, (const char*)payload, length);
     uart_write_bytes(port, (const char*)&checksum, 1);
+
+    if (s_uart_tx_mutex) {
+        xSemaphoreGive(s_uart_tx_mutex);
+    }
 }
 
 bool uart_proto_send_ctrl(uint8_t cmd_id, const uint8_t* data, uint8_t data_len) {

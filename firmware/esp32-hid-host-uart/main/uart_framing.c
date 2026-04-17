@@ -7,7 +7,22 @@
 #include "driver/uart.h"
 #include "esp_log.h"
 
+#include "freertos/FreeRTOS.h"
+#include "freertos/semphr.h"
+
 #include <string.h>
+
+static SemaphoreHandle_t s_uart_tx_mutex = NULL;
+static portMUX_TYPE s_uart_tx_mutex_init_lock = portMUX_INITIALIZER_UNLOCKED;
+
+static void bridge_uart_tx_mutex_init_once(void) {
+    if (s_uart_tx_mutex) return;
+    portENTER_CRITICAL(&s_uart_tx_mutex_init_lock);
+    if (!s_uart_tx_mutex) {
+        s_uart_tx_mutex = xSemaphoreCreateMutex();
+    }
+    portEXIT_CRITICAL(&s_uart_tx_mutex_init_lock);
+}
 
 static inline uint8_t xor_checksum(uint8_t length, const uint8_t* payload) {
     uint8_t x = length;
@@ -22,6 +37,11 @@ static void bridge_send_frame(const uint8_t* payload, uint8_t length) {
         return;
     }
 
+    bridge_uart_tx_mutex_init_once();
+    if (s_uart_tx_mutex) {
+        xSemaphoreTake(s_uart_tx_mutex, portMAX_DELAY);
+    }
+
     // Frame format: AA 55 <len> <payload...> <checksum>
     // checksum = XOR of len and payload bytes.
     uint8_t header[3] = {BRIDGE_SYNC0, BRIDGE_SYNC1, length};
@@ -30,6 +50,10 @@ static void bridge_send_frame(const uint8_t* payload, uint8_t length) {
     uart_write_bytes(BRIDGE_UART_PORT, (const char*)header, sizeof(header));
     uart_write_bytes(BRIDGE_UART_PORT, (const char*)payload, length);
     uart_write_bytes(BRIDGE_UART_PORT, (const char*)&checksum, 1);
+
+    if (s_uart_tx_mutex) {
+        xSemaphoreGive(s_uart_tx_mutex);
+    }
 }
 
 void bridge_send_key_event(uint8_t key_id, bool pressed) {
