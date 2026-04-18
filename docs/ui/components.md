@@ -41,10 +41,10 @@ Visual direction:
 - Use faint second-pass strokes, hatch fills, or paper-noise overlays where helpful.
 - Components should look like marker-and-pen UI sketches pinned on a workbench, not polished design-system tokens.
 
-In Tkinter:
+In PyQt6:
 
-- Use `tk.Button` when you need strict colors.
-- Use `ttk.Button` when you want OS-native behavior; accept that colors may vary.
+- Use `QPushButton` and apply token colors via stylesheets (or palette + custom painting when needed).
+- Prefer keeping behavior native while matching token colors (hover/pressed/disabled states).
 
 ## Toggles
 
@@ -54,9 +54,9 @@ Use for feature flags (e.g. record mode, debug options):
 - Knob: `text`
 - On state glow: `accent` at low opacity
 
-Tkinter note:
+Legacy note (Tkinter):
 
-- `ttk.Checkbutton` is the functional toggle; if you want a modern slider-toggle look, implement a small `Canvas` toggle using these colors.
+- Older UI drafts used `ttk.Checkbutton` or a `Canvas`-based slider toggle.
 
 ## Dials / Sliders
 
@@ -67,10 +67,10 @@ Use for continuous parameters (deadzone, exponent):
 - Needle: `text`
 - Ticks: `muted` at low opacity
 
-Tkinter note:
+In PyQt6:
 
-- `ttk.Scale` is the simplest control.
-- For a true dial, draw on `Canvas` and map mouse drag to value.
+- `QSlider` is the simplest control.
+- For a true dial, use `QDial` or custom paint a dial and map drag to value.
 
 ## Status pills
 

@@ -1,6 +1,6 @@
-"""Help view — searchable, collapsible sections mirroring the old Help tab.
+"""Help view — searchable, collapsible sections.
 
-Provides 16 sections covering setup, usage, troubleshooting, and reference.
+Provides 18 sections covering setup, usage, troubleshooting, and reference.
 Each section is collapsible and all are filtered by a live search bar.
 """
 from __future__ import annotations
@@ -610,7 +610,7 @@ def _sections() -> list[tuple[str, str, bool]]:
             False,
         ),
         (
-            "� Data & Profiles",
+            "📁 Data & Profiles",
             (
                 "Bind Bandit stores all user data in a persistent folder that "
                 "survives app updates and reinstalls:\n\n"
@@ -640,7 +640,7 @@ def _sections() -> list[tuple[str, str, bool]]:
             False,
         ),
         (
-            "�📋 Quick Reference",
+            "📋 Quick Reference",
             (
                 "## Keyboard shortcuts (helper app)\n"
                 "  Ctrl+Z — Undo profile change\n"

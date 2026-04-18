@@ -15,7 +15,7 @@ Non-negotiables:
 
 - `firmware/esp32-hid-host-uart/` — ESP32 Bluetooth HID host → UART framing
 - `firmware/esp32s3-usb-kbd/` — ESP32-S3 USB HID keyboard + USB CDC serial (UART → HID + helper COM port)
-- `helper-app/` — Python + Tkinter helper app (serial UI)
+- `helper-app/` — Python + PyQt6 helper app (serial UI)
 - `docs/` — wiring, protocols, keymap
 
 ## Protocols (do not break casually)
@@ -105,7 +105,7 @@ Identify what the change touches and proactively scan the connected files that m
 - Help tab content changes (`helper-app/joycon_helper/ui/views/help_view.py` → `_sections()`)
   - The Help tab is the **single source of truth** for end-user setup & usage docs inside the app.
   - Any change to wiring, pin assignments, firmware flash steps, key mappings, serial protocol, helper-app commands, OTA workflow, troubleshooting, or app install procedure **must** be reflected in the corresponding Help tab section.
-  - Sections to check (16 total): What Is This?, What You Need, Wiring & Connections, Board Pinout Diagram, Firmware Installation, First End-to-End Test, Using Bind Bandit, Default Key Mapping, Advanced Mapping Modes, Serial Protocol (Reference), Mouse Configuration (M913 & Razer), OTA Firmware Updates, Troubleshooting, Installing / Updating the Helper App, Settings & System Tray, Quick Reference.
+  - Sections to check (18 total): What Is This?, What You Need, Wiring & Connections, Board Pinout Diagram, Firmware Installation, First End-to-End Test, Using Bind Bandit, Default Key Mapping, Advanced Mapping Modes, Serial Protocol (Reference), Mouse Configuration (M913 & Razer), Gyro Calibration & LED, OTA Firmware Updates, Troubleshooting, Installing / Updating the Helper App, Settings & System Tray, Data & Profiles, Quick Reference.
   - Keep section count and order stable; add new sections at the end if needed.
   - Do not remove the search-filter feature.
 

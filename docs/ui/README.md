@@ -1,4 +1,4 @@
-# Helper App UI Pack (Tkinter)
+# Helper App UI Pack (PyQt6)
 
 This folder provides requested UI artifacts for the **Bind Bandit** app (`helper-app/joycon_helper/app.py`).
 
@@ -165,7 +165,7 @@ Note: board buttons are not required, but your Joy-Con may still need sync/pairi
 
 ## Theme
 
-Tkinter does not have a full CSS pipeline, so the theme here is expressed as **tokens** you can apply consistently:
+Bind Bandit uses **PyQt6**. The theme in this pack is expressed as **tokens** (in `theme.json`) so the look stays consistent across widgets, regardless of whether you implement styling via Qt stylesheets or per-widget palette/style config:
 
 - `theme.json` contains:
   - semantic colors (bg, panel, text, accent, danger, etc.)

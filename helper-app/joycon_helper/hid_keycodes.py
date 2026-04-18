@@ -1,8 +1,14 @@
-"""Mapping between tkinter key-event keysyms and USB HID keycodes.
+"""USB HID keycode helpers (plus a legacy keysym adapter).
 
-This module lets the helper app convert a keyboard key press into the
-(modifier_byte, keycode) pair expected by the ``remap_hid`` profile mapping
-type on the ESP32-S3 firmware.
+The Bind Bandit UI stores keyboard bindings as USB HID usage IDs plus a
+modifier bitmask (see `default_profiles.py`).
+
+This module provides:
+- Modifier-bit constants and keycode name helpers used throughout the UI.
+- `DEFAULT_KEYMAP` constants matching the firmware's built-in defaults.
+- `keysym_to_hid()` as a *legacy* adapter for older Tkinter-era keysym strings.
+
+Note: The current PyQt6 UI does not depend on Tkinter at runtime.
 """
 
 from __future__ import annotations
@@ -108,7 +114,7 @@ _KEYSYM_MAP: dict[str, tuple[int, int]] = {
 
 
 def keysym_to_hid(keysym: str) -> tuple[int, int] | None:
-    """Convert a tkinter keysym string to ``(modifier, keycode)``.
+    """Legacy: convert a Tkinter keysym string to ``(modifier, keycode)``.
 
     Returns *None* if the keysym is unrecognised.
     """

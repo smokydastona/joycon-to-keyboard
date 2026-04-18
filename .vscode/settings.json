@@ -2,5 +2,13 @@
   // For the C/C++ extension (ms-vscode.cpptools): prefer ESP-IDF compile_commands.json
   // This removes "#include errors detected" squiggles once you've built at least once.
   "C_Cpp.default.compileCommands": "${workspaceFolder}/firmware/esp32s3-usb-kbd/build/compile_commands.json",
-  "cmake.ignoreCMakeListsMissing": true
+  "cmake.ignoreCMakeListsMissing": true,
+
+  // Tooling noise: some local GitHub Actions validators warn on repo secrets
+  // (e.g. `${{ secrets.CODESIGN_PFX_BASE64 }}`) because they cannot see your
+  // repository's configured secrets. CI behavior is unaffected.
+  // Treat this workflow as plain YAML locally to suppress those warnings.
+  "files.associations": {
+    "**/.github/workflows/build-release-bundle.yml": "yaml"
+  }
 }

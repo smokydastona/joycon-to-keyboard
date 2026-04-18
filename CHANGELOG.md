@@ -2,6 +2,8 @@
 
 All notable changes to this project will be documented in this file.
 
+Note: The helper app UI is now PyQt6; older changelog entries may mention Tkinter.
+
 Format is based on **Keep a Changelog**, and this project aims to follow **Semantic Versioning** once releases/tags start.
 Until then, entries are grouped by date.
 

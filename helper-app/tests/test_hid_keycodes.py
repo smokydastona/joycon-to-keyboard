@@ -18,7 +18,7 @@ from joycon_helper.hid_keycodes import (
 
 
 class TestKeysymToHid:
-    """keysym_to_hid: tkinter keysym → (modifier, keycode)."""
+    """keysym_to_hid: legacy Tkinter keysym → (modifier, keycode)."""
 
     def test_lowercase_letters(self):
         for ch, expected_code in [("a", 0x04), ("z", 0x1D), ("m", 0x10)]:
