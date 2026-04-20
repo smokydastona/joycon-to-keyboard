@@ -271,7 +271,7 @@ static void ctrl_task(void *arg) {
     uint8_t payload[220];
     uint8_t payload_i = 0;
 
-    // UART error counting — alert buzzer on repeated framing errors
+    // UART error counting — track repeated framing errors
     uint32_t uart_err_count = 0;
     int64_t  uart_err_window_start = esp_timer_get_time();
     #define UART_ERR_THRESHOLD    5
@@ -309,7 +309,6 @@ static void ctrl_task(void *arg) {
                     }
                     uart_err_count++;
                     if (uart_err_count >= UART_ERR_THRESHOLD) {
-                        buzzer_play(BUZZER_TONE_ERROR);
                         uart_err_count = 0;
                         uart_err_window_start = now;
                     }
@@ -335,7 +334,6 @@ static void ctrl_task(void *arg) {
                     }
                     uart_err_count++;
                     if (uart_err_count >= UART_ERR_THRESHOLD) {
-                        buzzer_play(BUZZER_TONE_ERROR);
                         uart_err_count = 0;
                         uart_err_window_start = now;
                     }
