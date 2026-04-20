@@ -117,7 +117,11 @@ The Web Flasher uses these two lines after the ESP32 host is installed. It opens
 - NodeMCU **GPIO25** → one leg of a **passive piezo buzzer**
 - Other leg → **GND**
 
-Provides audible feedback for Bluetooth connect/disconnect, discovery scanning, setup complete, and error alerts. No resistor or amplifier needed — the ESP32 3.3 V LEDC PWM output drives small passive piezo buzzers directly.
+Provides audible feedback for Bluetooth connect/disconnect.
+
+Current firmware behavior: it plays a single connect chirp when the first controller connects, and a single disconnect chirp when the last controller disconnects.
+
+No resistor or amplifier needed — the ESP32 3.3 V LEDC PWM output drives small passive piezo buzzers directly.
 
 This is optional. The pin is configurable via `menuconfig` → `Bind Bandit` → `Buzzer GPIO pin` (default 25). The feature can be disabled entirely via `Enable piezo buzzer audio feedback`.
 

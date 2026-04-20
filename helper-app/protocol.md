@@ -629,7 +629,7 @@ Response:
 
 - `enabled`: master enable
 - `volume`: 0–100 (0 = mute)
-- `discovery_tick`: enable periodic tick while BT discovery is active
+- `discovery_tick`: enable periodic tick while BT discovery is active (note: recent firmware builds keep discovery/reconnect silent by default; this field may not produce automatic ticks)
 - `tone_mask`: per-tone enable bitmask (bit N = tone_id N)
 
 #### Apply settings

@@ -258,6 +258,11 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
                 break;
             }
 
+            // Only play a single connect beep when the system transitions
+            // from 0 connected devices to 1. This prevents continuous noise
+            // when background reconnect/discovery activity occurs.
+            const int prev_connected = connected_count();
+
             // Non-zero status means the connection attempt failed (e.g.
             // page timeout, auth failure).  Do NOT mark the slot as
             // connected or start the FSM — the device isn't reachable.
@@ -265,7 +270,6 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
                 ESP_LOGW(TAG, "HID OPEN failed (status=%d); scheduling reconnect",
                          param->open.status);
                 s_connecting = false;
-                buzzer_play(BUZZER_TONE_ERROR);
 #if CONFIG_JOYCON_HOST_AUTO_RECONNECT
                 schedule_reconnect();
 #else
@@ -323,7 +327,9 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
             // SPI flash calibration, sets player LEDs).
             joycon_setup_start(param->open.handle, slot, param->open.bd_addr);
             buzzer_discovery_tick_stop();
-            buzzer_play(BUZZER_TONE_CONNECT);
+            if (prev_connected == 0) {
+                buzzer_play(BUZZER_TONE_CONNECT);
+            }
 
             // Clear SOCD/stick state from any prior session so stale
             // direction history doesn't contaminate the new connection.
@@ -353,14 +359,18 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
 
             s_connecting = false;
 
+            const int prev_connected = connected_count();
+
             // Clear any slot matching this handle.
             esp_bd_addr_t closed_bda = {0};
             bool have_bda = false;
+            bool cleared_slot = false;
             for (int i = 0; i < BRIDGE_MAX_DEVICES; i++) {
                 if (!s_dev[i].connected) continue;
                 if (s_dev[i].handle == param->close.handle) {
                     memcpy(closed_bda, s_dev[i].bda, sizeof(esp_bd_addr_t));
                     have_bda = true;
+                    cleared_slot = true;
 #if CONFIG_JOYCON_HOST_AUTO_RECONNECT
                     // Stash info for reconnect before clearing the slot.
                     memcpy(s_last_bda, s_dev[i].bda, sizeof(esp_bd_addr_t));
@@ -375,8 +385,16 @@ static void hidh_cb(esp_hidh_cb_event_t event, esp_hidh_cb_param_t* param) {
                     break;
                 }
             }
-            bridge_send_bt_status(5, have_bda ? closed_bda : s_target_bda, NULL);
-            buzzer_play(BUZZER_TONE_DISCONNECT);
+            const int now_connected = connected_count();
+            if (cleared_slot) {
+                bridge_send_bt_status(5, closed_bda, NULL);
+            }
+            // Only beep when we transition from "some connected" to "none".
+            // Also suppress beeps for CLOSE events that don't correspond to a
+            // tracked connected slot (e.g., failed reconnect attempts).
+            if (cleared_slot && prev_connected > 0 && now_connected == 0) {
+                buzzer_play(BUZZER_TONE_DISCONNECT);
+            }
 #if CONFIG_JOYCON_HOST_AUTO_RECONNECT
             schedule_reconnect();
 #endif
@@ -644,8 +662,6 @@ esp_err_t bt_hid_host_start_discovery(void) {
     const char* needle = (local_name[0] != 0) ? local_name : CONFIG_JOYCON_HOST_NAME_SUBSTR;
     ESP_LOGI(TAG, "Starting inquiry scan (match='%s', %ds)...", needle, CONFIG_JOYCON_HOST_DISCOVERY_SECONDS);
     bridge_send_bt_status(1, NULL, needle);
-    buzzer_play(BUZZER_TONE_DISCOVERY_START);
-    buzzer_discovery_tick_start();
 
     // Best-effort: ignore cancel errors if not currently discovering.
     (void)esp_bt_gap_cancel_discovery();
