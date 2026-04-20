@@ -64,7 +64,7 @@ static const char *TAG = "bridge-serial";
 // We must avoid overflowing the ESP32 host's UART RX buffer while it's busy
 // erasing/writing flash. The safest scheme is to wait for a per-frame ACK
 // after every OTA UART chunk.
-#define ESP32_OTA_DATA_ACK_TIMEOUT_MS 5000
+#define ESP32_OTA_DATA_ACK_TIMEOUT_MS 20000
 
 // Max raw bytes per UART control frame data (frame payload = 0xFE + cmd_id + data)
 #define OTA_UART_CHUNK  218
