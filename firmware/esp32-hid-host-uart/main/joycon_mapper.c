@@ -486,6 +486,7 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
 
         // --- Left stick -> WASD (with curve + SOCD cleaning) ---
         {
+            uint8_t clamped_device_id = clamp_device_id(device_id);
             portENTER_CRITICAL(&s_cal_mux);
             int dx = apply_stick_curve(cal_normalize(&s_cal.lx, st.lx));
             int dy = apply_stick_curve(cal_normalize(&s_cal.ly, st.ly));
@@ -495,10 +496,10 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
             bridge_send_analog(device_id, (int16_t)dx, (int16_t)dy);
 
             // Hysteresis: use lower threshold to keep active, higher to activate
-            bool now_right = prev_right ? (dx > deact_dz)  : (dx > act_dz);
-            bool now_left  = prev_left  ? (dx < -deact_dz) : (dx < -act_dz);
-            bool now_up    = prev_forward ? (dy > deact_dz)  : (dy > act_dz);
-            bool now_down  = prev_back    ? (dy < -deact_dz) : (dy < -act_dz);
+            bool now_right = s_pressed[clamped_device_id][KEY_ID_RIGHT] ? (dx > deact_dz)  : (dx > act_dz);
+            bool now_left  = s_pressed[clamped_device_id][KEY_ID_LEFT] ? (dx < -deact_dz) : (dx < -act_dz);
+            bool now_up    = s_pressed[clamped_device_id][KEY_ID_FORWARD] ? (dy > deact_dz)  : (dy > act_dz);
+            bool now_down  = s_pressed[clamped_device_id][KEY_ID_BACK] ? (dy < -deact_dz) : (dy < -act_dz);
 
             // SOCD cleaning using the selected mode.
             socd_clean(&now_left, &now_right, &s_socd_lr_last);
@@ -512,6 +513,7 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
 
         // --- Right stick -> virtual directions (with curve + SOCD cleaning) ---
         {
+            uint8_t clamped_device_id = clamp_device_id(device_id);
             portENTER_CRITICAL(&s_cal_mux);
             int rdx = apply_stick_curve(cal_normalize(&s_cal.rx, st.rx));
             int rdy = apply_stick_curve(cal_normalize(&s_cal.ry, st.ry));
@@ -520,10 +522,10 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
             // Send right stick analog data for mouse/scroll modes.
             bridge_send_analog((uint8_t)(device_id | 0x80), (int16_t)rdx, (int16_t)rdy);
 
-            bool now_rup = prev_rup ? (rdy < -deact_dz) : (rdy < -act_dz);
-            bool now_rdn = prev_rdn ? (rdy >  deact_dz) : (rdy >  act_dz);
-            bool now_rlt = prev_rlt ? (rdx < -deact_dz) : (rdx < -act_dz);
-            bool now_rrt = prev_rrt ? (rdx >  deact_dz) : (rdx >  act_dz);
+            bool now_rup = s_pressed[clamped_device_id][KEY_ID_RSTICK_UP] ? (rdy < -deact_dz) : (rdy < -act_dz);
+            bool now_rdn = s_pressed[clamped_device_id][KEY_ID_RSTICK_DOWN] ? (rdy >  deact_dz) : (rdy >  act_dz);
+            bool now_rlt = s_pressed[clamped_device_id][KEY_ID_RSTICK_LEFT] ? (rdx < -deact_dz) : (rdx < -act_dz);
+            bool now_rrt = s_pressed[clamped_device_id][KEY_ID_RSTICK_RIGHT] ? (rdx >  deact_dz) : (rdx >  act_dz);
 
             // SOCD cleaning for right stick directions.
             socd_clean(&now_rlt, &now_rrt, &s_socd_rlr_last);
