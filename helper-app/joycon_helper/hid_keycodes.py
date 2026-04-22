@@ -202,6 +202,10 @@ DEFAULT_KEYMAP: dict[int, tuple[int, int]] = {
     33: (0, 0x23),           # 6  (SR left Joy-Con)
     34: (0, 0x24),           # 7  (SL right Joy-Con)
     35: (0, 0x25),           # 8  (SR right Joy-Con)
+    36: (0, 0x08),           # E  (D-pad up)
+    37: (0, 0x2C),           # Space  (D-pad down)
+    38: (0, 0x09),           # F  (D-pad left)
+    39: (0, 0x15),           # R  (D-pad right)
 }
 
 

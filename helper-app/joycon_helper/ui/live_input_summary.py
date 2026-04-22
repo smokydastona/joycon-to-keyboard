@@ -36,6 +36,10 @@ _BASE_KEY_LABELS: dict[int, str] = {
     33: "SR(L)",
     34: "SL(R)",
     35: "SR(R)",
+    36: "DPad Up",
+    37: "DPad Down",
+    38: "DPad Left",
+    39: "DPad Right",
 }
 
 _BASE_KEY_TO_HOTSPOT: dict[int, str] = {
@@ -71,6 +75,10 @@ _BASE_KEY_TO_HOTSPOT: dict[int, str] = {
     33: "SR(L)",
     34: "SL(R)",
     35: "SR(R)",
+    36: "DUp",
+    37: "DDown",
+    38: "DLeft",
+    39: "DRight",
 }
 
 _ACTIVITY_CATEGORY_ORDER = ("input", "layer", "macro")

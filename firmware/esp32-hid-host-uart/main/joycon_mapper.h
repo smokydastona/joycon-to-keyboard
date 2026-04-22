@@ -57,6 +57,12 @@ enum {
     KEY_ID_BTN_SR_L         = 33,  // SR on left Joy-Con
     KEY_ID_BTN_SL_R         = 34,  // SL on right Joy-Con
     KEY_ID_BTN_SR_R         = 35,  // SR on right Joy-Con
+
+    // Left Joy-Con D-pad
+    KEY_ID_DPAD_UP          = 36,
+    KEY_ID_DPAD_DOWN        = 37,
+    KEY_ID_DPAD_LEFT        = 38,
+    KEY_ID_DPAD_RIGHT       = 39,
 };
 
 // Feed raw HID report bytes into the mapper.

@@ -79,6 +79,15 @@ This repo supports a full Joy-Con button set: movement, face buttons, shoulders/
 | `34`   | SL(R)  | SL on right Joy-Con (inner rail)   |
 | `35`   | SR(R)  | SR on right Joy-Con (inner rail)   |
 
+### D-pad
+
+| key_id | Button | Description            |
+|--------|--------|------------------------|
+| `36`   | DUp    | Left Joy-Con D-pad up  |
+| `37`   | DDown  | Left Joy-Con D-pad down|
+| `38`   | DLeft  | Left Joy-Con D-pad left|
+| `39`   | DRight | Left Joy-Con D-pad right|
+
 ## Multi-device extended key_id space
 
 When multiple controllers are connected, each has its own `device_id`.
@@ -138,15 +147,10 @@ by targeting the full `key_id` value.
 | 33     | SR(L)       | `6`            |
 | 34     | SL(R)       | `7`            |
 | 35     | SR(R)       | `8`            |
-
-**D-pad defaults** (profile layer, all slots):
-
-| Button | Default output |
-|--------|----------------|
-| DUp    | `E`            |
-| DLeft  | `F`            |
-| DRight | `R`            |
-| DDown  | `Space`        |
+| 36     | DUp         | `E`            |
+| 37     | DDown       | `Space`        |
+| 38     | DLeft       | `F`            |
+| 39     | DRight      | `R`            |
 
 ## Stick auto-calibration
 

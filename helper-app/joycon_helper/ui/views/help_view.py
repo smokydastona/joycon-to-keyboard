@@ -296,6 +296,7 @@ def _sections() -> list[tuple[str, str, bool]]:
             (
                 "## Joy-Con (L) — Default Layout\n"
                 "  Stick → W / A / S / D    LStick Press → Ctrl\n"
+                "  D-pad emits its own hardware key_ids and defaults to:\n"
                 "  DUp → E    DLeft → F    DRight → R    DDown → Space\n"
                 "  L → Shift    ZL → I\n"
                 "  Minus → Tab    Capture → Esc\n\n"

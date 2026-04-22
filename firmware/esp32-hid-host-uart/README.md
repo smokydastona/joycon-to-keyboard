@@ -132,7 +132,7 @@ One leg of a passive piezo buzzer → GPIO 25, other leg → GND. No resistor or
 - **BT RSSI polling**: periodically reads Bluetooth RSSI (every 5 s) for connected devices and forwards to the ESP32-S3 via UART marker `0xF8`.
 - **BT auto-reconnect**: on disconnect, automatically attempts to reconnect with exponential backoff (2 s → 4 s → 8 s). Configurable via Kconfig (`JOYCON_HOST_AUTO_RECONNECT`, `JOYCON_HOST_AUTO_RECONNECT_MAX_RETRIES`). Falls back to discovery after max retries.
 - **Discovery auto-restart**: if the initial inquiry scan ends without finding a device, discovery automatically restarts after a 2 s cooldown (no manual board reset needed).
-- **Nintendo 0x30 button + stick parsing** (when enabled via menuconfig): fully parses all Joy-Con buttons (A/B/X/Y, L/R, ZL/ZR, Plus/Minus, Home, Capture, stick clicks) and both sticks.
+- **Nintendo 0x30 button + stick parsing** (when enabled via menuconfig): fully parses all Joy-Con buttons (A/B/X/Y, L/R, ZL/ZR, Plus/Minus, Home, Capture, stick clicks, left D-pad) and both sticks.
 - **Configurable motion thresholds**: shake, tilt, and flick gesture sensitivity are tunable via Kconfig (`JOYCON_HOST_MOTION_SHAKE_THRESHOLD`, `JOYCON_HOST_MOTION_TILT_THRESHOLD`, `JOYCON_HOST_MOTION_FLICK_THRESHOLD`, `JOYCON_HOST_MOTION_COOLDOWN_MS`).
 - **Configurable setup FSM timeout**: `JOYCON_HOST_SETUP_TIMEOUT_MS` controls how long each Joy-Con handshake step waits before retrying (default 1500 ms).
 - **Setup FSM retry & connect delay**: each subcmd step retries up to `JOYCON_HOST_SETUP_MAX_RETRIES` (default 2) times on timeout before advancing, and a post-connection delay (`JOYCON_HOST_SETUP_CONNECT_DELAY_MS`, default 500 ms) lets the BT link stabilise before the first subcmd is sent. This fixes intermittent FSM timeouts caused by sniff-mode negotiation racing with subcmd sends.
@@ -140,6 +140,6 @@ One leg of a passive piezo buzzer → GPIO 25, other leg → GND. No resistor or
 - **SOCD cleaning**: three modes (neutral / last-input / first-input) for simultaneous opposing cardinal direction handling. Configurable at runtime via UART control command or profile JSON.
 - **Rapid trigger (stick hysteresis)**: separate activation/deactivation thresholds prevent flickering at the deadzone boundary. Configurable at runtime.
 - **Analog stick data forwarding**: sends raw normalized stick values (±4096) over UART (marker `0xF7`) for mouse/scroll/sprint-zone on the USB side. Left stick = device_id `0x00`, right stick = device_id `0x80`.
-- **35 key_ids**: all Joy-Con inputs (left stick WASD, face buttons, shoulders, triggers, system buttons, stick clicks, right stick directions, motion gestures, SL/SR rail buttons) are mapped to unique key_ids (1–35) and emitted over UART.
+- **39 key_ids**: all Joy-Con inputs (left stick WASD, face buttons, shoulders, triggers, system buttons, stick clicks, right stick directions, motion gestures, SL/SR rail buttons, left D-pad) are mapped to unique key_ids (1–39) and emitted over UART.
 
 Next step is to capture real reports and verify the correct mappings in `main/joycon_mapper.c`.

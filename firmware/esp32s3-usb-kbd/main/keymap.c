@@ -126,6 +126,20 @@ bool keymap_lookup(uint16_t key_id, uint8_t* modifier, uint8_t* keycode) {
             *keycode = HID_KEY_8;
             return true;
 
+        // --- Left Joy-Con D-pad ---
+        case 36: // DPad Up -> E (interact)
+            *keycode = HID_KEY_E;
+            return true;
+        case 37: // DPad Down -> Space (jump)
+            *keycode = HID_KEY_SPACE;
+            return true;
+        case 38: // DPad Left -> F (ability)
+            *keycode = HID_KEY_F;
+            return true;
+        case 39: // DPad Right -> R (ability)
+            *keycode = HID_KEY_R;
+            return true;
+
         default:
             // Any non-zero device's IDs are offset by 128 * device_id.
             // Mirror the base (0..127) default mapping unless overridden

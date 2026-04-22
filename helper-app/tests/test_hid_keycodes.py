@@ -140,3 +140,9 @@ class TestDefaultKeymap:
         assert DEFAULT_KEYMAP[2] == (0, 0x16)  # S
         assert DEFAULT_KEYMAP[3] == (0, 0x04)  # A
         assert DEFAULT_KEYMAP[4] == (0, 0x07)  # D
+
+    def test_dpad_defaults_present(self):
+        assert DEFAULT_KEYMAP[36] == (0, 0x08)   # E
+        assert DEFAULT_KEYMAP[37] == (0, 0x2C)  # Space
+        assert DEFAULT_KEYMAP[38] == (0, 0x09)   # F
+        assert DEFAULT_KEYMAP[39] == (0, 0x15)  # R

@@ -8,6 +8,7 @@
 #include "esp_timer.h"
 
 #include "uart_framing.h"
+#include "config.h"
 #include "joycon_setup.h"
 
 #if CONFIG_JOYCON_HOST_TRY_NINTENDO_0X30
@@ -46,6 +47,38 @@ static int8_t s_socd_ud_last = 0;   // left stick vertical
 static int8_t s_socd_rlr_last = 0;  // right stick horizontal
 static int8_t s_socd_rud_last = 0;  // right stick vertical
 
+#define KEY_ID_BASE_MAX KEY_ID_DPAD_RIGHT
+
+static bool s_pressed[BRIDGE_MAX_DEVICES][KEY_ID_BASE_MAX + 1] = {0};
+
+static void clear_transient_motion_state(void);
+
+static uint8_t clamp_device_id(uint8_t device_id) {
+    if (device_id >= BRIDGE_MAX_DEVICES) {
+        return 0;
+    }
+    return device_id;
+}
+
+static void emit_raw_key_state(uint8_t device_id, uint8_t key_id, bool now_pressed) {
+    if (device_id == 0) {
+        bridge_send_key_event(key_id, now_pressed);
+    } else {
+        bridge_send_key_event_ex(device_id, key_id, now_pressed);
+    }
+}
+
+static void release_all_keys_for_device(uint8_t device_id) {
+    device_id = clamp_device_id(device_id);
+    for (uint8_t key_id = 1; key_id <= KEY_ID_BASE_MAX; key_id++) {
+        if (!s_pressed[device_id][key_id]) {
+            continue;
+        }
+        emit_raw_key_state(device_id, key_id, false);
+        s_pressed[device_id][key_id] = false;
+    }
+}
+
 void joycon_mapper_set_socd_mode(uint8_t mode) {
     if (mode <= SOCD_FIRST_INPUT) {
         s_socd_mode = (socd_mode_t)mode;
@@ -68,11 +101,16 @@ void joycon_mapper_set_rapid_trigger(uint8_t activation, uint8_t deactivation) {
 }
 
 void joycon_mapper_reset_state(void) {
+    for (uint8_t device_id = 0; device_id < BRIDGE_MAX_DEVICES; device_id++) {
+        release_all_keys_for_device(device_id);
+    }
+
     s_socd_lr_last  = 0;
     s_socd_ud_last  = 0;
     s_socd_rlr_last = 0;
     s_socd_rud_last = 0;
-    ESP_LOGI("joycon-mapper", "Transient state reset (SOCD history cleared)");
+    clear_transient_motion_state();
+    ESP_LOGI("joycon-mapper", "Transient state reset (pressed keys + SOCD history cleared)");
 }
 
 void joycon_mapper_set_stick_curve(uint8_t curve, uint8_t exp_x100) {
@@ -85,15 +123,18 @@ void joycon_mapper_set_stick_curve(uint8_t curve, uint8_t exp_x100) {
     ESP_LOGI("joycon-mapper", "Stick curve=%d exp=%.2f", (int)s_curve, (double)s_exp);
 }
 
-static void emit_if_changed_ex(uint8_t device_id, uint8_t key_id, bool now_pressed, bool* prev_pressed) {
-    if (now_pressed == *prev_pressed) return;
-
-    if (device_id == 0) {
-        bridge_send_key_event(key_id, now_pressed);
-    } else {
-        bridge_send_key_event_ex(device_id, key_id, now_pressed);
+static void emit_if_changed_ex(uint8_t device_id, uint8_t key_id, bool now_pressed) {
+    device_id = clamp_device_id(device_id);
+    if (key_id == 0 || key_id > KEY_ID_BASE_MAX) {
+        return;
     }
-    *prev_pressed = now_pressed;
+
+    if (now_pressed == s_pressed[device_id][key_id]) {
+        return;
+    }
+
+    emit_raw_key_state(device_id, key_id, now_pressed);
+    s_pressed[device_id][key_id] = now_pressed;
 }
 
 // SOCD clean an axis pair (neg = left/up, pos = right/down).
@@ -337,10 +378,17 @@ typedef struct {
 
 static motion_state_t s_motion = {0};
 
+static void clear_transient_motion_state(void) {
+    memset(&s_motion, 0, sizeof(s_motion));
+}
+
 static int64_t get_time_ms(void) {
     return (int64_t)(esp_timer_get_time() / 1000);
 }
 #else /* !CONFIG_JOYCON_HOST_NINTENDO_0X30_EMIT_KEYS */
+
+static void clear_transient_motion_state(void) {
+}
 
 /* Stubs so bridge_ctrl.c links even when the feature is disabled. */
 void joycon_mapper_save_calibration(void)  { /* no-op */ }
@@ -351,16 +399,6 @@ void joycon_mapper_clear_calibration(void) { /* no-op */ }
 void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16_t len) {
     (void)s_act_threshold;
     (void)s_deact_threshold;
-
-    // Placeholder: treat certain byte patterns as demo-only.
-    // This prevents "doing the wrong thing" with guessed Joy-Con layouts.
-    //
-    // If you run this as-is, it won't generate key presses.
-
-    static bool prev_forward = false;
-    static bool prev_back = false;
-    static bool prev_left = false;
-    static bool prev_right = false;
 
     if (report == NULL || len == 0) {
         return;
@@ -466,17 +504,14 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
             socd_clean(&now_left, &now_right, &s_socd_lr_last);
             socd_clean(&now_up,   &now_down,  &s_socd_ud_last);
 
-            emit_if_changed_ex(device_id, KEY_ID_FORWARD, now_up, &prev_forward);
-            emit_if_changed_ex(device_id, KEY_ID_BACK, now_down, &prev_back);
-            emit_if_changed_ex(device_id, KEY_ID_LEFT, now_left, &prev_left);
-            emit_if_changed_ex(device_id, KEY_ID_RIGHT, now_right, &prev_right);
+            emit_if_changed_ex(device_id, KEY_ID_FORWARD, now_up);
+            emit_if_changed_ex(device_id, KEY_ID_BACK, now_down);
+            emit_if_changed_ex(device_id, KEY_ID_LEFT, now_left);
+            emit_if_changed_ex(device_id, KEY_ID_RIGHT, now_right);
         }
 
         // --- Right stick -> virtual directions (with curve + SOCD cleaning) ---
         {
-            static bool prev_rup = false, prev_rdn = false;
-            static bool prev_rlt = false, prev_rrt = false;
-
             portENTER_CRITICAL(&s_cal_mux);
             int rdx = apply_stick_curve(cal_normalize(&s_cal.rx, st.rx));
             int rdy = apply_stick_curve(cal_normalize(&s_cal.ry, st.ry));
@@ -494,62 +529,56 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
             socd_clean(&now_rlt, &now_rrt, &s_socd_rlr_last);
             socd_clean(&now_rup, &now_rdn, &s_socd_rud_last);
 
-            emit_if_changed_ex(device_id, KEY_ID_RSTICK_UP,    now_rup, &prev_rup);
-            emit_if_changed_ex(device_id, KEY_ID_RSTICK_DOWN,  now_rdn, &prev_rdn);
-            emit_if_changed_ex(device_id, KEY_ID_RSTICK_LEFT,  now_rlt, &prev_rlt);
-            emit_if_changed_ex(device_id, KEY_ID_RSTICK_RIGHT, now_rrt, &prev_rrt);
+            emit_if_changed_ex(device_id, KEY_ID_RSTICK_UP,    now_rup);
+            emit_if_changed_ex(device_id, KEY_ID_RSTICK_DOWN,  now_rdn);
+            emit_if_changed_ex(device_id, KEY_ID_RSTICK_LEFT,  now_rlt);
+            emit_if_changed_ex(device_id, KEY_ID_RSTICK_RIGHT, now_rrt);
         }
 
         // --- Face buttons ---
         {
-            static bool prev_a = false, prev_b = false;
-            static bool prev_x = false, prev_y = false;
-
-            emit_if_changed_ex(device_id, KEY_ID_BTN_A, (st.buttons1 & NIN_BTN1_A) != 0, &prev_a);
-            emit_if_changed_ex(device_id, KEY_ID_BTN_B, (st.buttons1 & NIN_BTN1_B) != 0, &prev_b);
-            emit_if_changed_ex(device_id, KEY_ID_BTN_X, (st.buttons1 & NIN_BTN1_X) != 0, &prev_x);
-            emit_if_changed_ex(device_id, KEY_ID_BTN_Y, (st.buttons1 & NIN_BTN1_Y) != 0, &prev_y);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_A, (st.buttons1 & NIN_BTN1_A) != 0);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_B, (st.buttons1 & NIN_BTN1_B) != 0);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_X, (st.buttons1 & NIN_BTN1_X) != 0);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_Y, (st.buttons1 & NIN_BTN1_Y) != 0);
         }
 
         // --- Shoulder / trigger buttons ---
         {
-            static bool prev_l = false, prev_r = false;
-            static bool prev_zl = false, prev_zr = false;
-
-            emit_if_changed_ex(device_id, KEY_ID_BTN_L,  (st.buttons3 & NIN_BTN3_L)  != 0, &prev_l);
-            emit_if_changed_ex(device_id, KEY_ID_BTN_R,  (st.buttons1 & NIN_BTN1_R)  != 0, &prev_r);
-            emit_if_changed_ex(device_id, KEY_ID_BTN_ZL, (st.buttons3 & NIN_BTN3_ZL) != 0, &prev_zl);
-            emit_if_changed_ex(device_id, KEY_ID_BTN_ZR, (st.buttons1 & NIN_BTN1_ZR) != 0, &prev_zr);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_L,  (st.buttons3 & NIN_BTN3_L)  != 0);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_R,  (st.buttons1 & NIN_BTN1_R)  != 0);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_ZL, (st.buttons3 & NIN_BTN3_ZL) != 0);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_ZR, (st.buttons1 & NIN_BTN1_ZR) != 0);
         }
 
         // --- Side-rail buttons (SL / SR) ---
         {
-            static bool prev_sl_l = false, prev_sr_l = false;
-            static bool prev_sl_r = false, prev_sr_r = false;
+            emit_if_changed_ex(device_id, KEY_ID_BTN_SL_L, (st.buttons3 & NIN_BTN3_SL_L) != 0);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_SR_L, (st.buttons3 & NIN_BTN3_SR_L) != 0);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_SL_R, (st.buttons1 & NIN_BTN1_SL_R) != 0);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_SR_R, (st.buttons1 & NIN_BTN1_SR_R) != 0);
+        }
 
-            emit_if_changed_ex(device_id, KEY_ID_BTN_SL_L, (st.buttons3 & NIN_BTN3_SL_L) != 0, &prev_sl_l);
-            emit_if_changed_ex(device_id, KEY_ID_BTN_SR_L, (st.buttons3 & NIN_BTN3_SR_L) != 0, &prev_sr_l);
-            emit_if_changed_ex(device_id, KEY_ID_BTN_SL_R, (st.buttons1 & NIN_BTN1_SL_R) != 0, &prev_sl_r);
-            emit_if_changed_ex(device_id, KEY_ID_BTN_SR_R, (st.buttons1 & NIN_BTN1_SR_R) != 0, &prev_sr_r);
+        // --- Left Joy-Con D-pad ---
+        {
+            emit_if_changed_ex(device_id, KEY_ID_DPAD_UP,    (st.buttons3 & NIN_BTN3_DPAD_UP) != 0);
+            emit_if_changed_ex(device_id, KEY_ID_DPAD_DOWN,  (st.buttons3 & NIN_BTN3_DPAD_DOWN) != 0);
+            emit_if_changed_ex(device_id, KEY_ID_DPAD_LEFT,  (st.buttons3 & NIN_BTN3_DPAD_LEFT) != 0);
+            emit_if_changed_ex(device_id, KEY_ID_DPAD_RIGHT, (st.buttons3 & NIN_BTN3_DPAD_RIGHT) != 0);
         }
 
         // --- System buttons ---
         {
-            static bool prev_plus = false, prev_minus = false;
-            static bool prev_home = false, prev_capture = false;
-
-            emit_if_changed_ex(device_id, KEY_ID_BTN_PLUS,    (st.buttons2 & NIN_BTN2_PLUS)    != 0, &prev_plus);
-            emit_if_changed_ex(device_id, KEY_ID_BTN_MINUS,   (st.buttons2 & NIN_BTN2_MINUS)   != 0, &prev_minus);
-            emit_if_changed_ex(device_id, KEY_ID_BTN_HOME,    (st.buttons2 & NIN_BTN2_HOME)    != 0, &prev_home);
-            emit_if_changed_ex(device_id, KEY_ID_BTN_CAPTURE, (st.buttons2 & NIN_BTN2_CAPTURE) != 0, &prev_capture);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_PLUS,    (st.buttons2 & NIN_BTN2_PLUS)    != 0);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_MINUS,   (st.buttons2 & NIN_BTN2_MINUS)   != 0);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_HOME,    (st.buttons2 & NIN_BTN2_HOME)    != 0);
+            emit_if_changed_ex(device_id, KEY_ID_BTN_CAPTURE, (st.buttons2 & NIN_BTN2_CAPTURE) != 0);
         }
 
         // --- Stick clicks ---
         {
-            static bool prev_ls = false, prev_rs = false;
-
-            emit_if_changed_ex(device_id, KEY_ID_LSTICK_CLICK, (st.buttons2 & NIN_BTN2_LSTICK) != 0, &prev_ls);
-            emit_if_changed_ex(device_id, KEY_ID_RSTICK_CLICK, (st.buttons2 & NIN_BTN2_RSTICK) != 0, &prev_rs);
+            emit_if_changed_ex(device_id, KEY_ID_LSTICK_CLICK, (st.buttons2 & NIN_BTN2_LSTICK) != 0);
+            emit_if_changed_ex(device_id, KEY_ID_RSTICK_CLICK, (st.buttons2 & NIN_BTN2_RSTICK) != 0);
         }
 
         // --- Motion / IMU gesture detection ---
@@ -577,11 +606,11 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
                 (now - s_motion.last_shake_ms) > MOTION_COOLDOWN_MS) {
                 s_motion.shake_pressed = true;
                 s_motion.last_shake_ms = now;
-                emit_if_changed_ex(device_id, KEY_ID_MOTION_SHAKE, true, &s_motion.shake_pressed);
+                emit_if_changed_ex(device_id, KEY_ID_MOTION_SHAKE, true);
             } else if (!shake_now && s_motion.shake_pressed &&
                        (now - s_motion.last_shake_ms) > MOTION_COOLDOWN_MS) {
                 s_motion.shake_pressed = false;
-                emit_if_changed_ex(device_id, KEY_ID_MOTION_SHAKE, false, &s_motion.shake_pressed);
+                emit_if_changed_ex(device_id, KEY_ID_MOTION_SHAKE, false);
             }
 
             // Tilt: sustained acceleration on a single axis beyond threshold
@@ -590,10 +619,15 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
             bool tilt_left  = (ax < -MOTION_TILT_THRESHOLD);
             bool tilt_right = (ax >  MOTION_TILT_THRESHOLD);
 
-            emit_if_changed_ex(device_id, KEY_ID_MOTION_TILT_UP,    tilt_up,    &s_motion.tilt_up_pressed);
-            emit_if_changed_ex(device_id, KEY_ID_MOTION_TILT_DOWN,  tilt_down,  &s_motion.tilt_down_pressed);
-            emit_if_changed_ex(device_id, KEY_ID_MOTION_TILT_LEFT,  tilt_left,  &s_motion.tilt_left_pressed);
-            emit_if_changed_ex(device_id, KEY_ID_MOTION_TILT_RIGHT, tilt_right, &s_motion.tilt_right_pressed);
+            emit_if_changed_ex(device_id, KEY_ID_MOTION_TILT_UP,    tilt_up);
+            emit_if_changed_ex(device_id, KEY_ID_MOTION_TILT_DOWN,  tilt_down);
+            emit_if_changed_ex(device_id, KEY_ID_MOTION_TILT_LEFT,  tilt_left);
+            emit_if_changed_ex(device_id, KEY_ID_MOTION_TILT_RIGHT, tilt_right);
+
+            s_motion.tilt_up_pressed = tilt_up;
+            s_motion.tilt_down_pressed = tilt_down;
+            s_motion.tilt_left_pressed = tilt_left;
+            s_motion.tilt_right_pressed = tilt_right;
 
             // Flick: high gyro magnitude (quick twist)
             int32_t gyro_mag = (int32_t)(sqrtf((float)(gx*gx + gy*gy + gz*gz)));
@@ -602,11 +636,11 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
                 (now - s_motion.last_flick_ms) > MOTION_COOLDOWN_MS) {
                 s_motion.flick_pressed = true;
                 s_motion.last_flick_ms = now;
-                emit_if_changed_ex(device_id, KEY_ID_MOTION_FLICK, true, &s_motion.flick_pressed);
+                emit_if_changed_ex(device_id, KEY_ID_MOTION_FLICK, true);
             } else if (!flick_now && s_motion.flick_pressed &&
                        (now - s_motion.last_flick_ms) > MOTION_COOLDOWN_MS) {
                 s_motion.flick_pressed = false;
-                emit_if_changed_ex(device_id, KEY_ID_MOTION_FLICK, false, &s_motion.flick_pressed);
+                emit_if_changed_ex(device_id, KEY_ID_MOTION_FLICK, false);
             }
 
             // Forward averaged raw gyro data to the USB side for gyro-to-mouse.
@@ -622,13 +656,9 @@ void joycon_mapper_on_report_ex(uint8_t device_id, const uint8_t* report, uint16
     }
 #endif
 
-    // Fallback: if extended parsing above was compiled out or didn't match,
-    // release all buttons so nothing sticks.
-
-    emit_if_changed_ex(device_id, KEY_ID_FORWARD, false, &prev_forward);
-    emit_if_changed_ex(device_id, KEY_ID_BACK, false, &prev_back);
-    emit_if_changed_ex(device_id, KEY_ID_LEFT, false, &prev_left);
-    emit_if_changed_ex(device_id, KEY_ID_RIGHT, false, &prev_right);
+    // Fallback: if parsing didn't match the active report stream, release any
+    // currently-held keys for this device so the USB side can't retain a stale hold.
+    release_all_keys_for_device(device_id);
 }
 
 void joycon_mapper_on_report(const uint8_t* report, uint16_t len) {

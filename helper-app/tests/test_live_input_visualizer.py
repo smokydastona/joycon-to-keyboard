@@ -23,6 +23,7 @@ def test_hotspot_for_stick_and_face_keys() -> None:
     assert hotspot_for_key_id(22) == "RSUp"
     assert hotspot_for_key_id(8) == "A"
     assert hotspot_for_key_id(35) == "SR(R)"
+    assert hotspot_for_key_id(36) == "DUp"
 
 
 def test_hotspot_missing_for_abstract_action_key() -> None:
@@ -35,6 +36,7 @@ def test_label_for_key_id_uses_base_key_space() -> None:
     assert label_for_key_id(1) == "Forward"
     assert label_for_key_id(129) == "Forward"
     assert label_for_key_id(35) == "SR(R)"
+    assert label_for_key_id(39) == "DPad Right"
 
 
 def test_display_label_for_key_id_is_device_aware() -> None:
