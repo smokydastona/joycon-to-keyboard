@@ -119,7 +119,11 @@ The Web Flasher uses these two lines after the ESP32 host is installed. It opens
 
 Provides audible feedback for Bluetooth connect/disconnect.
 
+Use a **passive piezo only** here. Active buzzer modules with a built-in oscillator are not supported on this pin and can produce a constant tone instead of the intended chirps.
+
 Current firmware behavior: it plays a single connect chirp when the first controller connects, and a single disconnect chirp when the last controller disconnects.
+
+When idle, current firmware now hard-stops the PWM output so the buzzer pin returns to a quiet low state between tones.
 
 No resistor or amplifier needed — the ESP32 3.3 V LEDC PWM output drives small passive piezo buzzers directly.
 

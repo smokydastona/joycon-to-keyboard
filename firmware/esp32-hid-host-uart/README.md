@@ -85,6 +85,8 @@ Set in `main/config.h`.
 
 A passive piezo buzzer on GPIO 25 provides audible status cues so you don't need to watch a serial monitor or LED:
 
+Use a passive piezo only. Active buzzer modules with a built-in oscillator are not supported and can turn an idle GPIO state or PWM carrier into a constant tone instead of short chirps.
+
 | Tone | When | Pattern |
 |------|------|---------|
 | Startup chime | Board powers on | Rising chirp (C5→D5→E5→G5→C6) |
@@ -96,6 +98,7 @@ A passive piezo buzzer on GPIO 25 provides audible status cues so you don't need
 | Error | Connection failure or repeated UART errors | Three rapid low beeps (C4×3) |
 
 To reduce the "clicky" sound of abrupt note edges on passive piezo buzzers, notes are played with a small software attack/decay envelope (still using LEDC PWM).
+When idle, the firmware hard-stops the LEDC channel so the buzzer pin returns to a quiet low state between tones.
 
 ### Configuration
 

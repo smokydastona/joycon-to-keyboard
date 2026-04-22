@@ -274,7 +274,9 @@ static void buzzer_ledc_set_freq(uint16_t freq_hz) {
 }
 
 static void buzzer_ledc_off(void) {
-    buzzer_ledc_set_duty(0);
+    ledc_stop(LEDC_LOW_SPEED_MODE, BUZZER_LEDC_CHANNEL, 0);
+    s_last_duty = 0;
+    s_last_freq = 0;
 }
 
 static void buzzer_apply_envelope(TickType_t now) {
