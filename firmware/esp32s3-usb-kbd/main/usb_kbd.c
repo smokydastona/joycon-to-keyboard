@@ -26,6 +26,7 @@ static SemaphoreHandle_t s_mutex = NULL;
 // --- Report deduplication (reduce USB bus noise) ---
 static uint8_t s_last_mod = 0;
 static uint8_t s_last_keys[6] = {0};
+static bool s_report_pending = false;
 
 // --- Anti-cheat rate guard ---
 // The HID descriptor declares a 1 ms polling interval.  Sending reports
@@ -56,16 +57,21 @@ static void set_keycode(uint8_t keycode, bool pressed) {
 }
 
 static void send_report(void) {
-    if (!tud_hid_ready()) return;
+    if (!tud_hid_ready()) {
+        s_report_pending = true;
+        return;
+    }
 
     // Deduplication: skip if report is identical to the last one sent.
     if (s_mod == s_last_mod && memcmp(s_keys, s_last_keys, sizeof(s_keys)) == 0) {
+        s_report_pending = false;
         return;
     }
 
     // Anti-cheat rate guard: do not exceed the declared 1 ms polling interval.
     int64_t now = esp_timer_get_time();
     if ((now - s_last_report_us) < MIN_REPORT_INTERVAL_US) {
+        s_report_pending = true;
         return;
     }
 
@@ -74,6 +80,7 @@ static void send_report(void) {
     s_last_mod = s_mod;
     memcpy(s_last_keys, s_keys, sizeof(s_keys));
     s_last_report_us = now;
+    s_report_pending = false;
 }
 
 void usb_kbd_init(void) {
@@ -94,6 +101,9 @@ void usb_kbd_init(void) {
 
     s_mod = 0;
     memset(s_keys, 0, sizeof(s_keys));
+    s_last_mod = 0;
+    memset(s_last_keys, 0, sizeof(s_last_keys));
+    s_report_pending = false;
 }
 
 void usb_kbd_set_key(uint8_t modifier, uint8_t keycode, bool pressed) {
@@ -110,6 +120,22 @@ void usb_kbd_set_key(uint8_t modifier, uint8_t keycode, bool pressed) {
     }
 
     set_keycode(keycode, pressed);
+    send_report();
+
+    if (s_mutex) {
+        xSemaphoreGive(s_mutex);
+    }
+}
+
+void usb_kbd_poll(void) {
+    if (!s_report_pending) {
+        return;
+    }
+
+    if (s_mutex) {
+        xSemaphoreTake(s_mutex, portMAX_DELAY);
+    }
+
     send_report();
 
     if (s_mutex) {

@@ -58,6 +58,7 @@ void app_main(void) {
 
     while (1) {
         bridge_serial_poll();
+        usb_kbd_poll();
 
         uart_frame_t f;
         while (uart_proto_poll_frame(&f)) {
@@ -160,6 +161,8 @@ void app_main(void) {
                 continue;
             }
         }
+
+        usb_kbd_poll();
 
         // Block until UART data arrives or 1 tick elapses, whichever is
         // first.  This replaces vTaskDelay(1) so the task wakes instantly
